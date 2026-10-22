@@ -6,7 +6,9 @@ import { createClient } from '@supabase/supabase-js';
 export const sql =
   globalThis.__sql ??
   (globalThis.__sql = postgres(process.env.DATABASE_URL, {
-    prepare: false, max: 3, idle_timeout: 20, connect_timeout: 15,
+    prepare: false, max: 3, onnotice: () => {},
+    // traffic between the site and the database is always encrypted (only a local test copy skips it)
+    ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || '') ? false : 'require', idle_timeout: 20, connect_timeout: 15,
     // dates stay as plain YYYY-MM-DD text so they never shift with time zones; big ids come back as numbers
     types: { date: { to: 1082, from: [1082], serialize: (x) => x, parse: (x) => x }, bigint: { to: 20, from: [20], serialize: (x) => String(x), parse: (x) => Number(x) } },
   }));
@@ -44,10 +46,15 @@ export async function staffFor(req) {
       case when s.role = 'admin' then (select coalesce(array_agg(id), '{}') from desk.areas)
            else coalesce((select array_agg(area_id) from desk.staff_areas sa where sa.user_id = s.user_id
                  and (sa.expires_at is null or sa.expires_at >= (now() at time zone 'Asia/Dubai')::date)), '{}')
-      end as areas
+      end as areas,
+      (select id from desk.areas where name = 'Lookups') as lookup_area
     from desk.staff s where s.user_id = ${id} and s.active`;
   if (!s) return null;
-  return { ...s, areas: (s.areas || []).map(Number) };
+  // Units found with the Lookup tab live in their own "Lookups" area. Everyone can open those units,
+  // but they never appear in the Owners list (see listAreas).
+  const lookupArea = s.lookup_area ? Number(s.lookup_area) : null;
+  const own = (s.areas || []).map(Number).filter((a) => a !== lookupArea);
+  return { ...s, lookupArea, listAreas: own, areas: lookupArea ? [...own, lookupArea] : own };
 }
 
 // Wraps a route: office-IP check, sign-in check, no caching, friendly errors.
