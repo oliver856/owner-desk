@@ -60,5 +60,8 @@ export function whereSql(q, areas) {
   if (one('mort')) w.push(sql`mortgaged`);
   if (one('ind')) w.push(sql`not is_company`);
   if (one('phone')) w.push(sql`has_phone`);
+  if (one('ncall')) w.push(sql`last_called is null`);
+  if (one('called')) w.push(sql`last_called is not null`);
+  if (many('oc').length) w.push(sql`last_outcome = any(${many('oc')})`);
   return w.reduce((a, b) => sql`${a} and ${b}`);
 }
