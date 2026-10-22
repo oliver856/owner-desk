@@ -114,6 +114,11 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0} dt{color:
 .box{background:var(--bg);border-radius:8px;width:min(400px,100%);padding:20px 22px;border:1px solid var(--line)}
 .box h3{margin:0 0 4px;font-size:16px;font-weight:600}
 .radios{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin:14px 0}
+.lookup{max-width:1100px} .lk-box{display:grid;gap:10px;max-width:640px;margin-bottom:18px}
+.lk-box input{width:100%;border:1px solid var(--line);border-radius:4px;padding:8px;background:var(--bg)} .lk-box textarea{margin:0;min-height:90px}
+.lk-act{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;justify-self:start}
+.seg button{background:none;border:none;padding:6px 12px;color:var(--muted)} .seg button.on{background:var(--hover);color:var(--ink)}
 .notebox{margin:0 0 8px!important;min-height:64px!important}
 .noteact{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
 .note{border-top:1px solid var(--line);padding:9px 0}
@@ -287,6 +292,7 @@ function Desk() {
           <span className="brand">Apex Owner Desk</span>
           <nav className="nav">
             <button className={view === 'owners' ? 'on' : ''} onClick={() => setView('owners')}>Owners</button>
+            <button className={view === 'lookup' ? 'on' : ''} onClick={() => setView('lookup')}>Lookup</button>
             <button className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>Activity</button>
             <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
           </nav>
@@ -299,7 +305,7 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? <Owners places={me?.places || []} onOpen={setUnitId} /> : <Activity />}
+      {view === 'owners' ? <Owners places={me?.places || []} onOpen={setUnitId} /> : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {toast && <div className="toast">{toast}</div>}
     </>
@@ -793,11 +799,107 @@ function OutcomeForm({ requestId, onSaved, big }) {
   );
 }
 
+// ── Lookup tab ──────────────────────────────────────────────────────────────
+// Finds the registered unit and owner from a listing link or DEWA number. Kept apart from the Owners list:
+// results go into their own "Lookups" area and open in the normal unit panel (call, notes, WhatsApp).
+function Lookup({ onOpen }) {
+  const [mode, setMode] = useState('link');
+  const [url, setUrl] = useState('');
+  const [card, setCard] = useState('');
+  const [dewa, setDewa] = useState('');
+  const [st, setSt] = useState(null);
+  const [res, setRes] = useState(null);
+  const [recent, setRecent] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const refresh = useCallback(() => {
+    api('/api/lookup?action=status').then(setSt).catch((e) => setErr(e.message));
+    api('/api/lookup?action=recent').then((j) => setRecent(j.rows)).catch(() => {});
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  async function search() {
+    setErr(''); setRes(null); setBusy('search');
+    try {
+      const j = await api('/api/lookup?action=search', { method: 'POST', body: mode === 'dewa' ? { dewa } : { url, card } });
+      setRes(j);
+    } catch (e) { setErr(e.message); }
+    setBusy(''); refresh();
+  }
+  async function owner(c) {
+    if (c.unitId) return onOpen(c.unitId);
+    setErr(''); setBusy('owner' + c.i);
+    try {
+      const j = await api('/api/lookup?action=owner', { method: 'POST', body: { lookupId: res.lookupId, i: c.i } });
+      setRes((r) => ({ ...r, candidates: r.candidates.map((x) => (x.i === c.i ? { ...x, unitId: j.unitId } : x)) }));
+      onOpen(j.unitId);
+    } catch (e) { setErr(e.message); }
+    setBusy(''); refresh();
+  }
+  const prop = (p) => [p.building_name_en || p.project_name_en, p.property_number && `unit ${p.property_number}`].filter(Boolean).join(', ');
+  const propSub = (p) => [p.master_project_en, p.area_name_en, p.rooms_en, p.actual_area && `${fmt(Math.round(p.actual_area * 10.7639))} sq ft`, p.property_sub_type_en || p.property_type_en].filter(Boolean).join(' · ');
+  const ready = mode === 'dewa' ? /\d{5,}/.test(dewa) : /^https?:\/\//i.test(url.trim());
+
+  return (
+    <main className="gut lookup">
+      <div className="head" style={{ paddingInline: 0 }}>
+        <h1>Lookup</h1>
+        <p>Find the registered owner from a listing link or a DEWA number. Results are kept separate from the Owners list.</p>
+      </div>
+      {st && !st.configured && <p className="err">The lookup API key hasn&apos;t been added in Vercel yet (DXB_HAWK_KEY).</p>}
+      <div className="lk-box">
+        <div className="seg">
+          <button className={mode === 'link' ? 'on' : ''} onClick={() => setMode('link')}>Listing link</button>
+          <button className={mode === 'dewa' ? 'on' : ''} onClick={() => setMode('dewa')}>DEWA number</button>
+        </div>
+        {mode === 'link' ? <>
+          <input type="url" placeholder="Paste a Property Finder or Bayut listing link" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <textarea placeholder="Paste the whole permit card text from the listing (most listings need it)" value={card} onChange={(e) => setCard(e.target.value)} />
+        </> : <input inputMode="numeric" placeholder="DEWA premise number" value={dewa} onChange={(e) => setDewa(e.target.value.replace(/\D/g, ''))} />}
+        <div className="lk-act">
+          <span className="faint">{st ? `${st.used} of ${st.cap} lookups used today` : ' '}{st?.credits != null ? ` · ${st.credits} credits left` : ''}</span>
+          <button className="btn primary" disabled={!ready || !!busy || (st && !st.configured)} onClick={search}>{busy === 'search' ? 'Searching…' : 'Find unit · 2 credits'}</button>
+        </div>
+        {err && <p className="err">{err}</p>}
+      </div>
+
+      {res && (
+        <div className="blk">
+          <h4>{res.candidates.length > 1 ? `${res.candidates.length} possible units. Pick the right one.` : 'Unit found'}</h4>
+          {res.candidates.map((c) => (
+            <div className="owner" key={c.i}>
+              <div>{prop(c.property) || 'Registered unit'}<span className="sub">{propSub(c.property)}</span></div>
+              <button className={c.unitId ? 'btn' : 'btn primary'} disabled={!!busy} onClick={() => owner(c)}>
+                {c.unitId ? 'Open' : busy === 'owner' + c.i ? 'Getting owner…' : 'Get owner · 3 credits'}</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="blk"><h4>Recent lookups</h4>
+        {!recent ? <p className="muted">Loading…</p> : recent.length === 0 ? <p className="muted">No lookups yet</p> : (
+          <div className="tw"><table className="grid">
+            <thead><tr><th>Unit</th><th>Owner</th><th>Mobile</th><th>Previous owners</th><th>Found by</th><th /></tr></thead>
+            <tbody>{recent.map((r) => (
+              <tr key={r.unit_id} onClick={() => onOpen(r.unit_id)}>
+                <td><span className="clip strong">{titleCase(r.property?.building_name_en || r.property?.project_name_en)} {r.unit_no}</span></td>
+                <td><span className="clip" title={titleCase(r.owners)}>{titleCase(r.owners) || '—'}</span></td>
+                <td className="ph">{r.masked || <span className="faint">none</span>}</td>
+                <td><span className="clip" title={titleCase(r.previous)}>{r.previous_n ? titleCase(r.previous) : '—'}</span></td>
+                <td className="muted">{r.by_name}, {fdt(r.created_at)}</td>
+                <td className="callcol"><button className="btn" onClick={(e) => { e.stopPropagation(); onOpen(r.unit_id); }}>Open</button></td>
+              </tr>))}</tbody>
+          </table></div>)}
+      </div>
+    </main>
+  );
+}
+
 const ACTIVITY_LABEL = {
   searched: 'Searched', opened_unit: 'Opened a unit', call_sent: 'Sent a call to phone', call_dialled: 'Tapped Call on phone',
   outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', limit_hit: 'Hit a daily limit',
   call_blocked_hours: 'Tried to call outside 9am–6pm', dial_refused: 'Tapped an expired call', phone_alerts_on: 'Turned on phone alerts',
-  note_added: 'Added a note', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
+  note_added: 'Added a note', lookup_property: 'Looked up a unit', lookup_owner: 'Looked up an owner', lookup_failed: 'Lookup failed', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
 };
 const ACTIVITY_BAD = ['copy_blocked', 'limit_hit', 'call_blocked_hours', 'dial_refused'];
 
