@@ -114,6 +114,34 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0} dt{color:
 .box{background:var(--bg);border-radius:8px;width:min(400px,100%);padding:20px 22px;border:1px solid var(--line)}
 .box h3{margin:0 0 4px;font-size:16px;font-weight:600}
 .radios{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin:14px 0}
+.target{position:relative;overflow:hidden;margin-top:18px;border:1px solid var(--line);border-radius:14px;padding:14px 18px;
+  display:grid;grid-template-columns:minmax(220px,auto) 1fr auto;gap:8px 22px;align-items:center;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 8%,var(--bg)),var(--bg) 60%)}
+@media (max-width:900px){.target{grid-template-columns:1fr}}
+.t-num{display:flex;align-items:baseline;gap:6px} .t-num b{font-size:28px;font-weight:700;letter-spacing:-.02em;color:var(--accent)} .t-num span{color:var(--muted)}
+.t-line{font-size:12.5px;color:var(--ink);margin-top:1px}
+.t-track{position:relative;height:12px;border-radius:999px;background:var(--hover);border:1px solid var(--line)}
+.t-fill{position:absolute;inset:0 auto 0 0;border-radius:999px;background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 70%,#fff),var(--accent));transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.t-pace{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);opacity:.35;border-radius:2px}
+.t-mark{position:absolute;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:var(--line)} .t-mark.hit{background:var(--bg)}
+.t-side{display:grid;justify-items:end;gap:3px;text-align:right} @media (max-width:900px){.t-side{justify-items:start;text-align:left}}
+.t-pill{font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;background:var(--hover);color:var(--muted)}
+.t-pill.good{background:color-mix(in srgb,var(--accent) 14%,var(--bg));color:var(--accent)} .t-pill.warn{background:color-mix(in srgb,var(--warn) 14%,var(--bg));color:var(--warn)}
+.target.done{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.t-burst{position:absolute;left:50%;top:50%;pointer-events:none}
+.t-burst i{position:absolute;width:6px;height:6px;border-radius:2px;background:var(--accent);opacity:0;animation:burst 1.1s ease-out var(--d) 2}
+.t-burst i:nth-child(3n){background:var(--warn)} .t-burst i:nth-child(4n){background:var(--blue)}
+@keyframes burst{0%{opacity:1;transform:rotate(var(--a)) translateX(0)}100%{opacity:0;transform:rotate(var(--a)) translateX(70px)}}
+@media (prefers-reduced-motion:reduce){.t-burst{display:none}.t-fill{transition:none}}
+th[draggable]{cursor:grab} th.dragging{opacity:.4} th.dropto{box-shadow:inset 3px 0 0 var(--accent)}
+.cpick{width:340px} .cpick h5{margin:10px 0 6px;font-size:11px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+.order{list-style:none;margin:0;padding:0;display:grid;gap:3px;max-height:280px;overflow:auto}
+.order li{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:7px;padding:5px 6px 5px 8px;background:var(--bg);cursor:grab}
+.order li.dragging{opacity:.45;border-style:dashed}
+.order .grip{color:var(--faint);font-size:11px;letter-spacing:-2px} .order .nm{flex:1}
+.order .ud{display:flex;gap:2px} .order .ud button{background:none;border:none;width:22px;height:22px;border-radius:4px;color:var(--muted)}
+.order .ud button:hover:not([disabled]){background:var(--hover);color:var(--ink)} .order .ud button[disabled]{opacity:.3}
+.addcols{display:flex;flex-wrap:wrap;gap:5px}
 .lk{max-width:720px;margin:0 auto;padding:36px 16px 60px}
 .lk .c{text-align:center}
 .lk-hero{text-align:center;display:grid;justify-items:center;gap:8px;margin-bottom:22px}
@@ -296,7 +324,12 @@ function Desk() {
   const [unitId, setUnitId] = useState(null);
 
   const refreshMe = useCallback(() => api('/api/desk?action=me').then(setMe).catch((e) => setToast(e.message)), []);
-  useEffect(() => { refreshMe(); }, [refreshMe]);
+  useEffect(() => {
+    refreshMe();
+    // Keeps the call target fresh (calls are dialled on the phone); only while this tab is on screen
+    const t = setInterval(() => { if (document.visibilityState === 'visible') refreshMe(); }, 60000);
+    return () => clearInterval(t);
+  }, [refreshMe]);
 
   // Copy protection: blocks copying owner data and logs the attempt
   useEffect(() => {
@@ -333,14 +366,14 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? <Owners places={me?.places || []} onOpen={setUnitId} /> : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : <Activity />}
+      {view === 'owners' ? <Owners places={me?.places || []} target={me?.target} onCaps={refreshMe} onOpen={setUnitId} /> : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
 }
 
-function Owners({ places, onOpen }) {
+function Owners({ places, onOpen, target, onCaps }) {
   const [f, setF] = useState(EMPTY);
   const [tab, setTab] = useState('all');
   const [sort, setSort] = useState('unit');
@@ -353,7 +386,18 @@ function Owners({ places, onOpen }) {
   const [calling, setCalling] = useState(null);
   const [cols, setColsState] = useState(loadCols);
   const setCols = (next) => { setColsState(next); try { localStorage.setItem('columns', JSON.stringify(next)); } catch {} };
-  const shown = COLUMNS.filter((c) => cols.includes(c.k));
+  const shown = cols.map((k) => COLUMNS.find((c) => c.k === k)).filter(Boolean);
+  // Drag a column heading onto another to move it
+  const [dragCol, setDragCol] = useState(null);
+  const [overCol, setOverCol] = useState(null);
+  const moveCol = (from, to) => {
+    if (!from || from === to) return;
+    const rest = cols.filter((k) => k !== from);
+    const i = rest.indexOf(to);
+    const after = cols.indexOf(from) < cols.indexOf(to);
+    rest.splice(i + (after ? 1 : 0), 0, from);
+    setCols(rest);
+  };
 
   // Ask the server for the list. Typed fields wait for a short pause; everything else is instant.
   const load = useCallback((ff, t, s, p) => {
@@ -457,6 +501,7 @@ function Owners({ places, onOpen }) {
   return (
     <>
       {busy && <div className="loadbar" />}
+      {target && <TargetBar t={target} />}
       <div className="head gut">
         <h1>Owners</h1>
         <p>{fmt(c.all)} units in your areas · {DATA_NOTE}</p>
@@ -504,7 +549,13 @@ function Owners({ places, onOpen }) {
                   const hf = HEAD_FILTERS[col.k];
                   const on = hf && isOn(hf.on);
                   return (
-                    <th key={col.k} className={col.right ? 'r' : ''}>
+                    <th key={col.k} className={(col.right ? 'r' : '') + (overCol === col.k && dragCol && dragCol !== col.k ? ' dropto' : '') + (dragCol === col.k ? ' dragging' : '')}
+                      draggable title="Drag to move this column"
+                      onDragStart={(e) => { setDragCol(col.k); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', col.k); }}
+                      onDragOver={(e) => { e.preventDefault(); if (overCol !== col.k) setOverCol(col.k); }}
+                      onDragLeave={() => setOverCol((o) => (o === col.k ? null : o))}
+                      onDrop={(e) => { e.preventDefault(); moveCol(dragCol, col.k); setDragCol(null); setOverCol(null); }}
+                      onDragEnd={() => { setDragCol(null); setOverCol(null); }}>
                       <span className="th">
                         {col.sort ? sortBtn(col.sort, col.label) : col.label}
                         {hf && <button className={'fbtn' + (on ? ' on' : '') + (fcol?.k === col.k ? ' open' : '')} aria-label={'Filter ' + col.label}
@@ -538,7 +589,7 @@ function Owners({ places, onOpen }) {
       </main>
       {calling && <CallFlow unitId={calling.r.id} owner={{ id: calling.r.owner_id, name: calling.r.owner_name }}
         label={`${calling.r.owner_name}, ${placeOf(calling.r)} ${calling.r.unit_no}`}
-        onClose={(saved) => { setCalling(null); if (saved) load(f, tab, sort, page); }} />}
+        onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(f, tab, sort, page); }} />}
     </>
   );
 }
@@ -614,6 +665,7 @@ function loadCols() {
 
 function ColumnPicker({ cols, setCols }) {
   const [open, setOpen] = useState(false);
+  const [drag, setDrag] = useState(null);
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return;
@@ -621,29 +673,98 @@ function ColumnPicker({ cols, setCols }) {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [open]);
-  const toggle = (k) => {
-    const next = cols.includes(k) ? cols.filter((x) => x !== k) : COLUMNS.map((c) => c.k).filter((x) => cols.includes(x) || x === k);
-    if (next.length) setCols(next);
+  const label = (k) => COLUMNS.find((c) => c.k === k)?.label;
+  const remove = (k) => { if (cols.length > 1) setCols(cols.filter((x) => x !== k)); };
+  const add = (k) => setCols([...cols, k]);
+  const move = (from, to) => {
+    if (from == null || from === to) return;
+    const next = [...cols]; const [x] = next.splice(from, 1); next.splice(to, 0, x); setCols(next);
   };
-  const same = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+  const same = (a, b) => a.length === b.length && a.every((x, i) => b[i] === x);
+  const hidden = COLUMNS.filter((c) => !cols.includes(c.k));
   return (
     <div className="picker" ref={ref}>
       <button className="btn" onClick={() => setOpen(!open)} aria-expanded={open}>Columns · {cols.length}</button>
       {open && (
-        <div className="menu">
+        <div className="menu cpick">
           <div className="sets">
             {COLUMN_SETS.map(([name, keys]) => (
               <button key={name} className={'chip' + (same(cols, keys) ? ' on' : '')} onClick={() => setCols(keys)}>{name}</button>
             ))}
           </div>
-          <div className="cols">
-            {COLUMNS.map((c) => (
-              <label key={c.k} className="cb"><input type="checkbox" checked={cols.includes(c.k)} onChange={() => toggle(c.k)} />{c.label}</label>
+          <h5>Showing · drag to reorder</h5>
+          <ol className="order">
+            {cols.map((k, i) => (
+              <li key={k} draggable className={drag === i ? 'dragging' : ''}
+                onDragStart={(e) => { setDrag(i); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', k); }}
+                onDragOver={(e) => { e.preventDefault(); if (drag != null && drag !== i) { move(drag, i); setDrag(i); } }}
+                onDragEnd={() => setDrag(null)}>
+                <span className="grip" aria-hidden="true">⋮⋮</span>
+                <span className="nm">{label(k)}</span>
+                <span className="ud">
+                  <button aria-label={'Move ' + label(k) + ' up'} disabled={i === 0} onClick={() => move(i, i - 1)}>↑</button>
+                  <button aria-label={'Move ' + label(k) + ' down'} disabled={i === cols.length - 1} onClick={() => move(i, i + 1)}>↓</button>
+                  <button aria-label={'Hide ' + label(k)} disabled={cols.length === 1} onClick={() => remove(k)}>×</button>
+                </span>
+              </li>
             ))}
-          </div>
-          <p className="faint" style={{ margin: '8px 0 0' }}>Saved on this computer.</p>
+          </ol>
+          {hidden.length > 0 && <>
+            <h5>Add a column</h5>
+            <div className="addcols">{hidden.map((c) => <button key={c.k} className="chip" onClick={() => add(c.k)}>+ {c.label}</button>)}</div>
+          </>}
+          <p className="faint" style={{ margin: '10px 0 0' }}>You can also drag the column headings. Saved on this computer.</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// Today's call target at the top of the Owners page
+const TARGET_LINES = [
+  [0, 'Fresh list, fresh day. The first call is the hardest, so make it now.'],
+  [0.01, 'You\'re off the mark. Keep the rhythm going.'],
+  [0.2, 'Warming up nicely.'],
+  [0.5, 'Halfway there. Same again and you\'re done.'],
+  [0.75, 'Final stretch. Finish strong.'],
+  [0.9, 'So close. A few more dials.'],
+  [1, 'Target smashed. Everything from here is a bonus.'],
+  [1.5, 'Unstoppable. Take a bow.'],
+];
+function TargetBar({ t }) {
+  const { goal, made } = t;
+  const pct = goal ? made / goal : 0;
+  const line = TARGET_LINES.filter(([p]) => pct >= p).pop()[1];
+  const left = Math.max(0, goal - made);
+  // Pace through calling hours (Dubai time): how many calls you'd have made by now at an even rate
+  const toMin = (h) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+  const now = Number(parts.find((p) => p.type === 'hour').value) * 60 + Number(parts.find((p) => p.type === 'minute').value);
+  const from = toMin(t.hours.from), to = toMin(t.hours.to);
+  const share = Math.min(1, Math.max(0, (now - from) / (to - from)));
+  const due = Math.round(goal * share);
+  const pace = made >= goal ? '' : now < from ? 'Calling opens at ' + t.hours.from : now >= to ? 'Calling closed for today'
+    : made >= due ? 'On pace' : `${due - made} behind pace`;
+  const done = made >= goal;
+  const marks = [0.25, 0.5, 0.75];
+  return (
+    <div className="gut">
+      <div className={'target' + (done ? ' done' : '')}>
+        <div className="t-main">
+          <div className="t-num"><b className="n">{made}</b><span>/ {goal} calls today</span></div>
+          <div className="t-line">{line}</div>
+        </div>
+        <div className="t-track" role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={made} aria-label="Calls made today">
+          <div className="t-fill" style={{ width: `${Math.min(100, pct * 100)}%` }} />
+          {!done && share > 0 && share < 1 && <div className="t-pace" style={{ left: `${share * 100}%` }} title={`Pace: ${due} by now`} />}
+          {marks.map((m) => <span key={m} className={'t-mark' + (pct >= m ? ' hit' : '')} style={{ left: `${m * 100}%` }} />)}
+        </div>
+        <div className="t-side">
+          <span className={'t-pill' + (pace === 'On pace' || done ? ' good' : pace.includes('behind') ? ' warn' : '')}>{done ? `+${made - goal} bonus` : pace || `${left} to go`}</span>
+          <span className="faint">{done ? 'Goal reached' : `${left} to go`}{t.callers > 0 ? ` · #${t.rank} of ${t.callers} on the team · ${t.team} team calls` : ''}</span>
+        </div>
+        {done && <div className="t-burst" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ '--a': `${i * 26}deg`, '--d': `${(i % 4) * 60}ms` }} />)}</div>}
+      </div>
     </div>
   );
 }
