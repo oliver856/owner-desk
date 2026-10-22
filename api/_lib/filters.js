@@ -35,6 +35,7 @@ export function whereSql(q, areas) {
 
   one('q').toLowerCase().replace(/[%_\\]/g, '').split(/\s+/).filter(Boolean).slice(0, 5)
     .forEach((word) => w.push(sql`search_text like ${'%' + word + '%'}`));
+  if (one('area')) w.push(sql`area_id = (select id from desk.areas where name = ${one('area')})`);
   if (one('sc')) w.push(sql`subcommunity = ${one('sc')}`);
   if (one('bld')) w.push(sql`building = ${one('bld')}`);
   if (many('st').length) w.push(sql`lease_status = any(${many('st')})`);
