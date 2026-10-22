@@ -33,9 +33,11 @@ const actions = {
   async me(req, res, s) {
     const key = [...s.listAreas].sort((a, b) => a - b).join(',');
     let p = places.get(key);
-    if (!p || p.at < Date.now() - 3600e3) {
-      const rows = await sql`select distinct subcommunity, building from desk.mv_units where area_id = any(${s.listAreas}) order by 1, 2`;
-      p = { at: Date.now(), rows: rows.map((r) => ({ sc: r.subcommunity, bld: r.building })) };
+    if (!p || p.at < Date.now() - 600e3) {
+      const rows = await sql`select * from (select distinct a.name as area, m.subcommunity, m.building from desk.mv_units m
+                             join desk.areas a on a.id = m.area_id where m.area_id = any(${s.listAreas})) x
+                             order by area, upper(subcommunity), upper(building)`;
+      p = { at: Date.now(), rows: rows.map((r) => ({ area: r.area, sc: r.subcommunity, bld: r.building })) };
       places.set(key, p);
     }
     res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: await caps(s.user_id), places: p.rows });
@@ -49,7 +51,8 @@ const actions = {
     await ensureNotes();
     const [rows, [counts]] = await Promise.all([
       sql`select ${sql(COLS)},
-            (select n.body from desk.notes n where n.unit_id = v_unit_list.id order by n.created_at desc limit 1) as last_note
+            (select n.body from desk.notes n where n.unit_id = v_unit_list.id order by n.created_at desc limit 1) as last_note,
+            (select a.name from desk.areas a where a.id = v_unit_list.area_id) as area
           from desk.v_unit_list where ${whereSql(q, s.listAreas)} and ${tabSql(tab)}
           order by ${sortSql(q.get('sort'))} limit ${PAGE} offset ${(page - 1) * PAGE}`,
       sql`select count(*)::int as all,
