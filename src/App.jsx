@@ -840,8 +840,8 @@ function FollowUp({ f, me, onDone }) {
     setBusy(true); setErr('');
     try {
       const j = await api('/api/phone?action=whatsapp', { method: 'POST', body: { requestId: f.id, text, skip } });
-      if (j.url) window.location.href = j.url;
       onDone();
+      if (j.url) window.location.href = j.url;
     } catch (e) { setErr(e.message); }
     setBusy(false);
   }
@@ -864,7 +864,10 @@ function PhoneScreen() {
   const [st, setSt] = useState({ name: '', pending: null, awaiting: null, followup: null });
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState(false);
-  const load = useCallback(() => api('/api/phone?action=pending').then(setSt).catch(() => {}), []);
+  const fails = useRef(0);
+  const load = useCallback(() => api('/api/phone?action=pending')
+    .then((j) => { fails.current = 0; setErr(''); setSt(j); })
+    .catch((e) => { if (++fails.current >= 2) setErr(e.message || 'Can\'t reach the Owner Desk. Check your connection.'); }), []);
 
   useEffect(() => {
     // Checks every 3 seconds only while this screen is open and on show; nothing runs in the background.
@@ -906,10 +909,10 @@ function PhoneScreen() {
           <span className="muted">How did the call go?</span>
           <span className="who">{awaiting.owner_name}</span>
           <span>{phonePlace(awaiting)}</span>
-          <OutcomeForm big requestId={awaiting.id} onSaved={() => { setSaved(true); load().then(() => setSaved(false)); }} />
+          <OutcomeForm big requestId={awaiting.id} onSaved={() => { setSaved(true); setSt((x) => ({ ...x, awaiting: null })); load().then(() => setSaved(false)); }} />
         </div>
       )}
-      {!pending && !awaiting && !saved && followup && <FollowUp key={followup.id} f={followup} me={name} onDone={load} />}
+      {!pending && !awaiting && !saved && followup && <FollowUp key={followup.id} f={followup} me={name} onDone={() => { setSt((x) => ({ ...x, followup: null })); load(); }} />}
       {saved && <div className="waiting">Saved</div>}
       <PhoneAlerts onCall={load} />
       {!pending && !awaiting && !saved && !followup && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner and it appears here.</div>}
