@@ -107,6 +107,21 @@ export async function caps(userId) {
   return { profileCap: r.profile_cap, callCap: r.call_cap, profiles: r.profiles, calls: r.calls };
 }
 
+// Today's call target: calls actually dialled (the blue button tapped), the goal, and where you sit on the team
+export async function callTarget(userId) {
+  const [r] = await sql`
+    with day as (select date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start),
+    per as (select c.user_id, count(*)::int as n from desk.calls c, day where c.called_at >= day.start group by c.user_id)
+    select
+      coalesce((select (value #>> '{}')::int from desk.settings where key = 'daily_call_target'), 50) as goal,
+      coalesce((select n from per where user_id = ${userId}), 0) as made,
+      coalesce((select sum(n) from per), 0)::int as team,
+      (select count(*) from per)::int as callers,
+      (1 + (select count(*) from per where n > coalesce((select n from per where user_id = ${userId}), 0)))::int as rank,
+      (select value from desk.settings where key = 'call_hours') as hours`;
+  return { goal: r.goal, made: r.made, team: r.team, callers: r.callers, rank: r.rank, hours: r.hours || { from: '09:00', to: '18:00' } };
+}
+
 export async function withinCallHours() {
   const hrs = await setting('call_hours', { from: '09:00', to: '18:00' });
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
