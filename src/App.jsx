@@ -274,7 +274,7 @@ function ThemeToggle() {
 }
 
 // ── Laptop: owner list, unit panel, activity ────────────────────────────────
-const EMPTY = { q: '', sc: '', bld: '', st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', rmin: '', rmax: '', pmin: '', pmax: '',
+const EMPTY = { q: '', area: '', sc: '', bld: '', st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', rmin: '', rmax: '', pmin: '', pmax: '',
   first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false,
   ncall: false, called: false, oc: [] };
 
@@ -380,8 +380,10 @@ function Owners({ places, onOpen }) {
   const goSort = (s) => { setSort(s); setPage(1); load(f, tab, s, 1); };
   const goPage = (p) => { setPage(p); load(f, tab, sort, p); window.scrollTo({ top: 0 }); };
 
-  const subcommunities = useMemo(() => [...new Set(places.map((p) => p.sc))], [places]);
-  const buildings = useMemo(() => places.filter((p) => p.bld && (!f.sc || p.sc === f.sc)).map((p) => p.bld), [places, f.sc]);
+  const areas = useMemo(() => [...new Set(places.map((p) => p.area))], [places]);
+  const inArea = useMemo(() => places.filter((p) => !f.area || p.area === f.area), [places, f.area]);
+  const subcommunities = useMemo(() => [...new Set(inArea.map((p) => p.sc))], [inArea]);
+  const buildings = useMemo(() => [...new Set(inArea.filter((p) => p.bld && (!f.sc || p.sc === f.sc)).map((p) => p.bld))], [inArea, f.sc]);
   const c = data?.counts || {};
   const total = c[tab] ?? 0;
   const pages = Math.max(1, Math.ceil(total / (data?.pageSize || 100)));
@@ -409,7 +411,7 @@ function Owners({ places, onOpen }) {
       window.removeEventListener('scroll', gone, true); window.removeEventListener('resize', gone); };
   }, [fcol]);
   const pick = (k, list) => (
-    <select value={f[k]} onChange={(e) => change(k === 'sc' ? { sc: e.target.value, bld: '' } : { [k]: e.target.value })}>
+    <select value={f[k]} onChange={(e) => change(k === 'area' ? { area: e.target.value, sc: '', bld: '' } : k === 'sc' ? { sc: e.target.value, bld: '' } : { [k]: e.target.value })}>
       <option value="">All</option>{list.map((x) => <option key={x} value={x}>{titleCase(x)}</option>)}
     </select>
   );
@@ -424,6 +426,7 @@ function Owners({ places, onOpen }) {
     unit: { on: ['q'], ui: search },
     place: { on: ['bld'], ui: () => pick('bld', buildings) },
     sc: { on: ['sc'], ui: () => pick('sc', subcommunities) },
+    area: { on: ['area'], ui: () => pick('area', areas) },
     type: { on: ['type'], ui: () => <>{box('type', 'Apartment')}{box('type', 'Villa')}</> },
     beds: { on: ['beds'], ui: () => <div className="cols">{BEDS.map((b) => box('beds', b, bedsLabel(b)))}</div> },
     size: { on: ['smin', 'smax'], ui: () => <div className="pair">{num('smin', 'Min')}{num('smax', 'Max')}</div> },
@@ -461,13 +464,11 @@ function Owners({ places, onOpen }) {
       <main className="layout gut">
         <aside className="filters">
           <div><input id="q" type="search" placeholder="Search owner, building or unit" value={f.q} autoComplete="off" onChange={(e) => change({ q: e.target.value }, true)} /></div>
-          <div><h3>Sub-community</h3>
-            <select id="sc" value={f.sc} onChange={(e) => change({ sc: e.target.value, bld: '' })}>
-              <option value="">All</option>{subcommunities.map((s) => <option key={s}>{s}</option>)}
-            </select></div>
+          {areas.length > 1 && <div><h3>Area</h3>{pick('area', areas)}</div>}
+          <div><h3>Sub-community</h3>{pick('sc', subcommunities)}</div>
           <div><h3>Building</h3>
             <select id="bld" value={f.bld} onChange={(e) => change({ bld: e.target.value })}>
-              <option value="">All</option>{buildings.map((b) => <option key={b}>{b}</option>)}
+              <option value="">All</option>{buildings.map((b) => <option key={b} value={b}>{titleCase(b)}</option>)}
             </select></div>
           <div><h3>Lease</h3>{['Live Ejari', 'No live Ejari', 'Not confirmed'].map((v) => box('st', v))}</div>
           <div><h3>Contract ends</h3>
@@ -564,6 +565,7 @@ const LEASE_SHORT = { 'Live Ejari': 'Live', 'No live Ejari': 'None', 'Not confir
 const COLUMNS = [
   { k: 'unit', label: 'Unit', sort: 'unit', cell: (r) => <b>{r.unit_no}</b> },
   { k: 'place', label: 'Building', cell: (r) => <span className="clip" title={titleCase(placeOf(r))}>{titleCase(placeOf(r))}</span> },
+  { k: 'area', label: 'Area', cell: (r) => <span className="clip" title={r.area}>{r.area}</span> },
   { k: 'sc', label: 'Sub-community', cell: (r) => <span className="clip" title={titleCase(r.subcommunity)}>{titleCase(r.subcommunity)}</span> },
   { k: 'type', label: 'Type', cell: (r) => (r.unit_type === 'Villa' ? 'Villa' : 'Apartment') },
   { k: 'beds', label: 'Beds', cell: (r) => bedsLabel(r.beds) },
