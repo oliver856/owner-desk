@@ -15,6 +15,14 @@ const TABS = [
 ];
 const BEDS = ['Studio', '1', '2', '3', '4', '5', '6', '7'];
 const EXPIRY = [['30', 'Within 30 days'], ['90', 'Within 90 days'], ['180', 'Within 6 months'], ['365', 'Within a year'], ['', 'Any time']];
+// WhatsApp follow-up after a call. {first} = owner's first name, {me} = broker's first name,
+// {property} = e.g. "villa 12 in Maple 1" or "apartment 504 in Acacia A", {area} = e.g. "Dubai Hills Estate".
+// The broker can edit the message before it opens in WhatsApp. No message is offered for Wrong number or Do not call.
+const WHATSAPP = {
+  'No answer': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
+  'Call back': 'Hi {first}, this is {me} from Apex Homes. Thanks for picking up just now. As discussed, I\'ll call you back regarding your {property}, {area}. Save my number and message me here any time.',
+  default: 'Hi {first}, this is {me} from Apex Homes. Thanks for your time on the phone just now regarding your {property}, {area}. Save my number and feel free to message me here any time.',
+};
 const DATA_NOTE = 'Tenancies are registered Ejari contracts loaded to the end of September 2026';
 
 // ── Styles ──────────────────────────────────────────────────────────────────
@@ -120,7 +128,8 @@ textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:7px;b
 .callcard,.alerts{border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:6px}
 .callcard .who{font-size:20px;font-weight:600} .alerts .ok{color:var(--accent);font-weight:600}
 .bigcall{background:var(--blue);color:#fff;border:none;border-radius:999px;padding:16px;font-size:17px;font-weight:600;margin-top:10px;width:100%}
-.bigcall[disabled]{opacity:.5}
+.bigcall[disabled]{opacity:.5} .bigcall.wa{background:#1f9d55}
+.wamsg{min-height:170px!important;font-size:15px;margin:8px 0 0!important;border-radius:10px!important}
 .waiting{color:var(--muted);text-align:center;padding:50px 0}
 .outcomes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .outcomes button{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:12px;text-align:left}
@@ -750,7 +759,7 @@ function CallFlow({ unitId, owner, label, onClose }) {
           <button className="btn" onClick={() => onClose(false)}>Cancel</button></>}
         {stage === 'expired' && <><h3>Call expired</h3><p className="muted">It wasn&apos;t tapped on your phone in time. Press Call again.</p><button className="btn" onClick={() => onClose(false)}>Close</button></>}
         {stage === 'dialled' && <><h3>How did it go?</h3><p className="muted">{label}</p><OutcomeForm requestId={req.requestId} onSaved={() => setStage('done')} /></>}
-        {stage === 'done' && <><h3>Saved</h3><p className="muted">The outcome is on the unit&apos;s call history.</p><button className="btn" onClick={() => onClose(true)}>Close</button></>}
+        {stage === 'done' && <><h3>Saved</h3><p className="muted">The outcome is on the unit&apos;s call history. Your phone now shows a WhatsApp follow-up for this owner.</p><button className="btn" onClick={() => onClose(true)}>Close</button></>}
       </div>
     </div>
   );
@@ -788,7 +797,7 @@ const ACTIVITY_LABEL = {
   searched: 'Searched', opened_unit: 'Opened a unit', call_sent: 'Sent a call to phone', call_dialled: 'Tapped Call on phone',
   outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', limit_hit: 'Hit a daily limit',
   call_blocked_hours: 'Tried to call outside 9am–6pm', dial_refused: 'Tapped an expired call', phone_alerts_on: 'Turned on phone alerts',
-  note_added: 'Added a note',
+  note_added: 'Added a note', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
 };
 const ACTIVITY_BAD = ['copy_blocked', 'limit_hit', 'call_blocked_hours', 'dial_refused'];
 
@@ -815,17 +824,52 @@ function Activity() {
 }
 
 // ── Phone screen (/phone) ───────────────────────────────────────────────────
+function whatsappText(f, me) {
+  const first = f.is_company ? '' : titleCase(String(f.owner_name || '').split(/\s+/)[0]);
+  const place = f.unit_type === 'Villa' ? `villa ${f.unit_no} in ${titleCase(f.subcommunity)}` : `apartment ${f.unit_no} in ${titleCase(f.building)}`;
+  return (WHATSAPP[f.outcome] || WHATSAPP.default)
+    .replace('{first}', first).replace('Hi , ', 'Hi, ')
+    .replace('{me}', String(me || '').split(/\s+/)[0]).replace('{property}', place).replace('{area}', f.area || '');
+}
+
+function FollowUp({ f, me, onDone }) {
+  const [text, setText] = useState(() => whatsappText(f, me));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function send(skip) {
+    setBusy(true); setErr('');
+    try {
+      const j = await api('/api/phone?action=whatsapp', { method: 'POST', body: { requestId: f.id, text, skip } });
+      if (j.url) window.location.href = j.url;
+      onDone();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+  return (
+    <div className="callcard">
+      <span className="muted">Follow up on WhatsApp · {f.outcome}</span>
+      <span className="who">{titleCase(f.owner_name)}</span>
+      <span>{phonePlace({ ...f, subcommunity: titleCase(f.subcommunity), building: titleCase(f.building) })}</span>
+      <textarea className="wamsg" value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
+      {err && <p className="err">{err}</p>}
+      <button className="bigcall wa" disabled={busy || !text.trim()} onClick={() => send(false)}>WhatsApp</button>
+      <button className="link" style={{ alignSelf: 'center', marginTop: 6 }} disabled={busy} onClick={() => send(true)}>Skip</button>
+    </div>
+  );
+}
+
 const phonePlace = (x) => (x.unit_type === 'Villa' ? `${x.subcommunity} · villa ${x.unit_no}` : `${x.building} · ${x.unit_no}`);
 
 function PhoneScreen() {
-  const [st, setSt] = useState({ name: '', pending: null, awaiting: null });
+  const [st, setSt] = useState({ name: '', pending: null, awaiting: null, followup: null });
   const [err, setErr] = useState('');
   const [saved, setSaved] = useState(false);
   const load = useCallback(() => api('/api/phone?action=pending').then(setSt).catch(() => {}), []);
 
   useEffect(() => {
+    // Checks every 3 seconds only while this screen is open and on show; nothing runs in the background.
     load();
-    const t = setInterval(load, 3000);
+    const t = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 3000);
     const vis = () => document.visibilityState === 'visible' && load();
     document.addEventListener('visibilitychange', vis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
@@ -841,7 +885,7 @@ function PhoneScreen() {
     } catch (e) { setErr(e.message); load(); }
   }
 
-  const { name, pending, awaiting } = st;
+  const { name, pending, awaiting, followup } = st;
   return (
     <main className="phone">
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'start' }}>
@@ -862,12 +906,13 @@ function PhoneScreen() {
           <span className="muted">How did the call go?</span>
           <span className="who">{awaiting.owner_name}</span>
           <span>{phonePlace(awaiting)}</span>
-          <OutcomeForm big requestId={awaiting.id} onSaved={() => { setSaved(true); setTimeout(() => { setSaved(false); load(); }, 1500); }} />
+          <OutcomeForm big requestId={awaiting.id} onSaved={() => { setSaved(true); load().then(() => setSaved(false)); }} />
         </div>
       )}
+      {!pending && !awaiting && !saved && followup && <FollowUp key={followup.id} f={followup} me={name} onDone={load} />}
       {saved && <div className="waiting">Saved</div>}
       <PhoneAlerts onCall={load} />
-      {!pending && !awaiting && !saved && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner and it appears here.</div>}
+      {!pending && !awaiting && !saved && !followup && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner and it appears here.</div>}
       {err && <p className="err">{err}</p>}
       <button className="link" style={{ alignSelf: 'center' }} onClick={() => getSupa().then((sb) => sb.auth.signOut())}>Sign out</button>
     </main>
