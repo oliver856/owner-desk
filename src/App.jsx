@@ -52,8 +52,23 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .tabs{display:flex;gap:20px;border-bottom:1px solid var(--line);margin-bottom:4px;overflow-x:auto}
 .tab{background:none;border:none;padding:8px 0 9px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
 .tab:hover{color:var(--ink)} .tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:500} .tab .c{color:var(--faint);margin-left:5px}
-.meta{display:flex;justify-content:space-between;gap:10px;padding-block:10px;color:var(--muted);flex-wrap:wrap}
-.tw{overflow-x:auto;transition:opacity .15s} .tw.busy{opacity:.55}
+.meta{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-block:10px;color:var(--muted);flex-wrap:wrap}
+.tw{overflow-x:auto;transition:opacity .15s;border:1px solid var(--line);border-radius:8px} .tw.busy{opacity:.55}
+table.grid{min-width:0;width:100%}
+.grid th{position:sticky;top:0;background:var(--bg);padding:9px 14px;border-bottom:1px solid var(--line);font-size:11.5px;letter-spacing:.02em}
+.grid td{padding:0 14px;height:44px;vertical-align:middle;white-space:nowrap;border-bottom:1px solid var(--line)}
+.grid tbody tr:last-child td{border-bottom:none}
+.grid td+td,.grid th+th{border-left:1px solid var(--line)}
+.grid .clip{display:inline-block;max-width:240px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.grid .strong{font-weight:500}
+.grid .callcol{width:1%;text-align:right;border-left:none}
+.grid .up{color:var(--accent)} .grid .down{color:var(--bad)}
+.picker{position:relative}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;width:320px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.sets{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:10px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:3px 10px;font-size:12px}
+.chip.on{border-color:var(--accent);color:var(--accent)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
 table{border-collapse:collapse;width:100%;min-width:980px}
 th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:8px 10px 8px 0;border-bottom:1px solid var(--line);white-space:nowrap}
 th button{background:none;border:none;padding:0;color:inherit} th button.on{color:var(--ink)}
@@ -280,6 +295,9 @@ function Owners({ places, onOpen }) {
   const ctl = useRef(null);
   const timer = useRef(null);
   const [calling, setCalling] = useState(null);
+  const [cols, setColsState] = useState(loadCols);
+  const setCols = (next) => { setColsState(next); try { localStorage.setItem('columns', JSON.stringify(next)); } catch {} };
+  const shown = COLUMNS.filter((c) => cols.includes(c.k));
 
   // Ask the server for the list. Typed fields wait for a short pause; everything else is instant.
   const load = useCallback((ff, t, s, p) => {
@@ -322,7 +340,7 @@ function Owners({ places, onOpen }) {
   const num = (k, ph) => (
     <input key={k} type="number" inputMode="numeric" placeholder={ph} value={f[k]} onChange={(e) => change({ [k]: e.target.value }, true)} />
   );
-  const sortBtn = (k, label) => <button className={sort === k ? 'on' : ''} onClick={() => goSort(k)}>{label}</button>;
+  const sortBtn = (k, label) => <button className={sort === k ? 'on' : ''} onClick={() => goSort(k)}>{label}{sort === k ? ' ↓' : ''}</button>;
 
   return (
     <>
@@ -363,18 +381,24 @@ function Owners({ places, onOpen }) {
           <nav className="tabs">
             {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '')} onClick={() => goTab(k)}>{l}<span className="c n">{fmt(c[k])}</span></button>)}
           </nav>
-          <div className="meta"><span>{fmt(total)} units</span><span>Page {page} of {pages}</span></div>
+          <div className="meta">
+            <span>{fmt(total)} units · page {page} of {pages}</span>
+            <ColumnPicker cols={cols} setCols={setCols} />
+          </div>
           {err && <p className="err">{err}</p>}
           <div className={'tw' + (busy ? ' busy' : '')}>
-            <table>
+            <table className="grid">
               <thead><tr>
-                <th>{sortBtn('unit', 'Unit')}</th><th className="r">{sortBtn('size', 'Size')}</th><th>Lease</th>
-                <th>{sortBtn('end', 'Contract ends')}</th><th className="r">{sortBtn('rent', 'Rent')}</th>
-                <th className="r">{sortBtn('sale', 'Last sale')}</th><th>Owner</th><th>Mobile</th><th>Last call</th><th></th>
+                {shown.map((col) => (
+                  <th key={col.k} className={col.right ? 'r' : ''}>
+                    {col.sort ? sortBtn(col.sort, col.label) : col.label}
+                  </th>
+                ))}
+                <th className="callcol" aria-label="Call" />
               </tr></thead>
               <tbody>
-                {data && data.rows.length === 0 && <tr><td colSpan={10} className="empty">Nothing matches. Try clearing a filter.</td></tr>}
-                {data?.rows.map((r) => <OwnerRow key={r.id} r={r} onOpen={onOpen} onCall={setCalling} />)}
+                {data && data.rows.length === 0 && <tr><td colSpan={shown.length + 1} className="empty">Nothing matches. Try clearing a filter.</td></tr>}
+                {data?.rows.map((r) => <OwnerRow key={r.id} r={r} cols={shown} onOpen={onOpen} onCall={setCalling} />)}
               </tbody>
             </table>
           </div>
@@ -404,22 +428,101 @@ function EndsCell({ d }) {
   return <><span className="n">{fd(d)}</span><span className={'sub ' + (n < 0 ? 'gone' : n <= 90 ? 'soon' : '')}>{n < 0 ? `ended ${-n} days ago` : `in ${n} days`}</span></>;
 }
 
-const OwnerRow = React.memo(function OwnerRow({ r, onOpen, onCall }) {
-  const chg = pct(r.annual_rent, r.prev_rent);
-  const osub = [r.owners_n > 1 ? `+${r.owners_n - 1} co-owner${r.owners_n > 2 ? 's' : ''}` : null,
-    r.owner_units > 1 ? `${r.owner_units} units here` : null, r.mortgaged ? 'mortgaged' : null].filter(Boolean).join(', ');
+// ── Owner list columns ──────────────────────────────────────────────────────
+// Each column: key, header label, how to draw the cell. Add, remove or reorder here.
+const titleCase = (s) => (s ? s.toLowerCase().replace(/(^|[\s'-])\S/g, (m) => m.toUpperCase()).replace(/\b(Llc|Fzco|Fze|Dmcc|Pjsc|Psc|Ltd)\b/g, (m) => m.toUpperCase()) : '');
+const dash = <span className="faint">—</span>;
+const LEASE_SHORT = { 'Live Ejari': 'Live', 'No live Ejari': 'None', 'Not confirmed': 'Unknown' };
+
+const COLUMNS = [
+  { k: 'unit', label: 'Unit', sort: 'unit', cell: (r) => <b>{r.unit_no}</b> },
+  { k: 'place', label: 'Building', cell: (r) => <span className="clip" title={titleCase(placeOf(r))}>{titleCase(placeOf(r))}</span> },
+  { k: 'sc', label: 'Sub-community', cell: (r) => <span className="clip" title={titleCase(r.subcommunity)}>{titleCase(r.subcommunity)}</span> },
+  { k: 'type', label: 'Type', cell: (r) => (r.unit_type === 'Villa' ? 'Villa' : 'Apartment') },
+  { k: 'beds', label: 'Beds', cell: (r) => bedsLabel(r.beds) },
+  { k: 'size', label: 'Size (sq ft)', right: true, sort: 'size', cell: (r) => (r.size_sqft ? fmt(r.size_sqft) : dash) },
+  { k: 'lease', label: 'Ejari', cell: (r) => {
+    const cls = r.lease_status === 'Live Ejari' ? 't' : r.lease_status === 'No live Ejari' ? 'v' : '';
+    return <span className={r.lease_status === 'Not confirmed' ? 'faint' : ''}><span className={'dot ' + cls} />{LEASE_SHORT[r.lease_status]}</span>;
+  } },
+  { k: 'renewals', label: 'Renewals', right: true, cell: (r) => (r.renewals == null ? dash : r.renewals) },
+  { k: 'ends', label: 'Contract ends', sort: 'end', cell: (r) => (r.end_date ? fd(r.end_date) : dash) },
+  { k: 'days', label: 'Days left', right: true, cell: (r) => {
+    const n = daysTo(r.end_date);
+    if (n == null) return dash;
+    return <span className={n < 0 ? 'gone' : n <= 90 ? 'soon' : ''}>{n < 0 ? `ended` : n}</span>;
+  } },
+  { k: 'rent', label: 'Rent (AED)', right: true, sort: 'rent', cell: (r) => (r.annual_rent ? fmt(r.annual_rent) : dash) },
+  { k: 'change', label: 'Rent change', right: true, cell: (r) => {
+    const c = pct(r.annual_rent, r.prev_rent);
+    return c == null ? dash : <span className={c > 0 ? 'up' : c < 0 ? 'down' : ''}>{c > 0 ? '+' : ''}{c}%</span>;
+  } },
+  { k: 'sale', label: 'Last sale (AED)', right: true, sort: 'sale', cell: (r) => (r.last_sale_price ? fmt(r.last_sale_price) : dash) },
+  { k: 'owner', label: 'Owner', cell: (r) => <span className="clip strong" title={titleCase(r.owner_name)}>{r.owner_name ? titleCase(r.owner_name) : '—'}</span> },
+  { k: 'mobile', label: 'Mobile', cell: (r) => <span className="ph">{r.owner_masked ?? <span className="faint">none</span>}</span> },
+  { k: 'owned', label: 'Units owned', right: true, cell: (r) => r.owner_units },
+  { k: 'coowners', label: 'Co-owners', right: true, cell: (r) => (r.owners_n > 1 ? r.owners_n - 1 : dash) },
+  { k: 'mortgaged', label: 'Mortgaged', cell: (r) => (r.mortgaged ? 'Yes' : dash) },
+  { k: 'lastcall', label: 'Last called', cell: (r) => (r.last_called ? fd(r.last_called) : <span className="faint">Never</span>) },
+  { k: 'outcome', label: 'Last outcome', cell: (r) => r.last_outcome ?? dash },
+];
+
+const COLUMN_SETS = [
+  ['Names and numbers', ['unit', 'place', 'owner', 'mobile', 'lastcall']],
+  ['Tenancy', ['unit', 'place', 'beds', 'lease', 'ends', 'days', 'rent', 'change', 'owner', 'mobile', 'lastcall']],
+  ['Ownership', ['unit', 'place', 'beds', 'size', 'sale', 'owner', 'owned', 'coowners', 'mortgaged', 'mobile']],
+  ['Everything', COLUMNS.map((c) => c.k)],
+];
+const DEFAULT_COLS = COLUMN_SETS[1][1];
+function loadCols() {
+  try {
+    const v = JSON.parse(localStorage.getItem('columns') || 'null');
+    if (Array.isArray(v) && v.length) return v.filter((k) => COLUMNS.some((c) => c.k === k));
+  } catch {}
+  return DEFAULT_COLS;
+}
+
+function ColumnPicker({ cols, setCols }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+  const toggle = (k) => {
+    const next = cols.includes(k) ? cols.filter((x) => x !== k) : COLUMNS.map((c) => c.k).filter((x) => cols.includes(x) || x === k);
+    if (next.length) setCols(next);
+  };
+  const same = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+  return (
+    <div className="picker" ref={ref}>
+      <button className="btn" onClick={() => setOpen(!open)} aria-expanded={open}>Columns · {cols.length}</button>
+      {open && (
+        <div className="menu">
+          <div className="sets">
+            {COLUMN_SETS.map(([name, keys]) => (
+              <button key={name} className={'chip' + (same(cols, keys) ? ' on' : '')} onClick={() => setCols(keys)}>{name}</button>
+            ))}
+          </div>
+          <div className="cols">
+            {COLUMNS.map((c) => (
+              <label key={c.k} className="cb"><input type="checkbox" checked={cols.includes(c.k)} onChange={() => toggle(c.k)} />{c.label}</label>
+            ))}
+          </div>
+          <p className="faint" style={{ margin: '8px 0 0' }}>Saved on this computer.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const OwnerRow = React.memo(function OwnerRow({ r, cols, onOpen, onCall }) {
   return (
     <tr onClick={() => onOpen(r.id)}>
-      <td><span className="unit">{r.unit_no}</span><span className="sub">{placeOf(r)} · {r.unit_type === 'Villa' ? 'Villa' : 'Apt'} · {bedsLabel(r.beds)}</span></td>
-      <td className="r n">{fmt(r.size_sqft)}</td>
-      <td><LeaseCell r={r} /></td>
-      <td><EndsCell d={r.end_date} /></td>
-      <td className="r n">{r.annual_rent ? <>{fmt(r.annual_rent)}{chg ? <span className="sub">{chg > 0 ? '+' : ''}{chg}% vs last</span> : null}</> : <span className="muted">—</span>}</td>
-      <td className="r n">{r.last_sale_price ? fmt(r.last_sale_price) : <span className="muted">—</span>}</td>
-      <td style={{ maxWidth: 230 }}>{r.owner_name ?? '—'}{osub && <span className="sub">{osub}</span>}</td>
-      <td className="ph n">{r.owner_masked ?? <span className="muted">none</span>}</td>
-      <td>{r.last_called ? <>{fd(r.last_called)}<span className="sub">{r.last_outcome ?? 'no outcome yet'}</span></> : <span className="muted">Never</span>}</td>
-      <td className="r">{r.owner_id && r.has_phone && <button className="btn" onClick={(e) => { e.stopPropagation(); onCall({ r }); }}>Call</button>}</td>
+      {cols.map((c) => <td key={c.k} className={c.right ? 'r n' : ''}>{c.cell(r)}</td>)}
+      <td className="callcol">{r.owner_id && r.has_phone && <button className="btn" onClick={(e) => { e.stopPropagation(); onCall({ r }); }}>Call</button>}</td>
     </tr>
   );
 });
