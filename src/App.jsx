@@ -114,11 +114,39 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0} dt{color:
 .box{background:var(--bg);border-radius:8px;width:min(400px,100%);padding:20px 22px;border:1px solid var(--line)}
 .box h3{margin:0 0 4px;font-size:16px;font-weight:600}
 .radios{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin:14px 0}
-.lookup{max-width:1100px} .lk-box{display:grid;gap:10px;max-width:640px;margin-bottom:18px}
-.lk-box input{width:100%;border:1px solid var(--line);border-radius:4px;padding:8px;background:var(--bg)} .lk-box textarea{margin:0;min-height:90px}
-.lk-act{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;justify-self:start}
-.seg button{background:none;border:none;padding:6px 12px;color:var(--muted)} .seg button.on{background:var(--hover);color:var(--ink)}
+.lk{max-width:720px;margin:0 auto;padding:36px 16px 60px}
+.lk .c{text-align:center}
+.lk-hero{text-align:center;display:grid;justify-items:center;gap:8px;margin-bottom:22px}
+.lk-hero h1{font-size:30px;line-height:1.15;font-weight:650;letter-spacing:-.02em;margin:6px 0 0}
+.lk-hero p{margin:0;color:var(--muted);font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:12px;white-space:nowrap;background:var(--bg)}
+.pill .dot{margin:0} .pill.ok{color:var(--accent)} .pill.warn{color:var(--warn)}
+.lk-search{display:grid;justify-items:center;gap:12px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px;background:var(--hover)}
+.seg button{background:none;border:none;padding:6px 16px;border-radius:999px;color:var(--muted);font-size:13px}
+.seg button.on{background:var(--bg);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.lk-bar{width:100%;display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:16px;padding:7px 7px 7px 16px;background:var(--bg);
+  box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06);transition:border-color .15s,box-shadow .15s;color:var(--faint)}
+.lk-bar:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 14%,transparent),0 8px 24px rgba(0,0,0,.06)}
+.lk-bar input{flex:1;min-width:0;border:none;background:none;outline:none;font-size:15px;padding:8px 0;color:var(--ink)}
+.lk-bar .btn{border-radius:11px;padding:10px 20px;font-size:14px}
+.lk-permit{width:100%;border:1px solid var(--line);border-radius:14px;background:var(--hover);padding:12px 14px 14px}
+.lk-permit-h{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-bottom:8px}
+.lk-permit-h b{font-size:12.5px;font-weight:600} .lk-permit-h span{color:var(--muted);font-size:12px}
+.lk-permit textarea{width:100%;margin:0;min-height:84px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px 12px;font-size:13.5px}
+.lk-permit textarea:focus{outline:none;border-color:var(--accent)}
+.lk-meta{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 12px;color:var(--muted);font-size:12px}
+.lk-meta b{color:var(--ink);font-weight:600} .lk-meta .sep{width:3px;height:3px;border-radius:50%;background:var(--faint)}
+.lk-sec{margin-top:34px}
+.lk-sec h4{margin:0 0 10px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.lk-row{display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;background:var(--bg);color:inherit}
+.link-row{cursor:pointer;transition:border-color .15s,transform .15s} .link-row:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));transform:translateY(-1px)}
+.lk-ico{flex:none;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 12%,var(--bg));color:var(--accent);font-weight:600;font-size:12px}
+.lk-main{flex:1;min-width:0;display:grid;gap:2px} .lk-main b{font-weight:600}
+.lk-main span{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lk-by{flex:none;text-align:right;color:var(--faint);font-size:11.5px;line-height:1.4}
+.lk-empty{border:1px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--muted)}
+@media (max-width:560px){.lk-hero h1{font-size:24px} .lk-by{display:none}}
 .notebox{margin:0 0 8px!important;min-height:64px!important}
 .noteact{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
 .note{border-top:1px solid var(--line);padding:9px 0}
@@ -840,57 +868,74 @@ function Lookup({ onOpen }) {
   const propSub = (p) => [p.master_project_en, p.area_name_en, p.rooms_en, p.actual_area && `${fmt(Math.round(p.actual_area * 10.7639))} sq ft`, p.property_sub_type_en || p.property_type_en].filter(Boolean).join(' · ');
   const ready = mode === 'dewa' ? /\d{5,}/.test(dewa) : /^https?:\/\//i.test(url.trim());
 
+  const go = (e) => { e.preventDefault(); if (ready && !busy && st?.configured) search(); };
   return (
-    <main className="gut lookup">
-      <div className="head" style={{ paddingInline: 0 }}>
-        <h1>Lookup</h1>
-        <p>Find the registered owner from a listing link or a DEWA number. Results are kept separate from the Owners list.</p>
+    <main className="lk">
+      <div className="lk-hero">
+        {st && (st.configured
+          ? <span className="pill ok"><span className="dot t" />Connected{st.credits != null ? ` · ${st.credits} credits` : ''}</span>
+          : <span className="pill warn"><span className="dot v" />Not connected</span>)}
+        <h1>Find any owner</h1>
+        <p>Paste a listing link or a DEWA number to see who owns the unit.</p>
       </div>
-      {st && !st.configured && <p className="err">The lookup API key hasn&apos;t been added in Vercel yet (DXB_HAWK_KEY).</p>}
-      <div className="lk-box">
+
+      <form className="lk-search" onSubmit={go}>
         <div className="seg">
-          <button className={mode === 'link' ? 'on' : ''} onClick={() => setMode('link')}>Listing link</button>
-          <button className={mode === 'dewa' ? 'on' : ''} onClick={() => setMode('dewa')}>DEWA number</button>
+          <button type="button" className={mode === 'link' ? 'on' : ''} onClick={() => setMode('link')}>Listing link</button>
+          <button type="button" className={mode === 'dewa' ? 'on' : ''} onClick={() => setMode('dewa')}>DEWA number</button>
         </div>
-        {mode === 'link' ? <>
-          <input type="url" placeholder="Paste a Property Finder or Bayut listing link" value={url} onChange={(e) => setUrl(e.target.value)} />
-          <textarea placeholder="Paste the whole permit card text from the listing (most listings need it)" value={card} onChange={(e) => setCard(e.target.value)} />
-        </> : <input inputMode="numeric" placeholder="DEWA premise number" value={dewa} onChange={(e) => setDewa(e.target.value.replace(/\D/g, ''))} />}
-        <div className="lk-act">
-          <span className="faint">{st ? `${st.used} of ${st.cap} lookups used today` : ' '}{st?.credits != null ? ` · ${st.credits} credits left` : ''}</span>
-          <button className="btn primary" disabled={!ready || !!busy || (st && !st.configured)} onClick={search}>{busy === 'search' ? 'Searching…' : 'Find unit · 2 credits'}</button>
+        <div className="lk-bar">
+          <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" strokeWidth="1.8" /><path d="M13.5 13.5 18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+          {mode === 'link'
+            ? <input key="u" type="url" autoFocus placeholder="https://www.propertyfinder.ae/en/plp/…" value={url} onChange={(e) => setUrl(e.target.value)} />
+            : <input key="d" inputMode="numeric" autoFocus placeholder="DEWA premise number, e.g. 2015846395" value={dewa} onChange={(e) => setDewa(e.target.value.replace(/\D/g, ''))} />}
+          <button className="btn primary" disabled={!ready || !!busy || (st && !st.configured)}>{busy === 'search' ? 'Searching…' : 'Find unit'}</button>
         </div>
-        {err && <p className="err">{err}</p>}
-      </div>
+        {mode === 'link' && (
+          <div className="lk-permit">
+            <div className="lk-permit-h"><b>Permit card</b><span>Copy everything in the listing&apos;s permit section. Most listings need it.</span></div>
+            <textarea placeholder="Paste the permit card text here" value={card} onChange={(e) => setCard(e.target.value)} />
+          </div>
+        )}
+        {st && !st.configured && <p className="err c">Add the API key in Vercel to switch this on (DXB_HAWK_KEY).</p>}
+        {err && <p className="err c">{err}</p>}
+        <div className="lk-meta">
+          <span>{st ? `${st.used} of ${st.cap} lookups today` : ' '}</span>
+          <span className="sep" /><span>Find unit <b>2 credits</b></span>
+          <span className="sep" /><span>Get owner <b>3 credits</b></span>
+          <span className="sep" /><span>Already found <b>free</b></span>
+        </div>
+      </form>
 
       {res && (
-        <div className="blk">
-          <h4>{res.candidates.length > 1 ? `${res.candidates.length} possible units. Pick the right one.` : 'Unit found'}</h4>
+        <section className="lk-sec">
+          <h4>{res.candidates.length > 1 ? `${res.candidates.length} possible units · pick the right one` : 'Unit found'}</h4>
           {res.candidates.map((c) => (
-            <div className="owner" key={c.i}>
-              <div>{prop(c.property) || 'Registered unit'}<span className="sub">{propSub(c.property)}</span></div>
+            <div className="lk-row" key={c.i}>
+              <div className="lk-ico" aria-hidden="true">{(c.property?.property_number || '#').slice(0, 4)}</div>
+              <div className="lk-main"><b>{prop(c.property) || 'Registered unit'}</b><span>{propSub(c.property)}</span></div>
               <button className={c.unitId ? 'btn' : 'btn primary'} disabled={!!busy} onClick={() => owner(c)}>
-                {c.unitId ? 'Open' : busy === 'owner' + c.i ? 'Getting owner…' : 'Get owner · 3 credits'}</button>
+                {c.unitId ? 'Open' : busy === 'owner' + c.i ? 'Getting owner…' : 'Get owner'}</button>
             </div>
           ))}
-        </div>
+        </section>
       )}
 
-      <div className="blk"><h4>Recent lookups</h4>
-        {!recent ? <p className="muted">Loading…</p> : recent.length === 0 ? <p className="muted">No lookups yet</p> : (
-          <div className="tw"><table className="grid">
-            <thead><tr><th>Unit</th><th>Owner</th><th>Mobile</th><th>Previous owners</th><th>Found by</th><th /></tr></thead>
-            <tbody>{recent.map((r) => (
-              <tr key={r.unit_id} onClick={() => onOpen(r.unit_id)}>
-                <td><span className="clip strong">{titleCase(r.property?.building_name_en || r.property?.project_name_en)} {r.unit_no}</span></td>
-                <td><span className="clip" title={titleCase(r.owners)}>{titleCase(r.owners) || '—'}</span></td>
-                <td className="ph">{r.masked || <span className="faint">none</span>}</td>
-                <td><span className="clip" title={titleCase(r.previous)}>{r.previous_n ? titleCase(r.previous) : '—'}</span></td>
-                <td className="muted">{r.by_name}, {fdt(r.created_at)}</td>
-                <td className="callcol"><button className="btn" onClick={(e) => { e.stopPropagation(); onOpen(r.unit_id); }}>Open</button></td>
-              </tr>))}</tbody>
-          </table></div>)}
-      </div>
+      <section className="lk-sec">
+        <h4>Recent lookups</h4>
+        {!recent ? <p className="muted c">Loading…</p> : recent.length === 0
+          ? <div className="lk-empty">Nothing looked up yet. Owners you find appear here for the whole team.</div>
+          : recent.map((r) => (
+            <button className="lk-row link-row" key={r.unit_id} onClick={() => onOpen(r.unit_id)}>
+              <div className="lk-ico" aria-hidden="true">{String(r.unit_no || '#').slice(0, 4)}</div>
+              <div className="lk-main">
+                <b>{titleCase(r.property?.building_name_en || r.property?.project_name_en)} {r.unit_no}</b>
+                <span>{titleCase(r.owners) || 'Owner not listed'}{r.masked ? <> · <span className="ph">{r.masked}</span></> : ''}{r.previous_n ? ` · previously ${titleCase(r.previous)}` : ''}</span>
+              </div>
+              <span className="lk-by">{r.by_name}<br />{fdt(r.created_at)}</span>
+            </button>
+          ))}
+      </section>
     </main>
   );
 }
