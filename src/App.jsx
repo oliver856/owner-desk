@@ -72,6 +72,14 @@ table.grid{min-width:0;width:100%}
 table{border-collapse:collapse;width:100%;min-width:980px}
 th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:8px 10px 8px 0;border-bottom:1px solid var(--line);white-space:nowrap}
 th button{background:none;border:none;padding:0;color:inherit} th button.on{color:var(--ink)}
+.th{display:inline-flex;align-items:center;gap:6px} th.r .th{flex-direction:row-reverse}
+.fbtn{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;color:var(--faint)!important;opacity:.55}
+th:hover .fbtn,.fbtn.open,.fbtn.on{opacity:1} .fbtn:hover,.fbtn.open{background:var(--hover);color:var(--ink)!important}
+.fbtn.on{color:var(--accent)!important}
+.hf{position:fixed;z-index:40;width:260px;background:var(--bg);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);font-size:13px;letter-spacing:0;font-weight:400;text-align:left}
+.hf-h{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.hf .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px} .hf .pair input{width:100%;min-width:0}
+.hf-b{padding:10px 12px;display:grid;gap:2px;max-height:340px;overflow:auto} .hf-b select,.hf-b input[type=search]{width:100%}
 td{padding:10px 10px 10px 0;border-bottom:1px solid var(--line);vertical-align:top}
 tbody tr{cursor:pointer} tbody tr:hover td{background:var(--hover)}
 td.r,th.r{text-align:right} .unit{font-weight:600}
@@ -98,6 +106,10 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0} dt{color:
 .box{background:var(--bg);border-radius:8px;width:min(400px,100%);padding:20px 22px;border:1px solid var(--line)}
 .box h3{margin:0 0 4px;font-size:16px;font-weight:600}
 .radios{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin:14px 0}
+.notebox{margin:0 0 8px!important;min-height:64px!important}
+.noteact{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.note{border-top:1px solid var(--line);padding:9px 0}
+.note p{margin:0 0 3px;white-space:pre-wrap;overflow-wrap:anywhere}
 textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:7px;background:var(--bg);min-height:54px;resize:vertical;margin:10px 0 14px}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;z-index:90}
 .audit div{display:grid;grid-template-columns:120px 160px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)} .audit .bad{color:var(--bad)}
@@ -221,7 +233,8 @@ function ThemeToggle() {
 
 // ── Laptop: owner list, unit panel, activity ────────────────────────────────
 const EMPTY = { q: '', sc: '', bld: '', st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', rmin: '', rmax: '', pmin: '', pmax: '',
-  first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false };
+  first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false,
+  ncall: false, called: false, oc: [] };
 
 function toParams(f, tab, sort, page) {
   const p = new URLSearchParams();
@@ -340,6 +353,59 @@ function Owners({ places, onOpen }) {
   const num = (k, ph) => (
     <input key={k} type="number" inputMode="numeric" placeholder={ph} value={f[k]} onChange={(e) => change({ [k]: e.target.value }, true)} />
   );
+  // Filters on the column headings. They use the same choices as the side panel, so both always agree.
+  const [fcol, setFcol] = useState(null); // { k, x, y } of the open heading filter
+  useEffect(() => {
+    if (!fcol) return;
+    const close = (e) => { if (!e.target.closest?.('.hf,.fbtn')) setFcol(null); };
+    const esc = (e) => e.key === 'Escape' && setFcol(null);
+    const gone = () => setFcol(null);
+    document.addEventListener('mousedown', close); document.addEventListener('keydown', esc);
+    window.addEventListener('scroll', gone, true); window.addEventListener('resize', gone);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc);
+      window.removeEventListener('scroll', gone, true); window.removeEventListener('resize', gone); };
+  }, [fcol]);
+  const pick = (k, list) => (
+    <select value={f[k]} onChange={(e) => change(k === 'sc' ? { sc: e.target.value, bld: '' } : { [k]: e.target.value })}>
+      <option value="">All</option>{list.map((x) => <option key={x} value={x}>{titleCase(x)}</option>)}
+    </select>
+  );
+  const ends = () => <>
+    {EXPIRY.map(([v, l]) => <label className="cb" key={v}><input type="radio" name="hexp" checked={f.exp === v} onChange={() => change({ exp: v })} />{l}</label>)}
+    <div className="pair" style={{ marginTop: 6 }}>
+      <input type="date" aria-label="Ends from" value={f.from} onChange={(e) => change({ from: e.target.value })} />
+      <input type="date" aria-label="Ends to" value={f.to} onChange={(e) => change({ to: e.target.value })} />
+    </div></>;
+  const search = () => <input type="search" autoFocus placeholder="Search owner, building or unit" value={f.q} onChange={(e) => change({ q: e.target.value }, true)} />;
+  const HEAD_FILTERS = {
+    unit: { on: ['q'], ui: search },
+    place: { on: ['bld'], ui: () => pick('bld', buildings) },
+    sc: { on: ['sc'], ui: () => pick('sc', subcommunities) },
+    type: { on: ['type'], ui: () => <>{box('type', 'Apartment')}{box('type', 'Villa')}</> },
+    beds: { on: ['beds'], ui: () => <div className="cols">{BEDS.map((b) => box('beds', b, bedsLabel(b)))}</div> },
+    size: { on: ['smin', 'smax'], ui: () => <div className="pair">{num('smin', 'Min')}{num('smax', 'Max')}</div> },
+    lease: { on: ['st'], ui: () => ['Live Ejari', 'No live Ejari', 'Not confirmed'].map((v) => box('st', v)) },
+    renewals: { on: ['first', 'ren2'], ui: () => <>{flag('first', 'First year (no renewals)')}{flag('ren2', 'Renewed 2+ times')}</> },
+    ends: { on: ['exp', 'from', 'to'], ui: ends },
+    days: { on: ['exp', 'from', 'to'], ui: ends },
+    rent: { on: ['rmin', 'rmax'], ui: () => <div className="pair">{num('rmin', 'Min')}{num('rmax', 'Max')}</div> },
+    change: { on: ['up', 'down'], ui: () => <>{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</> },
+    sale: { on: ['pmin', 'pmax'], ui: () => <div className="pair">{num('pmin', 'Min')}{num('pmax', 'Max')}</div> },
+    owner: { on: ['q', 'ind'], ui: () => <>{search()}<div style={{ marginTop: 8 }}>{flag('ind', 'Individuals only')}</div></> },
+    mobile: { on: ['phone'], ui: () => flag('phone', 'Has a mobile number') },
+    owned: { on: ['port'], ui: () => flag('port', 'Owns 2+ units here') },
+    mortgaged: { on: ['mort'], ui: () => flag('mort', 'Mortgaged') },
+    lastcall: { on: ['ncall', 'called'], ui: () => <>{flag('ncall', 'Never called')}{flag('called', 'Called before')}</> },
+    outcome: { on: ['oc'], ui: () => OUTCOMES.map((o) => box('oc', o)) },
+  };
+  const isOn = (keys) => keys.some((k) => (Array.isArray(f[k]) ? f[k].length > 0 : !!f[k]));
+  const clearKeys = (keys) => change(Object.fromEntries(keys.map((k) => [k, EMPTY[k]])));
+  const openHead = (k, e) => {
+    if (fcol?.k === k) return setFcol(null);
+    const r = e.currentTarget.getBoundingClientRect();
+    setFcol({ k, x: Math.max(8, Math.min(r.left, window.innerWidth - 268)), y: r.bottom + 6 });
+  };
+
   const sortBtn = (k, label) => <button className={sort === k ? 'on' : ''} onClick={() => goSort(k)}>{label}{sort === k ? ' ↓' : ''}</button>;
 
   return (
@@ -374,6 +440,7 @@ function Owners({ places, onOpen }) {
           <div><h3>Tenancy</h3>{flag('first', 'First year (no renewals)')}{flag('ren2', 'Renewed 2+ times')}{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</div>
           <div><h3>Last sale price, AED</h3><div className="pair">{num('pmin', 'Min')}{num('pmax', 'Max')}</div></div>
           <div><h3>Owner</h3>{flag('port', 'Owns 2+ units here')}{flag('mort', 'Mortgaged')}{flag('ind', 'Individuals only')}{flag('phone', 'Has a mobile number')}</div>
+          <div><h3>Calls</h3>{flag('ncall', 'Never called')}{flag('called', 'Called before')}</div>
           <button className="link" style={{ textAlign: 'left' }} onClick={() => { setF(EMPTY); setPage(1); load(EMPTY, tab, sort, 1); }}>Clear filters</button>
         </aside>
 
@@ -389,11 +456,21 @@ function Owners({ places, onOpen }) {
           <div className={'tw' + (busy ? ' busy' : '')}>
             <table className="grid">
               <thead><tr>
-                {shown.map((col) => (
-                  <th key={col.k} className={col.right ? 'r' : ''}>
-                    {col.sort ? sortBtn(col.sort, col.label) : col.label}
-                  </th>
-                ))}
+                {shown.map((col) => {
+                  const hf = HEAD_FILTERS[col.k];
+                  const on = hf && isOn(hf.on);
+                  return (
+                    <th key={col.k} className={col.right ? 'r' : ''}>
+                      <span className="th">
+                        {col.sort ? sortBtn(col.sort, col.label) : col.label}
+                        {hf && <button className={'fbtn' + (on ? ' on' : '') + (fcol?.k === col.k ? ' open' : '')} aria-label={'Filter ' + col.label}
+                          title={'Filter ' + col.label} onClick={(e) => openHead(col.k, e)}>
+                          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 2.5h9L7 6.6v3.2l-2 .9V6.6z" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>
+                        </button>}
+                      </span>
+                    </th>
+                  );
+                })}
                 <th className="callcol" aria-label="Call" />
               </tr></thead>
               <tbody>
@@ -402,6 +479,13 @@ function Owners({ places, onOpen }) {
               </tbody>
             </table>
           </div>
+          {fcol && HEAD_FILTERS[fcol.k] && (
+            <div className="hf" style={{ left: fcol.x, top: fcol.y }} role="dialog" aria-label="Column filter">
+              <div className="hf-h"><b>{COLUMNS.find((c) => c.k === fcol.k)?.label}</b>
+                {isOn(HEAD_FILTERS[fcol.k].on) && <button className="link" onClick={() => clearKeys(HEAD_FILTERS[fcol.k].on)}>Clear</button>}</div>
+              <div className="hf-b">{HEAD_FILTERS[fcol.k].ui()}</div>
+            </div>
+          )}
           <div className="pager">
             {page > 1 && <button className="link" onClick={() => goPage(page - 1)}>Previous</button>}
             {page < pages && <button className="link" onClick={() => goPage(page + 1)}>Next</button>}
@@ -465,6 +549,7 @@ const COLUMNS = [
   { k: 'mortgaged', label: 'Mortgaged', cell: (r) => (r.mortgaged ? 'Yes' : dash) },
   { k: 'lastcall', label: 'Last called', cell: (r) => (r.last_called ? fd(r.last_called) : <span className="faint">Never</span>) },
   { k: 'outcome', label: 'Last outcome', cell: (r) => r.last_outcome ?? dash },
+  { k: 'note', label: 'Last note', cell: (r) => (r.last_note ? <span className="clip" title={r.last_note}>{r.last_note}</span> : dash) },
 ];
 
 const COLUMN_SETS = [
@@ -583,6 +668,7 @@ function UnitPanel({ id, onClose, onOpen, onCaps }) {
               ))}
             </div>
           </div>
+          <Notes unitId={u.id} notes={d.notes} onAdded={(n) => setD((x) => ({ ...x, notes: [n, ...x.notes] }))} />
           <div className="blk"><h4>Calls</h4>
             {d.calls.length === 0 ? <p className="muted">Not called yet</p> : d.calls.map((c, i) => (
               <div key={i} className="owner"><span>{c.outcome ?? 'No outcome logged'}{c.note && <span className="sub">{c.note}</span>}</span>
@@ -595,6 +681,38 @@ function UnitPanel({ id, onClose, onOpen, onCaps }) {
       {calling && u && <CallFlow unitId={u.id} owner={calling} label={`${calling.name}, ${place} ${u.unit_no}`}
         onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(); }} />}
     </>
+  );
+}
+
+// Notes on a unit. Anyone with the area sees them; they stay on the record with the writer's name.
+function Notes({ unitId, notes, onAdded }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function save() {
+    if (!text.trim()) return;
+    setBusy(true); setErr('');
+    try { const j = await api('/api/desk?action=addNote', { method: 'POST', body: { unitId, body: text } }); onAdded(j.note); setText(''); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+  return (
+    <div className="blk"><h4>Notes</h4>
+      <textarea className="notebox" placeholder="Add a note about this unit or owner" value={text} maxLength={2000}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save(); }} />
+      <div className="noteact">
+        <span className="faint">Ctrl/⌘ + Enter to save</span>
+        <button className="btn primary" disabled={!text.trim() || busy} onClick={save}>{busy ? 'Saving…' : 'Save note'}</button>
+      </div>
+      {err && <p className="err">{err}</p>}
+      {notes.length === 0 ? <p className="muted">No notes yet</p> : notes.map((n) => (
+        <div key={n.id} className="note">
+          <p>{n.body}</p>
+          <span className="faint">{n.full_name}, {fdt(n.created_at)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -670,6 +788,7 @@ const ACTIVITY_LABEL = {
   searched: 'Searched', opened_unit: 'Opened a unit', call_sent: 'Sent a call to phone', call_dialled: 'Tapped Call on phone',
   outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', limit_hit: 'Hit a daily limit',
   call_blocked_hours: 'Tried to call outside 9am–6pm', dial_refused: 'Tapped an expired call', phone_alerts_on: 'Turned on phone alerts',
+  note_added: 'Added a note',
 };
 const ACTIVITY_BAD = ['copy_blocked', 'limit_hit', 'call_blocked_hours', 'dial_refused'];
 
