@@ -14,6 +14,7 @@ const NO_WHATSAPP = ['Wrong number', 'Do not call'];
 const actions = {
   // The newest call waiting to be tapped, and the last tapped call with no outcome yet (masked numbers only)
   async pending(req, res, s) {
+    await ensureFollow();
     const [pending] = await sql`
       select cr.id, o.name as owner_name, ph.masked, u.unit_no, u.unit_type, b.subcommunity, b.name as building,
              extract(epoch from (cr.expires_at - now()))::int as seconds_left
@@ -24,31 +25,25 @@ const actions = {
       join desk.buildings b on b.id = u.building_id
       where cr.user_id = ${s.user_id} and cr.used_at is null and cr.expires_at > now()
       order by cr.created_at desc limit 1`;
-    const [awaiting] = await sql`
-      select cr.id, o.name as owner_name, u.unit_no, u.unit_type, b.subcommunity, b.name as building
-      from desk.call_requests cr
-      join desk.calls c on c.request_id = cr.id and c.outcome is null
-      join desk.owners o on o.id = cr.owner_id
-      join desk.units u on u.id = cr.unit_id
-      join desk.buildings b on b.id = u.building_id
-      where cr.user_id = ${s.user_id} and cr.used_at > now() - interval '2 hours'
-      order by cr.used_at desc limit 1`;
-    // The last call with an outcome in the past hour that still needs its WhatsApp follow-up (masked number only)
-    await ensureFollow();
-    const [followup] = await sql`
+    // After a call the phone only ever deals with the broker's latest tapped call: its outcome first, then the
+    // WhatsApp follow-up. Older calls left without an outcome stay on the record but don't queue up here.
+    const [last] = await sql`
       select cr.id, c.outcome, o.name as owner_name, o.is_company, ph.masked, u.unit_no, u.unit_type, u.beds,
-             b.subcommunity, b.name as building, a.name as area
+             b.subcommunity, b.name as building, a.name as area, (c.followup_at is not null) as followed_up,
+             (cr.used_at > now() - interval '1 hour') as recent,
+             exists (select 1 from desk.do_not_call d where d.owner_id = cr.owner_id) as dnc
       from desk.call_requests cr
-      join desk.calls c on c.request_id = cr.id and c.outcome is not null and c.followup_at is null
-        and not (c.outcome = any(${NO_WHATSAPP}))
+      join desk.calls c on c.request_id = cr.id
       join desk.owners o on o.id = cr.owner_id
-      join desk.owner_phones ph on ph.owner_id = cr.owner_id
+      left join desk.owner_phones ph on ph.owner_id = cr.owner_id
       join desk.units u on u.id = cr.unit_id
       join desk.buildings b on b.id = u.building_id
       join desk.areas a on a.id = b.area_id
-      where cr.user_id = ${s.user_id} and cr.used_at > now() - interval '1 hour'
-        and not exists (select 1 from desk.do_not_call d where d.owner_id = cr.owner_id)
-      order by c.outcome_at desc nulls last limit 1`;
+      where cr.user_id = ${s.user_id} and cr.used_at > now() - interval '2 hours'
+      order by cr.used_at desc limit 1`;
+    let awaiting = null, followup = null;
+    if (last && !last.outcome) awaiting = last;
+    else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome)) followup = last;
     res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup || null });
   },
 
