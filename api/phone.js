@@ -5,6 +5,12 @@ import { sql, route, query, body, audit } from './_lib/core.js';
 import { vapidKeys, pushToUser } from './_lib/push.js';
 import { OUTCOMES, saveOutcome } from './_lib/outcome.js';
 
+// One extra column on calls records when the WhatsApp follow-up was sent or skipped. Added by the server itself.
+let followReady = null;
+const ensureFollow = () => (followReady ??= sql`alter table desk.calls add column if not exists followup_at timestamptz`
+  .catch((e) => { followReady = null; throw e; }));
+const NO_WHATSAPP = ['Wrong number', 'Do not call'];
+
 const actions = {
   // The newest call waiting to be tapped, and the last tapped call with no outcome yet (masked numbers only)
   async pending(req, res, s) {
@@ -27,7 +33,23 @@ const actions = {
       join desk.buildings b on b.id = u.building_id
       where cr.user_id = ${s.user_id} and cr.used_at > now() - interval '2 hours'
       order by cr.used_at desc limit 1`;
-    res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null });
+    // The last call with an outcome in the past hour that still needs its WhatsApp follow-up (masked number only)
+    await ensureFollow();
+    const [followup] = await sql`
+      select cr.id, c.outcome, o.name as owner_name, o.is_company, ph.masked, u.unit_no, u.unit_type, u.beds,
+             b.subcommunity, b.name as building, a.name as area
+      from desk.call_requests cr
+      join desk.calls c on c.request_id = cr.id and c.outcome is not null and c.followup_at is null
+        and not (c.outcome = any(${NO_WHATSAPP}))
+      join desk.owners o on o.id = cr.owner_id
+      join desk.owner_phones ph on ph.owner_id = cr.owner_id
+      join desk.units u on u.id = cr.unit_id
+      join desk.buildings b on b.id = u.building_id
+      join desk.areas a on a.id = b.area_id
+      where cr.user_id = ${s.user_id} and cr.used_at > now() - interval '1 hour'
+        and not exists (select 1 from desk.do_not_call d where d.owner_id = cr.owner_id)
+      order by c.outcome_at desc nulls last limit 1`;
+    res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup || null });
   },
 
   // The blue button. Releases the number once, for this broker's own unexpired request, and records the call.
@@ -56,6 +78,31 @@ const actions = {
     const ok = await saveOutcome(s, Number(requestId), outcome, note, !!kendal, ip);
     if (!ok) return res.status(404).json({ error: 'That call wasn\'t found. Was the blue button tapped on your phone?' });
     res.json({ ok: true });
+  },
+
+  // WhatsApp follow-up after a call. The message is written on the phone screen; the server adds the number
+  // only for this broker's own call from the past hour, and logs it.
+  async whatsapp(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    const b = body(req);
+    const id = Number(b.requestId);
+    const skip = !!b.skip;
+    const text = String(b.text || '').trim().slice(0, 1000);
+    if (!skip && !text) return res.status(400).json({ error: 'Write a message first.' });
+    await ensureFollow();
+    const [c] = await sql`
+      update desk.calls c set followup_at = now()
+      from desk.call_requests cr
+      where cr.id = c.request_id and cr.id = ${id} and cr.user_id = ${s.user_id}
+        and cr.used_at > now() - interval '1 hour' and c.followup_at is null
+        and not (coalesce(c.outcome, '') = any(${NO_WHATSAPP}))
+        and not exists (select 1 from desk.do_not_call d where d.owner_id = c.owner_id)
+      returning c.unit_id, c.owner_id`;
+    if (!c) return res.status(410).json({ error: 'This follow-up has expired or was already sent.' });
+    await audit(s.user_id, skip ? 'whatsapp_skipped' : 'whatsapp_opened', { unitId: c.unit_id, detail: { request_id: id, owner_id: c.owner_id }, ip });
+    if (skip) return res.json({ ok: true });
+    const [ph] = await sql`select phone from desk.owner_phones where owner_id = ${c.owner_id}`;
+    res.json({ url: `https://wa.me/${ph.phone}?text=${encodeURIComponent(text)}` });
   },
 
   async vapid(req, res) {
