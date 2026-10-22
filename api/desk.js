@@ -1,7 +1,7 @@
 // Office-only actions: /api/desk?action=...
 // Every action checks the office IP and the signed-in broker before touching data.
 import crypto from 'node:crypto';
-import { sql, route, query, body, audit, caps, setting, withinCallHours } from './_lib/core.js';
+import { sql, route, query, body, audit, caps, setting, withinCallHours, callTarget } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 
@@ -40,7 +40,8 @@ const actions = {
       p = { at: Date.now(), rows: rows.map((r) => ({ area: r.area, sc: r.subcommunity, bld: r.building })) };
       places.set(key, p);
     }
-    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: await caps(s.user_id), places: p.rows });
+    const [c, target] = await Promise.all([caps(s.user_id), callTarget(s.user_id)]);
+    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: p.rows });
   },
 
   // The owner list with filters, tab counts and paging
