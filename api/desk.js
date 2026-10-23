@@ -127,6 +127,11 @@ const actions = {
     const page = Math.max(1, Number(q.get('page')) || 1);
     await Promise.all([ensureNotes(), ensureHolds()]);
     const more = q.get('more') === '1';
+    // only=<unit id>: refresh one row in place (after a call) without reloading the list
+    const only = Number(q.get('only')) || 0;
+    const rowWhere = only
+      ? sql`${whereSql(new URLSearchParams(), s.listAreas, s.user_id)} and v_unit_list.id = ${only}`
+      : sql`${whereSql(q, s.listAreas, s.user_id)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}`;
     const [rows, [counts]] = await Promise.all([
       sql`select ${sql(COLS)},
             (select x.body from (
@@ -154,7 +159,7 @@ const actions = {
             (select a.name from desk.areas a where a.id = v_unit_list.area_id) as area,
             (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
                from desk.owner_hold(v_unit_list.owner_id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user) as hold
-          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}
+          from desk.v_unit_list where ${rowWhere}
           order by ${sortSql(q.get('sort'))} limit ${PAGE} offset ${(page - 1) * PAGE}`,
       more ? Promise.resolve([null]) : sql`select count(*)::int as all,
             count(*) filter (where ${tabSql('exp90')})::int as exp90,
@@ -165,8 +170,8 @@ const actions = {
             count(*) filter (where ${tabSql('callbacks', s.user_id, s.role !== 'broker')})::int as callbacks
           from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)}`,
     ]);
-    const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more'].includes(k));
-    if (filtered || page > 1) audit(s.user_id, 'searched', { detail: Object.fromEntries(q), ip }).catch(() => {});
+    const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more', 'only'].includes(k));
+    if (!only && (filtered || page > 1)) audit(s.user_id, 'searched', { detail: Object.fromEntries(q), ip }).catch(() => {});
     res.json({ rows, counts, page, pageSize: PAGE });
   },
 
