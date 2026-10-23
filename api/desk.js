@@ -13,6 +13,12 @@ const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 
 
 const places = new Map(); // building list per area set, kept for 10 minutes
 
+// Adds the 'director' role (sees every team, like an admin, but can't change settings)
+let rolesReady = null;
+const ensureRoles = () => (rolesReady ??= sql`alter table desk.staff drop constraint if exists staff_role_check`
+  .then(() => sql`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`)
+  .catch((e) => { rolesReady = null; throw e; }));
+
 // Each broker's saved view (filters, tab, sort, columns, filter panel). Created by the server on first use.
 let prefsReady = null;
 const ensurePrefs = () => (prefsReady ??= sql`create table if not exists desk.staff_prefs (
@@ -54,6 +60,48 @@ const actions = {
     const [c, target, [pr]] = await Promise.all([caps(s.user_id), callTarget(s.user_id),
       sql`select prefs from desk.staff_prefs where user_id = ${s.user_id}`]);
     res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: p.rows, prefs: pr?.prefs || null });
+  },
+
+  // Manager dashboard (their team) and director overview (every team)
+  async dashboard(req, res, s) {
+    if (s.role === 'broker') return res.status(403).json({ error: 'Only managers and directors can see the dashboard.' });
+    await ensureRoles();
+    const q = query(req);
+    const period = ['today', 'week', 'month'].includes(q.get('period')) ? q.get('period') : 'today';
+    const all = s.role === 'admin' || s.role === 'director';
+    const team = all ? (q.get('team') || '') : (s.team || '');
+    const unit = period === 'today' ? 'day' : period;
+    const [b] = await sql`select date_trunc(${unit}, now() at time zone 'Asia/Dubai') as local_start,
+      date_trunc(${unit}, now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start,
+      (now() at time zone 'Asia/Dubai')::date as today`;
+    // Working days (Mon to Fri) so far in the period, for the target
+    const days = []; for (let d = new Date(b.local_start); d.toISOString().slice(0, 10) <= String(b.today).slice(0, 10); d.setDate(d.getDate() + 1)) days.push(new Date(d));
+    const workdays = Math.max(1, days.filter((d) => d.getDay() !== 0 && d.getDay() !== 6).length);
+    const goal = Number(await setting('daily_call_target', 50));
+    const HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to)')`;
+    const COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+    const people = sql`st.active and st.role in ('broker', 'manager') and (${team === ''} or coalesce(st.team, 'No team') = ${team})`;
+    const [rows, series, teams] = await Promise.all([
+      sql`select st.full_name as name, coalesce(st.team, 'No team') as team, st.role,
+            count(c.id)::int as calls,
+            count(c.id) filter (where ${HOT})::int as hot,
+            count(c.id) filter (where ${COLD})::int as cold,
+            count(c.id) filter (where c.note ~* 'whatsapp sent')::int as wa,
+            max(c.called_at) as last_at
+          from desk.staff st left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${b.start}
+          where ${people} group by st.user_id, st.full_name, st.team, st.role
+          order by calls desc, name`,
+      sql`select ${period === 'today' ? sql`extract(hour from c.called_at at time zone 'Asia/Dubai')::int` : sql`to_char(c.called_at at time zone 'Asia/Dubai', 'YYYY-MM-DD')`} as k,
+            count(*)::int as n
+          from desk.calls c join desk.staff st on st.user_id = c.user_id
+          where c.called_at >= ${b.start} and ${people} group by 1 order by 1`,
+      all ? sql`select coalesce(st.team, 'No team') as team, count(distinct st.user_id)::int as people, count(c.id)::int as calls,
+                  count(c.id) filter (where ${HOT})::int as hot
+                from desk.staff st left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${b.start}
+                where st.active and st.role in ('broker', 'manager') group by 1 order by calls desc` : Promise.resolve([]),
+    ]);
+    res.json({ period, team, all, myTeam: s.team, goal, workdays, start: b.start, rows, series, teams,
+      teamNames: all ? (await sql`select distinct coalesce(team, 'No team') as t from desk.staff where active and role in ('broker', 'manager') order by 1`).map((x) => x.t) : [] });
   },
 
   // Save (POST) or clear (DELETE) this broker's view
