@@ -51,7 +51,14 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .theme button{background:none;border:none;padding:3px 8px;color:var(--muted);font-size:12px}
 .theme button[aria-pressed="true"]{background:var(--hover);color:var(--ink)}
 .head{padding-block:22px 6px} .head h1{font-size:20px;font-weight:600;margin:0} .head p{margin:3px 0 0;color:var(--muted)}
-.layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:36px;padding-block:18px 60px;align-items:start}
+.layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:36px;padding-block:18px 40px;align-items:start}
+.layout.noside{grid-template-columns:minmax(0,1fr)}
+.hide-side{align-self:flex-start;background:none;border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:12px;color:var(--muted)}
+.hide-side:hover{color:var(--ink);background:var(--hover)}
+.show-side{border-color:color-mix(in srgb,var(--accent) 50%,var(--line));color:var(--accent);font-weight:500}
+.meta-l,.meta-r{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap}
+.btn.saved{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line));opacity:1}
+.more{padding:14px;text-align:center;color:var(--faint);font-size:12px;min-height:44px}
 .filters{display:flex;flex-direction:column;gap:20px;position:sticky;top:60px;max-height:calc(100vh - 80px);overflow:auto;padding-bottom:20px}
 .filters h3{font-size:12px;font-weight:600;margin:0 0 6px}
 .filters input[type=search],.filters input[type=number],.filters input[type=date],.filters select{width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:4px;background:var(--bg);font-size:12.5px}
@@ -61,7 +68,7 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .tab{background:none;border:none;padding:8px 0 9px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
 .tab:hover{color:var(--ink)} .tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:500} .tab .c{color:var(--faint);margin-left:5px}
 .meta{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-block:10px;color:var(--muted);flex-wrap:wrap}
-.tw{overflow-x:auto;transition:opacity .15s;border:1px solid var(--line);border-radius:8px} .tw.busy{opacity:.55}
+.tw{overflow:auto;max-height:calc(100vh - 130px);transition:opacity .15s;border:1px solid var(--line);border-radius:8px} .tw.busy{opacity:.55}
 table.grid{min-width:0;width:100%}
 .grid th{position:sticky;top:0;background:var(--bg);padding:9px 14px;border-bottom:1px solid var(--line);font-size:11.5px;letter-spacing:.02em}
 .grid td{padding:0 14px;height:44px;vertical-align:middle;white-space:nowrap;border-bottom:1px solid var(--line)}
@@ -114,6 +121,12 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0} dt{color:
 .box{background:var(--bg);border-radius:8px;width:min(400px,100%);padding:20px 22px;border:1px solid var(--line)}
 .box h3{margin:0 0 4px;font-size:16px;font-weight:600}
 .radios{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin:14px 0}
+.hold{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--warn);background:color-mix(in srgb,var(--warn) 11%,var(--bg));border-radius:999px;padding:3px 9px;white-space:nowrap}
+.hold.live{color:var(--blue);background:color-mix(in srgb,var(--blue) 11%,var(--bg))}
+.hold .pulse{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+.heldcell{display:inline-flex;align-items:center;gap:6px} .btn.ghost{opacity:.7;white-space:nowrap}
+tr.held-row td:not(.callcol){color:var(--muted)}
 .target{position:relative;overflow:hidden;margin-top:18px;border:1px solid var(--line);border-radius:14px;padding:14px 18px;
   display:grid;grid-template-columns:minmax(220px,auto) 1fr auto;gap:8px 22px;align-items:center;
   background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 8%,var(--bg)),var(--bg) 60%)}
@@ -304,7 +317,7 @@ function ThemeToggle() {
 // ── Laptop: owner list, unit panel, activity ────────────────────────────────
 const EMPTY = { q: '', area: '', sc: '', bld: '', st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', rmin: '', rmax: '', pmin: '', pmax: '',
   first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false,
-  ncall: false, called: false, oc: [] };
+  ncall: false, called: false, oc: [], free: true };
 
 function toParams(f, tab, sort, page) {
   const p = new URLSearchParams();
@@ -324,6 +337,10 @@ function Desk() {
   const [unitId, setUnitId] = useState(null);
 
   const refreshMe = useCallback(() => api('/api/desk?action=me').then(setMe).catch((e) => setToast(e.message)), []);
+  const savePrefs = useCallback(async (prefs) => {
+    try { await api('/api/desk?action=savePrefs', { method: 'POST', body: { prefs } }); setMe((m) => ({ ...m, prefs })); setToast('View saved. The Owners page will open like this every time.'); }
+    catch (e) { setToast(e.message); }
+  }, []);
   useEffect(() => {
     refreshMe();
     // Keeps the call target fresh (calls are dialled on the phone); only while this tab is on screen
@@ -366,25 +383,35 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? <Owners places={me?.places || []} target={me?.target} onCaps={refreshMe} onOpen={setUnitId} /> : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : <Activity />}
-      {unitId && <UnitPanel id={unitId} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
+      {view === 'owners' ? (me ? <Owners places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : <Activity />}
+      {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
 }
 
-function Owners({ places, onOpen, target, onCaps }) {
-  const [f, setF] = useState(EMPTY);
-  const [tab, setTab] = useState('all');
-  const [sort, setSort] = useState('unit');
+function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs }) {
+  // Start from the broker's saved view if they have one
+  const start = useRef({
+    f: { ...EMPTY, ...(prefs?.f || {}) }, tab: prefs?.tab || 'all', sort: prefs?.sort || 'unit',
+    cols: (prefs?.cols || []).filter((k) => COLUMNS.some((c) => c.k === k)), side: prefs?.side !== false,
+  }).current;
+  const [f, setF] = useState(start.f);
+  const [tab, setTab] = useState(start.tab);
+  const [sort, setSort] = useState(start.sort);
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [side, setSide] = useState(start.side);
+  const tw = useRef(null);
+  const sentinel = useRef(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const ctl = useRef(null);
   const timer = useRef(null);
   const [calling, setCalling] = useState(null);
-  const [cols, setColsState] = useState(loadCols);
+  const [cols, setColsState] = useState(() => (start.cols.length ? start.cols : loadCols()));
   const setCols = (next) => { setColsState(next); try { localStorage.setItem('columns', JSON.stringify(next)); } catch {} };
   const shown = cols.map((k) => COLUMNS.find((c) => c.k === k)).filter(Boolean);
   // Drag a column heading onto another to move it
@@ -406,11 +433,32 @@ function Owners({ places, onOpen, target, onCaps }) {
     ctl.current = c;
     setBusy(true);
     api('/api/desk?action=units&' + toParams(ff, t, s, p).toString(), { signal: c.signal })
-      .then((j) => { setData(j); setErr(''); })
+      .then((j) => { setData(j); setRows(j.rows); setPage(1); setErr(''); if (tw.current) tw.current.scrollTop = 0; })
       .catch((e) => { if (e.name !== 'AbortError') setErr(e.message); })
       .finally(() => { if (ctl.current === c) setBusy(false); });
   }, []);
-  useEffect(() => { load(EMPTY, 'all', 'unit', 1); }, [load]);
+  useEffect(() => { load(start.f, start.tab, start.sort, 1); }, [load, start]);
+
+  // Keep scrolling: the next 100 load in the background as you near the bottom of the list
+  const loadMore = useCallback(() => {
+    if (moreBusy || busy || !data) return;
+    const total = (data.counts || {})[tab] ?? 0;
+    if (rows.length >= total) return;
+    const next = page + 1;
+    setMoreBusy(true);
+    const c = ctl.current;
+    api('/api/desk?action=units&more=1&' + toParams(f, tab, sort, next).toString())
+      .then((j) => { if (ctl.current !== c) return; setRows((r) => [...r, ...j.rows.filter((x) => !r.some((y) => y.id === x.id))]); setPage(next); })
+      .catch((e) => setErr(e.message))
+      .finally(() => setMoreBusy(false));
+  }, [moreBusy, busy, data, rows.length, page, f, tab, sort]);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el) return;
+    const io = new IntersectionObserver((es) => { if (es[0].isIntersecting) loadMore(); }, { root: tw.current, rootMargin: '600px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore]);
 
   const change = (patch, typed) => {
     const nf = { ...f, ...patch };
@@ -422,7 +470,15 @@ function Owners({ places, onOpen, target, onCaps }) {
   const toggle = (k, v) => change({ [k]: f[k].includes(v) ? f[k].filter((x) => x !== v) : [...f[k], v] });
   const goTab = (t) => { setTab(t); setPage(1); load(f, t, sort, 1); };
   const goSort = (s) => { setSort(s); setPage(1); load(f, tab, s, 1); };
-  const goPage = (p) => { setPage(p); load(f, tab, sort, p); window.scrollTo({ top: 0 }); };
+  // Saved view: compare what's on screen with what was saved
+  const snap = { f, tab, sort, cols, side };
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const savedSnap = prefs ? { f: { ...EMPTY, ...(prefs.f || {}) }, tab: prefs.tab || 'all', sort: prefs.sort || 'unit', cols: prefs.cols || cols, side: prefs.side !== false } : null;
+  const isSaved = savedSnap && same(snap, savedSnap);
+  const [savingView, setSavingView] = useState(false);
+  const saveView = async () => { setSavingView(true); try { await onSavePrefs(snap); } finally { setSavingView(false); } };
+  const backToSaved = () => { setF(savedSnap.f); setTab(savedSnap.tab); setSort(savedSnap.sort); setCols(savedSnap.cols); setSide(savedSnap.side); load(savedSnap.f, savedSnap.tab, savedSnap.sort, 1); };
+  const activeFilters = Object.keys(EMPTY).filter((k) => k !== 'free' && (Array.isArray(f[k]) ? f[k].length : !!f[k])).length;
 
   const areas = useMemo(() => [...new Set(places.map((p) => p.area))], [places]);
   const inArea = useMemo(() => places.filter((p) => !f.area || p.area === f.area), [places, f.area]);
@@ -430,7 +486,7 @@ function Owners({ places, onOpen, target, onCaps }) {
   const buildings = useMemo(() => [...new Set(inArea.filter((p) => p.bld && (!f.sc || p.sc === f.sc)).map((p) => p.bld))], [inArea, f.sc]);
   const c = data?.counts || {};
   const total = c[tab] ?? 0;
-  const pages = Math.max(1, Math.ceil(total / (data?.pageSize || 100)));
+
 
   // Plain render helpers (not components) so inputs keep focus while typing
   const box = (k, v, label) => (
@@ -485,7 +541,7 @@ function Owners({ places, onOpen, target, onCaps }) {
     mobile: { on: ['phone'], ui: () => flag('phone', 'Has a mobile number') },
     owned: { on: ['port'], ui: () => flag('port', 'Owns 2+ units here') },
     mortgaged: { on: ['mort'], ui: () => flag('mort', 'Mortgaged') },
-    lastcall: { on: ['ncall', 'called'], ui: () => <>{flag('ncall', 'Never called')}{flag('called', 'Called before')}</> },
+    lastcall: { on: ['ncall', 'called'], ui: () => <>{flag('ncall', 'Never called')}{flag('called', 'Called before')}{flag('free', 'Hide owners others are working')}</> },
     outcome: { on: ['oc'], ui: () => OUTCOMES.map((o) => box('oc', o)) },
   };
   const isOn = (keys) => keys.some((k) => (Array.isArray(f[k]) ? f[k].length > 0 : !!f[k]));
@@ -506,8 +562,9 @@ function Owners({ places, onOpen, target, onCaps }) {
         <h1>Owners</h1>
         <p>{fmt(c.all)} units in your areas · {DATA_NOTE}</p>
       </div>
-      <main className="layout gut">
-        <aside className="filters">
+      <main className={'layout gut' + (side ? '' : ' noside')}>
+        {side && <aside className="filters">
+          <button className="hide-side" onClick={() => setSide(false)} title="Hide filters to see the whole table">‹ Hide filters</button>
           <div><input id="q" type="search" placeholder="Search owner, building or unit" value={f.q} autoComplete="off" onChange={(e) => change({ q: e.target.value }, true)} /></div>
           {areas.length > 1 && <div><h3>Area</h3>{pick('area', areas)}</div>}
           <div><h3>Sub-community</h3>{pick('sc', subcommunities)}</div>
@@ -529,20 +586,28 @@ function Owners({ places, onOpen, target, onCaps }) {
           <div><h3>Tenancy</h3>{flag('first', 'First year (no renewals)')}{flag('ren2', 'Renewed 2+ times')}{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</div>
           <div><h3>Last sale price, AED</h3><div className="pair">{num('pmin', 'Min')}{num('pmax', 'Max')}</div></div>
           <div><h3>Owner</h3>{flag('port', 'Owns 2+ units here')}{flag('mort', 'Mortgaged')}{flag('ind', 'Individuals only')}{flag('phone', 'Has a mobile number')}</div>
-          <div><h3>Calls</h3>{flag('ncall', 'Never called')}{flag('called', 'Called before')}</div>
-          <button className="link" style={{ textAlign: 'left' }} onClick={() => { setF(EMPTY); setPage(1); load(EMPTY, tab, sort, 1); }}>Clear filters</button>
-        </aside>
+          <div><h3>Calls</h3>{flag('free', 'Hide owners others are working')}{flag('ncall', 'Never called')}{flag('called', 'Called before')}</div>
+          <button className="link" style={{ textAlign: 'left' }} onClick={() => { setF(EMPTY); load(EMPTY, tab, sort, 1); }}>Clear filters</button>
+        </aside>}
 
         <section style={{ minWidth: 0 }}>
           <nav className="tabs">
             {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '')} onClick={() => goTab(k)}>{l}<span className="c n">{fmt(c[k])}</span></button>)}
           </nav>
           <div className="meta">
-            <span>{fmt(total)} units · page {page} of {pages}</span>
-            <ColumnPicker cols={cols} setCols={setCols} />
+            <span className="meta-l">
+              {!side && <button className="btn show-side" onClick={() => setSide(true)}>☰ Filters{activeFilters ? ` · ${activeFilters} on` : ''}</button>}
+              <span>{fmt(total)} units{total > rows.length ? ` · showing ${fmt(rows.length)}` : ''}</span>
+            </span>
+            <span className="meta-r">
+              {savedSnap && !isSaved && <button className="link" onClick={backToSaved}>Back to my saved view</button>}
+              <button className={'btn' + (isSaved ? ' saved' : '')} disabled={isSaved || savingView} onClick={saveView}
+                title="Opens the Owners page with these filters, tab, sort and columns every time">{isSaved ? '✓ View saved' : savingView ? 'Saving…' : 'Save view'}</button>
+              <ColumnPicker cols={cols} setCols={setCols} />
+            </span>
           </div>
           {err && <p className="err">{err}</p>}
-          <div className={'tw' + (busy ? ' busy' : '')}>
+          <div className={'tw' + (busy ? ' busy' : '')} ref={tw}>
             <table className="grid">
               <thead><tr>
                 {shown.map((col) => {
@@ -569,10 +634,11 @@ function Owners({ places, onOpen, target, onCaps }) {
                 <th className="callcol" aria-label="Call" />
               </tr></thead>
               <tbody>
-                {data && data.rows.length === 0 && <tr><td colSpan={shown.length + 1} className="empty">Nothing matches. Try clearing a filter.</td></tr>}
-                {data?.rows.map((r) => <OwnerRow key={r.id} r={r} cols={shown} onOpen={onOpen} onCall={setCalling} />)}
+                {data && rows.length === 0 && <tr><td colSpan={shown.length + 1} className="empty">Nothing matches. Try clearing a filter.</td></tr>}
+                {rows.map((r) => <OwnerRow key={r.id} r={r} cols={shown} onOpen={onOpen} onCall={setCalling} canOverride={canOverride} />)}
               </tbody>
             </table>
+            <div ref={sentinel} className="more">{moreBusy ? 'Loading more…' : data && rows.length >= total && rows.length > 0 ? `All ${fmt(total)} units shown` : ''}</div>
           </div>
           {fcol && HEAD_FILTERS[fcol.k] && (
             <div className="hf" style={{ left: fcol.x, top: fcol.y }} role="dialog" aria-label="Column filter">
@@ -581,15 +647,12 @@ function Owners({ places, onOpen, target, onCaps }) {
               <div className="hf-b">{HEAD_FILTERS[fcol.k].ui()}</div>
             </div>
           )}
-          <div className="pager">
-            {page > 1 && <button className="link" onClick={() => goPage(page - 1)}>Previous</button>}
-            {page < pages && <button className="link" onClick={() => goPage(page + 1)}>Next</button>}
-          </div>
+
         </section>
       </main>
-      {calling && <CallFlow unitId={calling.r.id} owner={{ id: calling.r.owner_id, name: calling.r.owner_name }}
+      {calling && <CallFlow unitId={calling.r.id} owner={{ id: calling.r.owner_id, name: calling.r.owner_name }} force={!!calling.force}
         label={`${calling.r.owner_name}, ${placeOf(calling.r)} ${calling.r.unit_no}`}
-        onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(f, tab, sort, page); }} />}
+        onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(f, tab, sort, 1); }} />}
     </>
   );
 }
@@ -769,16 +832,31 @@ function TargetBar({ t }) {
   );
 }
 
-const OwnerRow = React.memo(function OwnerRow({ r, cols, onOpen, onCall }) {
+// Who is working this owner and for how long
+function holdLeft(until) {
+  const m = Math.max(1, Math.round((new Date(until) - Date.now()) / 60000));
+  return m < 60 ? `${m}m` : m < 2880 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
+}
+function HoldChip({ h, long }) {
+  const first = String(h.by || '').split(' ')[0];
+  const live = h.why === 'Calling now';
+  const tip = live ? `${h.by} is calling this owner right now` : `${h.by} is working this owner (${h.why}). Free to call in ${holdLeft(h.until)}.`;
+  return <span className={'hold' + (live ? ' live' : '')} title={tip}>{live ? <span className="pulse" /> : null}{long ? (live ? `${h.by} is calling now` : `${h.by} · ${h.why} · free in ${holdLeft(h.until)}`) : `${first} · ${live ? 'now' : holdLeft(h.until)}`}</span>;
+}
+
+const OwnerRow = React.memo(function OwnerRow({ r, cols, onOpen, onCall, canOverride }) {
+  const call = (force) => (e) => { e.stopPropagation(); onCall({ r, force }); };
   return (
-    <tr onClick={() => onOpen(r.id)}>
+    <tr onClick={() => onOpen(r.id)} className={r.hold ? 'held-row' : ''}>
       {cols.map((c) => <td key={c.k} className={c.right ? 'r n' : ''}>{c.cell(r)}</td>)}
-      <td className="callcol">{r.owner_id && r.has_phone && <button className="btn" onClick={(e) => { e.stopPropagation(); onCall({ r }); }}>Call</button>}</td>
+      <td className="callcol">{r.owner_id && r.has_phone && (r.hold
+        ? <span className="heldcell"><HoldChip h={r.hold} />{canOverride && <button className="btn ghost" title="Managers can call anyway" onClick={call(true)}>Call</button>}</span>
+        : <button className="btn" onClick={call(false)}>Call</button>)}</td>
     </tr>
   );
 });
 
-function UnitPanel({ id, onClose, onOpen, onCaps }) {
+function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
   const [calling, setCalling] = useState(null);
@@ -829,7 +907,9 @@ function UnitPanel({ id, onClose, onOpen, onCaps }) {
                     {o.role === 'owner' && o.units > 1 && <span className="sub">Also owns {d.others.filter((x) => x.owner_id === o.id).map((x) => (
                       <button key={x.id} className="link" style={{ marginRight: 8 }} onClick={() => onOpen(x.id)}>{x.unit_type === 'Villa' ? x.subcommunity : x.building} {x.unit_no}</button>))}</span>}
                   </div>
-                  <div>{o.role === 'owner' && o.has_phone && !o.dnc && <button className="btn" onClick={() => setCalling(o)}>Call</button>}</div>
+                  <div>{o.role === 'owner' && o.has_phone && !o.dnc && (o.hold
+                    ? <span className="heldcell"><HoldChip h={o.hold} long />{canOverride && <button className="btn ghost" onClick={() => setCalling({ ...o, force: true })}>Call anyway</button>}</span>
+                    : <button className="btn" onClick={() => setCalling(o)}>Call</button>)}</div>
                 </div>
               ))}
             </div>
@@ -844,7 +924,7 @@ function UnitPanel({ id, onClose, onOpen, onCaps }) {
           <p className="fine">The full number never reaches this laptop. Call sends it to your phone and logs it under your name.</p>
         </>}
       </aside>
-      {calling && u && <CallFlow unitId={u.id} owner={calling} label={`${calling.name}, ${place} ${u.unit_no}`}
+      {calling && u && <CallFlow unitId={u.id} owner={calling} force={!!calling.force} label={`${calling.name}, ${place} ${u.unit_no}`}
         onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(); }} />}
     </>
   );
@@ -883,13 +963,13 @@ function Notes({ unitId, notes, onAdded }) {
 }
 
 // Laptop side of a call: send to phone, wait for the tap, then log the outcome
-function CallFlow({ unitId, owner, label, onClose }) {
+function CallFlow({ unitId, owner, label, onClose, force }) {
   const [stage, setStage] = useState('sending');
   const [msg, setMsg] = useState('');
   const [req, setReq] = useState(null);
 
   useEffect(() => {
-    api('/api/desk?action=call', { method: 'POST', body: { unitId, ownerId: owner.id } })
+    api('/api/desk?action=call', { method: 'POST', body: { unitId, ownerId: owner.id, force } })
       .then((j) => { setReq(j); setStage('sent'); })
       .catch((e) => { setMsg(e.message); setStage('error'); });
   }, [unitId, owner.id]);
@@ -1067,9 +1147,9 @@ const ACTIVITY_LABEL = {
   searched: 'Searched', opened_unit: 'Opened a unit', call_sent: 'Sent a call to phone', call_dialled: 'Tapped Call on phone',
   outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', limit_hit: 'Hit a daily limit',
   call_blocked_hours: 'Tried to call outside 9am–6pm', dial_refused: 'Tapped an expired call', phone_alerts_on: 'Turned on phone alerts',
-  note_added: 'Added a note', lookup_property: 'Looked up a unit', lookup_owner: 'Looked up an owner', lookup_failed: 'Lookup failed', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
+  note_added: 'Added a note', call_blocked_hold: 'Tried to call an owner someone else is working', call_hold_override: 'Called an owner someone else was working', lookup_property: 'Looked up a unit', lookup_owner: 'Looked up an owner', lookup_failed: 'Lookup failed', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
 };
-const ACTIVITY_BAD = ['copy_blocked', 'limit_hit', 'call_blocked_hours', 'dial_refused'];
+const ACTIVITY_BAD = ['call_blocked_hold', 'copy_blocked', 'limit_hit', 'call_blocked_hours', 'dial_refused'];
 
 function Activity() {
   const [d, setD] = useState(null);
