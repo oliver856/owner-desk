@@ -227,6 +227,47 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0} dt{color:
 @keyframes pulse{50%{opacity:.25}}
 .heldcell{display:inline-flex;align-items:center;gap:6px} .btn.ghost{opacity:.7;white-space:nowrap}
 tr.held-row td:not(.callcol){color:var(--muted)}
+.target.race{grid-template-columns:minmax(230px,auto) 1fr auto}
+.r-track{position:relative;height:58px;margin:0 22px 0 8px}
+.r-line{position:absolute;left:0;right:0;top:50%;height:8px;margin-top:-4px;border-radius:999px;background:var(--hover);border:1px solid var(--line)}
+.r-fill{position:absolute;left:0;top:50%;height:8px;margin-top:-4px;border-radius:999px;background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 60%,#fff),var(--accent));transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.r-goal{position:absolute;top:2px;bottom:2px;width:0;border-left:2px dashed color-mix(in srgb,var(--ink) 35%,transparent)}
+.r-goal span{position:absolute;top:-2px;left:4px;font-size:10.5px;color:var(--muted);white-space:nowrap}
+.r-dot{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  background:var(--bg);border:2px solid var(--line);font-size:10px;font-weight:700;color:var(--muted);transition:left .7s cubic-bezier(.2,.8,.2,1);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.r-dot.lead{border-color:#d4a017;color:#a87b00}
+.r-dot.me{width:34px;height:34px;background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:10.5px;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 18%,transparent)}
+.r-dot .crown{position:absolute;top:-15px;font-style:normal;font-size:13px}
+.r-podium{display:flex;gap:10px;font-size:12px;white-space:nowrap} .r-podium b{font-variant-numeric:tabular-nums}
+.r-podium .mine{color:var(--accent);font-weight:600}
+.dash{padding-block:20px 60px;max-width:1300px}
+.dash-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.dash-head h1{font-size:22px;margin:0;font-weight:650} .dash-head p{margin:4px 0 0}
+.dash-ctl{display:flex;gap:10px;align-items:center} .dash-ctl select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.kpis{display:grid;grid-template-columns:1.6fr repeat(4,1fr);gap:12px;margin-bottom:12px}
+@media (max-width:1000px){.kpis{grid-template-columns:1fr 1fr}}
+.kpi{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;background:var(--bg)}
+.kpi span{font-size:12px;color:var(--muted)} .kpi b{font-size:28px;font-weight:700;letter-spacing:-.02em} .kpi b small{font-size:15px;color:var(--faint);font-weight:500}
+.kpi em{font-style:normal;font-size:12px;color:var(--faint)}
+.kpi.hot b{color:var(--hot)} .kpi.cold b{color:var(--cold)}
+.kpi.big{background:linear-gradient(110deg,color-mix(in srgb,var(--accent) 9%,var(--bg)),var(--bg) 70%)} .kpi.big b{color:var(--accent)}
+.kbar{height:8px;border-radius:999px;background:var(--hover);overflow:hidden;margin-top:4px}
+.kbar i{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .5s} .kbar i.hit{background:var(--hot)}
+.kbar.sm{display:inline-block;width:70%;height:6px;vertical-align:middle;margin:0 8px 0 0}
+.dash-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin-bottom:12px} @media (max-width:1000px){.dash-grid{grid-template-columns:1fr}}
+.dash-grid>.card:only-child{grid-column:1/-1} .dash-grid>*{min-width:0} .dash .card{overflow-x:auto}
+.card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--bg)}
+.card h4{margin:0 0 12px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.bars{display:flex;align-items:flex-end;gap:6px;height:150px}
+.bar-c{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;min-width:0}
+.bar-v{width:100%;max-width:38px;min-height:2px;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 60%,#fff));position:relative;transition:height .5s}
+.bar-v span{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted)}
+.bar-c em{font-style:normal;font-size:10.5px;color:var(--faint);white-space:nowrap}
+table.mini{width:100%;min-width:0;border-collapse:collapse} table.mini th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.mini td{padding:9px 8px;border-bottom:1px solid var(--line)} table.mini tr:last-child td{border-bottom:none} table.mini .r{text-align:right}
+table.mini tr.click{cursor:pointer} table.mini tr.click:hover td{background:var(--hover)}
+.lb .rank{font-size:17px;text-align:center} .lb tr.idle td{color:var(--faint)}
+.hotc{color:var(--hot)} .coldc{color:var(--cold)}
 .target{position:relative;overflow:hidden;margin-top:18px;border:1px solid var(--line);border-radius:14px;padding:14px 18px;
   display:grid;grid-template-columns:minmax(220px,auto) 1fr auto;gap:8px 22px;align-items:center;
   background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 8%,var(--bg)),var(--bg) 60%)}
@@ -491,6 +532,7 @@ function Desk() {
           <nav className="nav">
             <button className={view === 'owners' ? 'on' : ''} onClick={() => setView('owners')}>Owners</button>
             <button className={view === 'lookup' ? 'on' : ''} onClick={() => setView('lookup')}>Lookup</button>
+            {me && me.staff.role !== 'broker' && <button className={view === 'dash' ? 'on' : ''} onClick={() => setView('dash')}>Dashboard</button>}
             <button className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>Activity</button>
             <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
           </nav>
@@ -503,7 +545,7 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? (me ? <Owners places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : <Activity />}
+      {view === 'owners' ? (me ? <Owners places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {toast && <div className="toast">{toast}</div>}
     </>
@@ -955,11 +997,34 @@ const TARGET_LINES = [
   [1, 'Target smashed. Everything from here is a bonus.'],
   [1.5, 'Unstoppable. Take a bow.'],
 ];
+// The race: everyone calling today on one track, with the leader, who's chasing and how far behind you are
+const first = (n) => String(n || '').split(' ')[0];
+const initials = (n) => String(n || '').split(' ').filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase();
+function raceLine(board, me) {
+  const i = board.findIndex((b) => b.me);
+  const leader = board[0];
+  if (!me || !leader) return 'Get on the board.';
+  const others = board.filter((b) => !b.me);
+  if (me.calls === 0) return others.length ? `${first(leader.name)} is already on ${leader.calls}. Time to get on the board!` : 'Nobody has called yet. Be first on the board!';
+  if (i === 0) {
+    const second = board[1];
+    if (!second) return 'You\'re first on the board today. Set the pace!';
+    if (second.calls === me.calls) return `Neck and neck with ${first(second.name)} at the top. The next call takes the lead!`;
+    const gap = me.calls - second.calls;
+    return gap <= 2 ? `You're leading, but ${first(second.name)} is only ${gap} behind. Don't slow down!` : `You're in the lead by ${gap}. ${first(second.name)} is chasing.`;
+  }
+  const above = board[i - 1];
+  const gap = above.calls - me.calls;
+  if (gap === 0) return `Level with ${first(above.name)}. One more call and you're ahead!`;
+  const chase = gap <= 2 ? `So close! ${gap} more and you pass ${first(above.name)}.` : `${gap} calls behind ${first(above.name)} for #${i}.`;
+  return i === 1 ? chase : `${chase} ${first(leader.name)} leads with ${leader.calls}.`;
+}
 function TargetBar({ t }) {
   const { goal, made } = t;
+  const board = t.board || [];
+  const meRow = board.find((b) => b.me) || { me: true, name: 'You', calls: made };
+  const myRank = board.findIndex((b) => b.me) + 1;
   const pct = goal ? made / goal : 0;
-  const line = TARGET_LINES.filter(([p]) => pct >= p).pop()[1];
-  const left = Math.max(0, goal - made);
   // Pace through calling hours (Dubai time): how many calls you'd have made by now at an even rate
   const toMin = (h) => Number(h.slice(0, 2)) * 60 + Number(h.slice(3, 5));
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
@@ -967,25 +1032,50 @@ function TargetBar({ t }) {
   const from = toMin(t.hours.from), to = toMin(t.hours.to);
   const share = Math.min(1, Math.max(0, (now - from) / (to - from)));
   const due = Math.round(goal * share);
-  const pace = made >= goal ? '' : now < from ? 'Calling opens at ' + t.hours.from : now >= to ? 'Calling closed for today'
-    : made >= due ? 'On pace' : `${due - made} behind pace`;
   const done = made >= goal;
-  const marks = [0.25, 0.5, 0.75];
+  const pace = done ? `+${made - goal} bonus` : now < from ? 'Calling opens at ' + t.hours.from : now >= to ? 'Calling closed for today'
+    : made >= due ? 'On pace' : `${due - made} behind pace`;
+  // Overtakes: remember your place and celebrate when you climb
+  const prev = useRef(myRank);
+  const [flash, setFlash] = useState('');
+  useEffect(() => {
+    if (prev.current && myRank && myRank < prev.current) {
+      const passed = board[myRank];
+      setFlash(myRank === 1 ? 'You just took the lead! 🚀' : `You just overtook ${first(passed?.name)}! 🚀`);
+      const x = setTimeout(() => setFlash(''), 9000); prev.current = myRank; return () => clearTimeout(x);
+    }
+    prev.current = myRank;
+  }, [myRank]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scale = Math.max(goal, board[0]?.calls || 0, 1);
+  const medal = ['🥇', '🥈', '🥉'];
   return (
     <div className="gut">
-      <div className={'target' + (done ? ' done' : '')}>
+      <div className={'target race' + (done ? ' done' : '')}>
         <div className="t-main">
           <div className="t-num"><b className="n">{made}</b><span>/ {goal} calls today</span></div>
-          <div className="t-line">{line}</div>
+          <div className="t-line">{flash || raceLine(board, meRow)}</div>
         </div>
-        <div className="t-track" role="progressbar" aria-valuemin={0} aria-valuemax={goal} aria-valuenow={made} aria-label="Calls made today">
-          <div className="t-fill" style={{ width: `${Math.min(100, pct * 100)}%` }} />
-          {!done && share > 0 && share < 1 && <div className="t-pace" style={{ left: `${share * 100}%` }} title={`Pace: ${due} by now`} />}
-          {marks.map((m) => <span key={m} className={'t-mark' + (pct >= m ? ' hit' : '')} style={{ left: `${m * 100}%` }} />)}
+        <div className="r-track" aria-label="Today's race">
+          <div className="r-line" />
+          <div className="r-fill" style={{ width: `${Math.min(100, (made / scale) * 100)}%` }} />
+          {!done && share > 0 && share < 1 && <div className="t-pace" style={{ left: `${(due / scale) * 100}%` }} title={`Pace: ${due} by now`} />}
+          <div className="r-goal" style={{ left: `${(goal / scale) * 100}%` }} title={`Target: ${goal}`}><span>🏁 {goal}</span></div>
+          {board.map((b, i) => (
+            <div key={b.name + i} className={'r-dot' + (b.me ? ' me' : '') + (i === 0 && b.calls > 0 ? ' lead' : '')}
+              style={{ left: `${(b.calls / scale) * 100}%`, top: b.me ? '50%' : i % 2 ? '78%' : '22%', zIndex: b.me ? 5 : 3 - Math.min(i, 2) }}
+              title={`${b.name}: ${b.calls} calls`}>
+              {i === 0 && b.calls > 0 && <i className="crown">👑</i>}
+              <span>{b.me ? 'You' : initials(b.name)}</span>
+            </div>
+          ))}
         </div>
         <div className="t-side">
-          <span className={'t-pill' + (pace === 'On pace' || done ? ' good' : pace.includes('behind') ? ' warn' : '')}>{done ? `+${made - goal} bonus` : pace || `${left} to go`}</span>
-          <span className="faint">{done ? 'Goal reached' : `${left} to go`}{t.callers > 0 ? ` · #${t.rank} of ${t.callers} on the team · ${t.team} team calls` : ''}</span>
+          <span className={'t-pill' + (pace === 'On pace' || done ? ' good' : pace.includes('behind') ? ' warn' : '')}>{pace}</span>
+          <span className="r-podium">
+            {board.slice(0, 3).filter((b) => b.calls > 0).map((b, i) => <span key={i} className={b.me ? 'mine' : ''}>{medal[i]} {b.me ? 'You' : first(b.name)} <b>{b.calls}</b></span>)}
+            {myRank > 3 && <span className="mine">#{myRank} You <b>{made}</b></span>}
+          </span>
+          <span className="faint">{t.team} calls across the team today</span>
         </div>
         {done && <div className="t-burst" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ '--a': `${i * 26}deg`, '--d': `${(i % 4) * 60}ms` }} />)}</div>}
       </div>
@@ -1388,6 +1478,94 @@ const ACTIVITY_LABEL = {
   note_added: 'Added a note', call_blocked_hold: 'Tried to call an owner someone else is working', call_hold_override: 'Called an owner someone else was working', lookup_property: 'Looked up a unit', lookup_owner: 'Looked up an owner', lookup_failed: 'Lookup failed', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
 };
 const ACTIVITY_BAD = ['call_blocked_hold', 'copy_blocked', 'limit_hit', 'call_blocked_hours', 'dial_refused'];
+
+// ── Dashboard: managers see their team, directors and admins see every team ──
+function Dashboard() {
+  const [period, setPeriod] = useState('today');
+  const [team, setTeam] = useState('');
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const load = useCallback(() => {
+    api(`/api/desk?action=dashboard&period=${period}&team=${encodeURIComponent(team)}`).then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message));
+  }, [period, team]);
+  useEffect(() => { load(); const t = setInterval(() => document.visibilityState === 'visible' && load(), 60000); return () => clearInterval(t); }, [load]);
+  if (err) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p></main>;
+  if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
+  const per = d.goal * d.workdays;
+  const total = d.rows.reduce((a, r) => a + r.calls, 0);
+  const hot = d.rows.reduce((a, r) => a + r.hot, 0);
+  const cold = d.rows.reduce((a, r) => a + r.cold, 0);
+  const wa = d.rows.reduce((a, r) => a + r.wa, 0);
+  const active = d.rows.filter((r) => r.calls > 0).length;
+  const teamTarget = per * Math.max(1, d.rows.length);
+  const label = { today: 'today', week: 'this week', month: 'this month' }[period];
+  // Chart: by hour today, by day for week/month
+  let bars;
+  if (period === 'today') { bars = Array.from({ length: 11 }, (_, i) => { const h = 8 + i; return { k: `${h}:00`, n: d.series.find((x) => Number(x.k) === h)?.n || 0 }; }); }
+  else {
+    const out = []; const start = new Date(String(d.start)); const end = new Date();
+    for (let x = new Date(start); x <= end; x.setDate(x.getDate() + 1)) {
+      const k = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(x);
+      const lab = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', weekday: period === 'week' ? 'short' : undefined, day: 'numeric' }).format(x);
+      if (!out.some((o) => o.key === k)) out.push({ key: k, k: lab, n: d.series.find((s) => s.k === k)?.n || 0 });
+    }
+    bars = out;
+  }
+  const maxBar = Math.max(1, ...bars.map((b) => b.n));
+  const medal = ['🥇', '🥈', '🥉'];
+  return (
+    <main className="gut dash">
+      <div className="dash-head">
+        <div><h1>{d.all ? (d.team ? d.team : 'Director overview') : `${d.myTeam || 'Your team'}`}</h1>
+          <p className="muted">{d.all ? 'Calls across every team' : 'Your team\'s calls'} {label} · target {d.goal} a day per person{period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}</p></div>
+        <div className="dash-ctl">
+          {d.all && <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="">All teams</option>{d.teamNames.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
+          <div className="seg">{[['today', 'Today'], ['week', 'This week'], ['month', 'This month']].map(([k, l]) => <button key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
+        </div>
+      </div>
+
+      <div className="kpis">
+        <div className="kpi big"><span>Calls</span><b className="n">{fmt(total)}</b>
+          <div className="kbar"><i style={{ width: `${Math.min(100, (total / teamTarget) * 100)}%` }} /></div>
+          <em>{Math.round((total / teamTarget) * 100)}% of {fmt(teamTarget)} target</em></div>
+        <div className="kpi hot"><span>Hot</span><b className="n">{fmt(hot)}</b><em>{total ? Math.round((hot / total) * 100) : 0}% of calls</em></div>
+        <div className="kpi cold"><span>Cold</span><b className="n">{fmt(cold)}</b><em>no answer, unreachable</em></div>
+        <div className="kpi"><span>WhatsApps sent</span><b className="n">{fmt(wa)}</b><em>after calls</em></div>
+        <div className="kpi"><span>Calling</span><b className="n">{active}<small> / {d.rows.length}</small></b><em>people with a call {label}</em></div>
+      </div>
+
+      <div className="dash-grid">
+        <section className="card">
+          <h4>{period === 'today' ? 'Calls by hour' : 'Calls by day'}</h4>
+          <div className="bars">{bars.map((b, i) => (
+            <div key={i} className="bar-c" title={`${b.k}: ${b.n}`}><div className="bar-v" style={{ height: `${(b.n / maxBar) * 100}%` }}>{b.n ? <span>{b.n}</span> : null}</div><em>{b.k}</em></div>))}</div>
+        </section>
+        {d.all && !d.team && <section className="card">
+          <h4>Teams</h4>
+          <table className="mini"><thead><tr><th>Team</th><th className="r">People</th><th className="r">Calls</th><th className="r">Per person</th><th className="r">Hot</th></tr></thead>
+            <tbody>{d.teams.map((t) => <tr key={t.team} onClick={() => setTeam(t.team)} className="click"><td>{t.team}</td><td className="r n">{t.people}</td><td className="r n"><b>{fmt(t.calls)}</b></td>
+              <td className="r n">{t.people ? Math.round(t.calls / t.people) : 0}</td><td className="r n hotc">{t.hot}</td></tr>)}</tbody></table>
+        </section>}
+      </div>
+
+      <section className="card">
+        <h4>Leaderboard {label}</h4>
+        <table className="mini lb"><thead><tr><th style={{ width: 44 }} /><th>Name</th>{d.all && !d.team && <th>Team</th>}<th className="r">Calls</th><th style={{ width: '28%' }}>Target</th><th className="r">Hot</th><th className="r">Cold</th><th className="r">WhatsApps</th><th>Last call</th></tr></thead>
+          <tbody>{d.rows.map((r, i) => (
+            <tr key={r.name + i} className={r.calls ? '' : 'idle'}>
+              <td className="rank">{r.calls ? medal[i] || `#${i + 1}` : ''}</td>
+              <td><b>{r.name}</b>{r.role === 'manager' && <span className="faint"> · manager</span>}</td>
+              {d.all && !d.team && <td className="muted">{r.team}</td>}
+              <td className="r n"><b>{r.calls}</b></td>
+              <td><div className="kbar sm"><i style={{ width: `${Math.min(100, (r.calls / per) * 100)}%` }} className={r.calls >= per ? 'hit' : ''} /></div><span className="faint">{Math.round((r.calls / per) * 100)}%</span></td>
+              <td className="r n hotc">{r.hot}</td><td className="r n coldc">{r.cold}</td><td className="r n">{r.wa}</td>
+              <td className="muted">{r.last_at ? fdt(r.last_at) : 'No calls yet'}</td>
+            </tr>))}</tbody></table>
+        {d.rows.length === 0 && <p className="muted">Nobody is set up in this team yet.</p>}
+      </section>
+    </main>
+  );
+}
 
 function Activity() {
   const [d, setD] = useState(null);
