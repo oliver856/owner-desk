@@ -699,7 +699,8 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
     if (!fcol) return;
     const close = (e) => { if (!e.target.closest?.('.hf,.fbtn')) setFcol(null); };
     const esc = (e) => e.key === 'Escape' && setFcol(null);
-    const gone = () => setFcol(null);
+    // Close when the page or table scrolls, but not when scrolling inside the filter box itself
+    const gone = (e) => { if (e.target instanceof Element && e.target.closest('.hf')) return; setFcol(null); };
     document.addEventListener('mousedown', close); document.addEventListener('keydown', esc);
     window.addEventListener('scroll', gone, true); window.addEventListener('resize', gone);
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc);
