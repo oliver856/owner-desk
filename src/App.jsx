@@ -198,6 +198,7 @@ th:hover .fbtn,.fbtn.open,.fbtn.on{opacity:1} .fbtn:hover,.fbtn.open{background:
 .fbtn.on{color:var(--accent)!important}
 .hf{position:fixed;z-index:40;width:260px;background:var(--bg);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);font-size:13px;letter-spacing:0;font-weight:400;text-align:left}
 .hf-h{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.unums{display:grid;gap:6px;margin-top:10px} .sect .unums,.section .unums{margin-top:0} .unums .lbl{font-size:12px;color:var(--muted);margin-top:2px} .unums input{width:100%;min-width:0}
 .hf .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px} .hf .pair input{width:100%;min-width:0}
 .hf-b{padding:10px 12px;display:grid;gap:2px;max-height:340px;overflow:auto} .hf-b select,.hf-b input[type=search]{width:100%}
 td{padding:10px 10px 10px 0;border-bottom:1px solid var(--line);vertical-align:top}
@@ -464,7 +465,7 @@ function ThemeToggle() {
 }
 
 // ── Laptop: owner list, unit panel, activity ────────────────────────────────
-const EMPTY = { q: '', area: [], sc: [], bld: [], st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', rmin: '', rmax: '', pmin: '', pmax: '',
+const EMPTY = { q: '', area: [], sc: [], bld: [], st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', umin: '', umax: '', useries: '', rmin: '', rmax: '', pmin: '', pmax: '',
   first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false,
   ncall: false, called: false, oc: [], free: true };
 
@@ -728,9 +729,16 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
       <input type="date" aria-label="Ends from" value={f.from} onChange={(e) => change({ from: e.target.value })} />
       <input type="date" aria-label="Ends to" value={f.to} onChange={(e) => change({ to: e.target.value })} />
     </div></>;
+  const unitNums = (side) => <div className="unums">
+    {!side && <span className="lbl">Unit number</span>}
+    <div className="pair">{num('umin', 'From')}{num('umax', 'To')}</div>
+    <span className="lbl">Series</span>
+    <input type="text" inputMode="numeric" maxLength={4} placeholder="e.g. 02 for 102, 202, 302" value={f.useries}
+      onChange={(e) => change({ useries: e.target.value.replace(/\D/g, '') }, true)} />
+  </div>;
   const search = () => <input type="search" autoFocus placeholder="Search owner, building or unit" value={f.q} onChange={(e) => change({ q: e.target.value }, true)} />;
   const HEAD_FILTERS = {
-    unit: { on: ['q'], ui: search },
+    unit: { on: ['q', 'umin', 'umax', 'useries'], ui: () => <>{search()}{unitNums()}</> },
     place: { on: ['bld'], ui: () => pick('bld', buildings) },
     sc: { on: ['sc'], ui: () => pick('sc', subcommunities) },
     area: { on: ['area'], ui: () => pick('area', areas) },
@@ -786,6 +794,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
             </div></Section>
           <Section title="Type" on={f.type.length}>{box('type', 'Apartment')}{box('type', 'Villa')}</Section>
           <Section title="Beds" on={f.beds.length}><div className="cols">{BEDS.map((b) => box('beds', b, bedsLabel(b)))}</div></Section>
+          <Section title="Unit number" on={f.umin || f.umax || f.useries}>{unitNums(true)}</Section>
           <Section title="Size, sq ft" on={f.smin || f.smax}><div className="pair">{num('smin', 'Min')}{num('smax', 'Max')}</div></Section>
           <Section title="Rent, AED a year" on={f.rmin || f.rmax}><div className="pair">{num('rmin', 'Min')}{num('rmax', 'Max')}</div></Section>
           <Section title="Tenancy" on={f.first || f.ren2 || f.up || f.down}>{flag('first', 'First year (no renewals)')}{flag('ren2', 'Renewed 2+ times')}{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</Section>
