@@ -9,6 +9,7 @@ let ready = null;
 export function ensureHolds() {
   ready ??= (async () => {
     await sql`create index if not exists calls_owner_time_idx on desk.calls (owner_id, called_at desc)`;
+    await sql`create index if not exists calls_time_idx on desk.calls (called_at desc)`;
     await sql`create index if not exists call_requests_owner_time_idx on desk.call_requests (owner_id, created_at desc)`;
     await sql`insert into desk.settings (key, value) values ('call_holds', ${sql.json(HOLD_DEFAULTS)}) on conflict (key) do nothing`;
     await sql.unsafe(`
