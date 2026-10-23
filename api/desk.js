@@ -4,13 +4,23 @@ import crypto from 'node:crypto';
 import { sql, route, query, body, audit, caps, setting, withinCallHours, callTarget } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
+import { ensureHolds, holdFor } from './_lib/holds.js';
 
 const PAGE = 100;
 const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 'size_sqft', 'lease_status', 'end_date', 'annual_rent',
   'prev_rent', 'renewals', 'last_sale_price', 'owner_id', 'owner_name', 'owner_masked', 'has_phone', 'owner_units', 'owners_n', 'mortgaged',
   'last_called', 'last_outcome'];
 
-const places = new Map(); // building list per area set, kept for an hour
+const places = new Map(); // building list per area set, kept for 10 minutes
+
+// Each broker's saved view (filters, tab, sort, columns, filter panel). Created by the server on first use.
+let prefsReady = null;
+const ensurePrefs = () => (prefsReady ??= sql`create table if not exists desk.staff_prefs (
+    user_id uuid primary key references desk.staff(user_id) on delete cascade,
+    prefs jsonb not null, updated_at timestamptz not null default now())`
+  .then(() => sql`alter table desk.staff_prefs enable row level security`)
+  .then(() => sql`revoke all on desk.staff_prefs from anon, authenticated`)
+  .catch((e) => { prefsReady = null; throw e; }));
 
 // The notes table is created by the server the first time it's needed, so no SQL has to be run by hand.
 let notesReady = null;
@@ -40,8 +50,22 @@ const actions = {
       p = { at: Date.now(), rows: rows.map((r) => ({ area: r.area, sc: r.subcommunity, bld: r.building })) };
       places.set(key, p);
     }
-    const [c, target] = await Promise.all([caps(s.user_id), callTarget(s.user_id)]);
-    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: p.rows });
+    await ensurePrefs();
+    const [c, target, [pr]] = await Promise.all([caps(s.user_id), callTarget(s.user_id),
+      sql`select prefs from desk.staff_prefs where user_id = ${s.user_id}`]);
+    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: p.rows, prefs: pr?.prefs || null });
+  },
+
+  // Save (POST) or clear (DELETE) this broker's view
+  async savePrefs(req, res, s) {
+    await ensurePrefs();
+    if (req.method === 'DELETE') { await sql`delete from desk.staff_prefs where user_id = ${s.user_id}`; return res.json({ ok: true }); }
+    if (req.method !== 'POST') return res.status(405).end();
+    const p = body(req).prefs;
+    if (!p || typeof p !== 'object' || Array.isArray(p) || JSON.stringify(p).length > 20000) return res.status(400).json({ error: 'Bad view' });
+    await sql`insert into desk.staff_prefs (user_id, prefs) values (${s.user_id}, ${sql.json(p)})
+              on conflict (user_id) do update set prefs = excluded.prefs, updated_at = now()`;
+    res.json({ ok: true });
   },
 
   // The owner list with filters, tab counts and paging
@@ -49,22 +73,25 @@ const actions = {
     const q = query(req);
     const tab = TABS.includes(q.get('tab')) ? q.get('tab') : 'all';
     const page = Math.max(1, Number(q.get('page')) || 1);
-    await ensureNotes();
+    await Promise.all([ensureNotes(), ensureHolds()]);
+    const more = q.get('more') === '1';
     const [rows, [counts]] = await Promise.all([
       sql`select ${sql(COLS)},
             (select n.body from desk.notes n where n.unit_id = v_unit_list.id order by n.created_at desc limit 1) as last_note,
-            (select a.name from desk.areas a where a.id = v_unit_list.area_id) as area
-          from desk.v_unit_list where ${whereSql(q, s.listAreas)} and ${tabSql(tab)}
+            (select a.name from desk.areas a where a.id = v_unit_list.area_id) as area,
+            (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
+               from desk.owner_hold(v_unit_list.owner_id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user) as hold
+          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)} and ${tabSql(tab)}
           order by ${sortSql(q.get('sort'))} limit ${PAGE} offset ${(page - 1) * PAGE}`,
-      sql`select count(*)::int as all,
+      more ? Promise.resolve([null]) : sql`select count(*)::int as all,
             count(*) filter (where ${tabSql('exp90')})::int as exp90,
             count(*) filter (where ${tabSql('up')})::int as up,
             count(*) filter (where ${tabSql('port')})::int as port,
             count(*) filter (where ${tabSql('mort')})::int as mort,
             count(*) filter (where ${tabSql('never')})::int as never
-          from desk.v_unit_list where ${whereSql(q, s.listAreas)}`,
+          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)}`,
     ]);
-    const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page'].includes(k));
+    const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more'].includes(k));
     if (filtered || page > 1) audit(s.user_id, 'searched', { detail: Object.fromEntries(q), ip }).catch(() => {});
     res.json({ rows, counts, page, pageSize: PAGE });
   },
@@ -77,13 +104,15 @@ const actions = {
       await audit(s.user_id, 'limit_hit', { unitId: id, detail: { limit: 'profiles' }, ip });
       return res.status(429).json({ error: `You've opened ${c.profileCap} owner profiles today. Ask your manager if you need more.` });
     }
-    await ensureNotes();
+    await Promise.all([ensureNotes(), ensureHolds()]);
     const inArea = sql`exists (select 1 from desk.mv_units m where m.id = ${id} and m.area_id = any(${s.areas}))`;
     const [[u], owners, calls, notes] = await Promise.all([
       sql`select * from desk.v_unit_list where id = ${id} and area_id = any(${s.areas})`,
       sql`select o.id, o.name, o.is_company, uo.role, ph.masked, (ph.owner_id is not null) as has_phone,
                  (select count(*) from desk.unit_owners x where x.owner_id = o.id and x.role = 'owner')::int as units,
-                 exists (select 1 from desk.do_not_call d where d.owner_id = o.id) as dnc
+                 exists (select 1 from desk.do_not_call d where d.owner_id = o.id) as dnc,
+                 (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
+                    from desk.owner_hold(o.id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user) as hold
           from desk.unit_owners uo join desk.owners o on o.id = uo.owner_id
           left join desk.owner_phones ph on ph.owner_id = o.id
           where uo.unit_id = ${id} and ${inArea} order by uo.role desc, o.is_company, o.id`,
@@ -129,6 +158,15 @@ const actions = {
     if (!x) return res.status(403).json({ error: 'This owner isn\'t in your areas or has no mobile.' });
     const [dnc] = await sql`select 1 from desk.do_not_call where owner_id = ${ownerId}`;
     if (dnc) return res.status(403).json({ error: 'This owner asked not to be called.' });
+    const hold = await holdFor(ownerId, s.user_id);
+    if (hold && !(body(req).force && s.role !== 'broker')) {
+      await audit(s.user_id, 'call_blocked_hold', { unitId, detail: { owner_id: ownerId, held_by: hold.by_name, why: hold.why }, ip });
+      const when = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(hold.until));
+      return res.status(409).json({ error: hold.why === 'Calling now'
+        ? `${hold.by_name} is calling this owner right now.`
+        : `${hold.by_name} is working this owner (${hold.why}). Free to call from ${when}.`, hold });
+    }
+    if (hold) await audit(s.user_id, 'call_hold_override', { unitId, detail: { owner_id: ownerId, held_by: hold.by_name }, ip });
 
     const minutes = Number(await setting('call_token_minutes', 5));
     const hash = crypto.createHash('sha256').update(crypto.randomBytes(32)).digest('hex');
