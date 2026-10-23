@@ -2,9 +2,10 @@ import { sql, audit } from './core.js';
 
 export const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
 
+// Outcome is optional: a broker can save just a note (e.g. one of the quick notes)
 export async function saveOutcome(s, requestId, outcome, note, kendal, ip) {
   const [c] = await sql`
-    update desk.calls set outcome = ${outcome}, note = ${String(note || '').slice(0, 1000) || null},
+    update desk.calls set outcome = ${outcome || null}, note = ${String(note || '').slice(0, 1000) || null},
       sent_to_kendal = ${kendal}, outcome_at = now()
     where request_id = ${requestId} and user_id = ${s.user_id}
     returning id, unit_id, owner_id`;
