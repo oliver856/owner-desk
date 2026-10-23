@@ -11,7 +11,7 @@ const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 
   'prev_rent', 'renewals', 'last_sale_price', 'owner_id', 'owner_name', 'owner_masked', 'has_phone', 'owner_units', 'owners_n', 'mortgaged',
   'last_called', 'last_outcome'];
 
-const places = new Map(); // building list per area set, kept for 10 minutes
+const places = new Map(); // building list per area set, kept for 1 minute
 
 // Adds the 'director' role (sees every team, like an admin, but can't change settings)
 let rolesReady = null;
@@ -49,7 +49,7 @@ const actions = {
   async me(req, res, s) {
     const key = [...s.listAreas].sort((a, b) => a - b).join(',');
     let p = places.get(key);
-    if (!p || p.at < Date.now() - 600e3) {
+    if (!p || p.at < Date.now() - 60e3) {
       const rows = await sql`select * from (select distinct a.name as area, m.subcommunity, m.building from desk.mv_units m
                              join desk.areas a on a.id = m.area_id where m.area_id = any(${s.listAreas})) x
                              order by area, upper(subcommunity), upper(building)`;
@@ -80,7 +80,10 @@ const actions = {
     const goal = Number(await setting('daily_call_target', 50));
     const HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to)')`;
     const COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
-    const people = sql`st.active and st.role in ('broker', 'manager') and (${team === ''} or coalesce(st.team, 'No team') = ${team})`;
+    // Brokers and managers always; admins and directors only once they've made a call in the period
+    const people = sql`st.active and (st.role in ('broker', 'manager')
+        or exists (select 1 from desk.calls x where x.user_id = st.user_id and x.called_at >= ${b.start}))
+      and (${team === ''} or coalesce(st.team, 'No team') = ${team})`;
     const [rows, series, teams] = await Promise.all([
       sql`select st.full_name as name, coalesce(st.team, 'No team') as team, st.role,
             count(c.id)::int as calls,
@@ -98,7 +101,8 @@ const actions = {
       all ? sql`select coalesce(st.team, 'No team') as team, count(distinct st.user_id)::int as people, count(c.id)::int as calls,
                   count(c.id) filter (where ${HOT})::int as hot
                 from desk.staff st left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${b.start}
-                where st.active and st.role in ('broker', 'manager') group by 1 order by calls desc` : Promise.resolve([]),
+                where st.active and (st.role in ('broker', 'manager') or exists (select 1 from desk.calls x where x.user_id = st.user_id and x.called_at >= ${b.start}))
+                group by 1 order by calls desc` : Promise.resolve([]),
     ]);
     res.json({ period, team, all, myTeam: s.team, goal, workdays, start: b.start, rows, series, teams,
       teamNames: all ? (await sql`select distinct coalesce(team, 'No team') as t from desk.staff where active and role in ('broker', 'manager') order by 1`).map((x) => x.t) : [] });
