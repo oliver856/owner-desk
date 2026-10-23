@@ -18,7 +18,9 @@ const QUICK_NOTES = {
 function noteTone(text) {
   const t = String(text || '').toLowerCase();
   const hit = (list) => list.some((q) => t.startsWith(q.toLowerCase()));
-  return hit(QUICK_NOTES.Hot) ? 'hot' : hit(QUICK_NOTES.Cold) || t.startsWith('cold') ? 'cold' : '';
+  if (hit(QUICK_NOTES.Hot) || hit(HOT_OUTCOMES) || t.startsWith('call back')) return 'hot';
+  if (hit(QUICK_NOTES.Cold) || t.startsWith('cold') || hit(['No answer', 'Not interested', 'Wrong number', 'Do not call'])) return 'cold';
+  return '';
 }
 function NoteTag({ text, clip }) {
   const tone = noteTone(text);
@@ -40,7 +42,7 @@ function QuickNotes({ value, onPick }) {
 const HOT_OUTCOMES = ['Wants valuation', 'Listing opportunity', 'Wants to sell']; // these tick "Send to Kendal" automatically
 const TABS = [
   ['all', 'All units'], ['exp90', 'Ending in 90 days'], ['up', 'Rent up 10%+'],
-  ['port', 'Portfolio owners'], ['mort', 'Mortgaged'], ['never', 'Never called'],
+  ['port', 'Portfolio owners'], ['mort', 'Mortgaged'], ['never', 'Never called'], ['callbacks', 'Callbacks this week'],
 ];
 const BEDS = ['Studio', '1', '2', '3', '4', '5', '6', '7'];
 const EXPIRY = [['30', 'Within 30 days'], ['90', 'Within 90 days'], ['180', 'Within 6 months'], ['365', 'Within a year'], ['', 'Any time']];
@@ -126,6 +128,12 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .qcol.cold .qh{color:var(--cold)} .qcol.hot .qh{color:var(--hot)}
 .qcol.cold .chip.on{border-color:var(--cold);color:var(--cold);background:color-mix(in srgb,var(--cold) 10%,var(--bg))}
 .qcol.hot .chip.on{border-color:var(--hot);color:var(--hot);background:color-mix(in srgb,var(--hot) 10%,var(--bg))}
+.stack{display:flex;flex-direction:column;gap:2px;padding:6px 0} .stack>div{min-height:30px;display:flex;align-items:center;min-width:0}
+.grid td.callcol .stack{align-items:flex-end}
+.nstack{display:flex;flex-direction:column;gap:5px;padding:7px 0;min-width:0}
+.nitem{display:flex;flex-direction:column;gap:1px;min-width:0;align-items:flex-start}
+.nmeta{font-size:11px;color:var(--faint)}
+.tab.due .c{background:var(--cold);color:#fff;border-radius:999px;padding:0 7px;margin-left:6px}
 .notetag{display:inline-flex;align-items:center;gap:6px;max-width:100%}
 .notetag.hot,.notetag.cold{padding:2px 9px;border-radius:999px;font-size:12.5px;font-weight:500}
 .notetag.hot{color:var(--hot);background:color-mix(in srgb,var(--hot) 12%,var(--bg))}
@@ -682,7 +690,9 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
 
         <section style={{ minWidth: 0 }}>
           <nav className="tabs">
-            {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '')} onClick={() => goTab(k)}>{l}<span className="c n">{fmt(c[k])}</span></button>)}
+            {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '') + (k === 'callbacks' && c[k] ? ' due' : '')}
+              title={k === 'callbacks' ? 'Owners whose last call this week got no answer. Work through them on Friday.' : undefined}
+              onClick={() => goTab(k)}>{l}<span className="c n">{fmt(c[k])}</span></button>)}
           </nav>
           <div className="meta">
             <span className="meta-l">
@@ -742,8 +752,8 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
 
         </section>
       </main>
-      {calling && <CallFlow unitId={calling.r.id} owner={{ id: calling.r.owner_id, name: calling.r.owner_name }} force={!!calling.force}
-        label={`${calling.r.owner_name}, ${placeOf(calling.r)} ${calling.r.unit_no}`}
+      {calling && <CallFlow unitId={calling.r.id} owner={{ id: (calling.owner || {}).id ?? calling.r.owner_id, name: (calling.owner || {}).name ?? calling.r.owner_name }} force={!!calling.force}
+        label={`${(calling.owner || {}).name ?? calling.r.owner_name}, ${placeOf(calling.r)} ${calling.r.unit_no}`}
         onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(f, tab, sort, 1); }} />}
     </>
   );
@@ -793,27 +803,31 @@ const COLUMNS = [
     return c == null ? dash : <span className={c > 0 ? 'up' : c < 0 ? 'down' : ''}>{c > 0 ? '+' : ''}{c}%</span>;
   } },
   { k: 'sale', label: 'Last sale (AED)', right: true, sort: 'sale', cell: (r) => (r.last_sale_price ? fmt(r.last_sale_price) : dash) },
-  { k: 'owner', label: 'Owner', cell: (r) => <span className="clip strong" title={titleCase(r.owner_name)}>{r.owner_name ? titleCase(r.owner_name) : '—'}</span> },
-  { k: 'mobile', label: 'Mobile', cell: (r) => <span className="ph">{r.owner_masked ?? <span className="faint">none</span>}</span> },
+  { k: 'owner', label: 'Owner', cell: (r) => (ownersOf(r).length
+    ? <div className="stack">{ownersOf(r).map((o) => <div key={o.id}><span className="clip strong" title={titleCase(o.name)}>{titleCase(o.name)}</span></div>)}</div> : dash) },
+  { k: 'mobile', label: 'Mobile', cell: (r) => (ownersOf(r).length
+    ? <div className="stack">{ownersOf(r).map((o) => <div key={o.id}><span className="ph">{o.masked ?? <span className="faint">none</span>}</span></div>)}</div> : <span className="faint">none</span>) },
   { k: 'owned', label: 'Units owned', right: true, cell: (r) => r.owner_units },
-  { k: 'coowners', label: 'Co-owners', right: true, cell: (r) => (r.owners_n > 1 ? r.owners_n - 1 : dash) },
   { k: 'mortgaged', label: 'Mortgaged', cell: (r) => (r.mortgaged ? 'Yes' : dash) },
   { k: 'lastcall', label: 'Last called', cell: (r) => (r.last_called ? fd(r.last_called) : <span className="faint">Never</span>) },
   { k: 'outcome', label: 'Last outcome', cell: (r) => r.last_outcome ?? dash },
-  { k: 'note', label: 'Last note', cell: (r) => (r.last_note ? <NoteTag text={r.last_note} clip /> : dash) },
+  { k: 'note', label: 'Notes', cell: (r) => (r.notes?.length
+    ? <div className="nstack">{r.notes.map((n, i) => (
+        <div key={i} className="nitem"><span className="nmeta">{fdt(n.t)} · {String(n.by || '').split(' ')[0]}</span><NoteTag text={n.text} clip /></div>))}</div>
+    : dash) },
 ];
 
 const COLUMN_SETS = [
   ['Names and numbers', ['unit', 'place', 'owner', 'mobile', 'lastcall']],
   ['Tenancy', ['unit', 'place', 'beds', 'lease', 'ends', 'days', 'rent', 'change', 'owner', 'mobile', 'lastcall']],
-  ['Ownership', ['unit', 'place', 'beds', 'size', 'sale', 'owner', 'owned', 'coowners', 'mortgaged', 'mobile']],
+  ['Ownership', ['unit', 'place', 'beds', 'size', 'sale', 'owner', 'mobile', 'owned', 'mortgaged']],
   ['Everything', COLUMNS.map((c) => c.k)],
 ];
 const DEFAULT_COLS = COLUMN_SETS[1][1];
 // Starting widths (px) for each column; brokers can drag them wider or narrower
 const COL_W = { unit: 110, area: 140, place: 170, sc: 160, type: 100, beds: 80, size: 110, lease: 125, renewals: 95, ends: 125,
   days: 95, rent: 115, change: 110, sale: 135, owner: 230, mobile: 150, owned: 105, coowners: 100, mortgaged: 105,
-  lastcall: 120, outcome: 140, note: 240 };
+  lastcall: 120, outcome: 140, note: 340 };
 function loadWidths() { try { const w = JSON.parse(localStorage.getItem('colWidths') || '{}'); return w && typeof w === 'object' ? w : {}; } catch { return {}; } }
 
 function loadCols() {
@@ -942,14 +956,23 @@ function HoldChip({ h, long }) {
   return <span className={'hold' + (live ? ' live' : '')} title={tip}>{live ? <span className="pulse" /> : null}{long ? (live ? `${h.by} is calling now` : `${h.by} · ${h.why} · free in ${holdLeft(h.until)}`) : `${first} · ${live ? 'now' : holdLeft(h.until)}`}</span>;
 }
 
+// All owners of a unit, in one row (falls back to the main owner if the list didn't include them)
+function ownersOf(r) {
+  if (Array.isArray(r.owners) && r.owners.length) return r.owners;
+  return r.owner_id ? [{ id: r.owner_id, name: r.owner_name, masked: r.owner_masked, has_phone: r.has_phone, hold: r.hold }] : [];
+}
 const OwnerRow = React.memo(function OwnerRow({ r, cols, onOpen, onCall, canOverride }) {
-  const call = (force) => (e) => { e.stopPropagation(); onCall({ r, force }); };
+  const owners = ownersOf(r);
+  // A hold on any co-owner holds the whole unit, so one broker calls them all
+  const unitHold = owners.map((o) => o.hold).find(Boolean) || null;
+  const call = (o, force) => (e) => { e.stopPropagation(); onCall({ r, owner: o, force }); };
   return (
-    <tr onClick={() => onOpen(r.id)} className={r.hold ? 'held-row' : ''}>
+    <tr onClick={() => onOpen(r.id)} className={unitHold ? 'held-row' : ''}>
       {cols.map((c) => <td key={c.k} className={c.right ? 'r n' : ''}>{c.cell(r)}</td>)}
-      <td className="callcol">{r.owner_id && r.has_phone && (r.hold
-        ? <span className="heldcell"><HoldChip h={r.hold} />{canOverride && <button className="btn ghost" title="Managers can call anyway" onClick={call(true)}>Call</button>}</span>
-        : <button className="btn" onClick={call(false)}>Call</button>)}</td>
+      <td className="callcol"><div className="stack">{owners.map((o) => (
+        <div key={o.id}>{o.has_phone && !o.dnc && (unitHold
+          ? <span className="heldcell"><HoldChip h={unitHold} />{canOverride && <button className="btn ghost" title="Managers can call anyway" onClick={call(o, true)}>Call</button>}</span>
+          : <button className="btn" onClick={call(o, false)}>Call</button>)}</div>))}</div></td>
     </tr>
   );
 });
