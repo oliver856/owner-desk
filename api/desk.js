@@ -77,7 +77,12 @@ const actions = {
     const more = q.get('more') === '1';
     const [rows, [counts]] = await Promise.all([
       sql`select ${sql(COLS)},
-            (select n.body from desk.notes n where n.unit_id = v_unit_list.id order by n.created_at desc limit 1) as last_note,
+            (select x.body from (
+               select n.body, n.created_at as t from desk.notes n where n.unit_id = v_unit_list.id
+               union all
+               select c.note, coalesce(c.outcome_at, c.called_at) from desk.calls c
+               where c.unit_id = v_unit_list.id and c.note is not null and c.note <> '') x
+             order by x.t desc limit 1) as last_note,
             (select a.name from desk.areas a where a.id = v_unit_list.area_id) as area,
             (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
                from desk.owner_hold(v_unit_list.owner_id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user) as hold
