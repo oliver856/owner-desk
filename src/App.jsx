@@ -102,7 +102,28 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .meta-l,.meta-r{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap}
 .btn.saved{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line));opacity:1}
 .more{padding:14px;text-align:center;color:var(--faint);font-size:12px;min-height:44px}
-.filters{display:flex;flex-direction:column;gap:20px;position:sticky;top:60px;max-height:calc(100vh - 80px);overflow:auto;padding-bottom:20px}
+.owners-page{display:flex;flex-direction:column;height:calc(100dvh - var(--toph, 49px));overflow:hidden}
+.owners-page>.layout{flex:1;min-height:0;align-items:stretch;padding-block:14px 16px}
+.listcol{min-width:0;display:flex;flex-direction:column;min-height:0}
+.listcol>.tw{flex:1;min-height:0;max-height:none}
+.owners-page .head{padding-block:14px 0}
+.filters{display:flex;flex-direction:column;gap:14px;height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  scroll-behavior:smooth;scrollbar-width:thin;padding:2px 6px 24px 2px}
+.filters::-webkit-scrollbar{width:6px} .filters::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
+.ms-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:12.5px;text-align:left}
+.ms-btn:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.ms-btn.on{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));color:var(--accent);font-weight:500}
+.ms-sum{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chev{color:var(--faint);font-size:10px;transition:transform .15s} .open>button .chev{transform:rotate(180deg)}
+.checklist{margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--bg)}
+.cl-search{width:100%;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:12.5px;margin-bottom:6px}
+.cl-acts{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+.cl-list{max-height:220px;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:1px;scrollbar-width:thin}
+.sec{border-top:1px solid var(--line);padding-top:10px}
+.sec-h{width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:none;padding:0;font-size:12px;font-weight:600;color:var(--ink)}
+.sec-h:hover{color:var(--accent)}
+.sec-b{padding-top:8px}
+.sec-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-left:6px;vertical-align:middle}
 .filters h3{font-size:12px;font-weight:600;margin:0 0 6px}
 .filters input[type=search],.filters input[type=number],.filters input[type=date],.filters select{width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:4px;background:var(--bg);font-size:12.5px}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
@@ -130,9 +151,10 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .qcol.hot .chip.on{border-color:var(--hot);color:var(--hot);background:color-mix(in srgb,var(--hot) 10%,var(--bg))}
 .stack{display:flex;flex-direction:column;gap:2px;padding:6px 0} .stack>div{min-height:30px;display:flex;align-items:center;min-width:0}
 .grid td.callcol .stack{align-items:flex-end}
-.nstack{display:flex;flex-direction:column;gap:5px;padding:7px 0;min-width:0}
-.nitem{display:flex;flex-direction:column;gap:1px;min-width:0;align-items:flex-start}
-.nmeta{font-size:11px;color:var(--faint)}
+.nstack{display:flex;flex-direction:column;gap:4px;padding:6px 0;min-width:0}
+.nitem{display:flex;align-items:center;gap:8px;min-width:0}
+.nmeta{flex:none;font-size:11px;color:var(--faint);white-space:nowrap}
+.nitem .notetag{min-width:0;flex:0 1 auto}
 .tab.due .c{background:var(--cold);color:#fff;border-radius:999px;padding:0 7px;margin-left:6px}
 .notetag{display:inline-flex;align-items:center;gap:6px;max-width:100%}
 .notetag.hot,.notetag.cold{padding:2px 9px;border-radius:999px;font-size:12.5px;font-weight:500}
@@ -392,9 +414,16 @@ function ThemeToggle() {
 }
 
 // ── Laptop: owner list, unit panel, activity ────────────────────────────────
-const EMPTY = { q: '', area: '', sc: '', bld: '', st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', rmin: '', rmax: '', pmin: '', pmax: '',
+const EMPTY = { q: '', area: [], sc: [], bld: [], st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', rmin: '', rmax: '', pmin: '', pmax: '',
   first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false,
   ncall: false, called: false, oc: [], free: true };
+
+// Older saved views stored one area/cluster/building as text; these are now lists
+function normF(f) {
+  const n = { ...EMPTY, ...(f || {}) };
+  for (const k of ['area', 'sc', 'bld']) n[k] = Array.isArray(n[k]) ? n[k] : n[k] ? [n[k]] : [];
+  return n;
+}
 
 function toParams(f, tab, sort, page) {
   const p = new URLSearchParams();
@@ -412,6 +441,16 @@ function Desk() {
   const [me, setMe] = useState(null);
   const [toast, setToast] = useState('');
   const [unitId, setUnitId] = useState(null);
+  // The Owners page fills the screen under this header; keep its height in a CSS variable
+  const headerRef = useRef(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const set = () => document.documentElement.style.setProperty('--toph', el.offsetHeight + 'px');
+    set();
+    const ro = new ResizeObserver(set); ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const refreshMe = useCallback(() => api('/api/desk?action=me').then(setMe).catch((e) => setToast(e.message)), []);
   const savePrefs = useCallback(async (prefs) => {
@@ -442,7 +481,7 @@ function Desk() {
 
   return (
     <>
-      <header className="top">
+      <header className="top" ref={headerRef}>
         <div className="bar gut">
           <span className="brand">Apex Owner Desk</span>
           <nav className="nav">
@@ -470,7 +509,7 @@ function Desk() {
 function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs }) {
   // Start from the broker's saved view if they have one
   const start = useRef({
-    f: { ...EMPTY, ...(prefs?.f || {}) }, tab: prefs?.tab || 'all', sort: prefs?.sort || 'unit',
+    f: normF(prefs?.f), tab: prefs?.tab || 'all', sort: prefs?.sort || 'unit',
     cols: (prefs?.cols || []).filter((k) => COLUMNS.some((c) => c.k === k)), side: prefs?.side !== false,
   }).current;
   const [f, setF] = useState(start.f);
@@ -571,7 +610,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   // Saved view: compare what's on screen with what was saved
   const snap = { f, tab, sort, cols, side, widths };
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const savedSnap = prefs ? { f: { ...EMPTY, ...(prefs.f || {}) }, tab: prefs.tab || 'all', sort: prefs.sort || 'unit', cols: prefs.cols || cols, side: prefs.side !== false, widths: prefs.widths || {} } : null;
+  const savedSnap = prefs ? { f: normF(prefs.f), tab: prefs.tab || 'all', sort: prefs.sort || 'unit', cols: prefs.cols || cols, side: prefs.side !== false, widths: prefs.widths || {} } : null;
   const isSaved = savedSnap && same(snap, savedSnap);
   const [savingView, setSavingView] = useState(false);
   const saveView = async () => { setSavingView(true); try { await onSavePrefs(snap); } finally { setSavingView(false); } };
@@ -579,9 +618,20 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   const activeFilters = Object.keys(EMPTY).filter((k) => k !== 'free' && (Array.isArray(f[k]) ? f[k].length : !!f[k])).length;
 
   const areas = useMemo(() => [...new Set(places.map((p) => p.area))], [places]);
-  const inArea = useMemo(() => places.filter((p) => !f.area || p.area === f.area), [places, f.area]);
+  const inArea = useMemo(() => places.filter((p) => !f.area.length || f.area.includes(p.area)), [places, f.area]);
   const subcommunities = useMemo(() => [...new Set(inArea.map((p) => p.sc))], [inArea]);
-  const buildings = useMemo(() => [...new Set(inArea.filter((p) => p.bld && (!f.sc || p.sc === f.sc)).map((p) => p.bld))], [inArea, f.sc]);
+  const buildings = useMemo(() => [...new Set(inArea.filter((p) => p.bld && (!f.sc.length || f.sc.includes(p.sc))).map((p) => p.bld))], [inArea, f.sc]);
+  // Picking areas/clusters keeps only the clusters/buildings that still belong to them
+  const setPlace = (k, list) => {
+    const patch = { [k]: list };
+    if (k === 'area') {
+      const ok = places.filter((p) => !list.length || list.includes(p.area));
+      patch.sc = f.sc.filter((x) => ok.some((p) => p.sc === x));
+      patch.bld = f.bld.filter((x) => ok.some((p) => p.bld === x && (!patch.sc.length || patch.sc.includes(p.sc))));
+    }
+    if (k === 'sc') patch.bld = f.bld.filter((x) => inArea.some((p) => p.bld === x && (!list.length || list.includes(p.sc))));
+    change(patch);
+  };
   const c = data?.counts || {};
   const total = c[tab] ?? 0;
 
@@ -608,11 +658,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc);
       window.removeEventListener('scroll', gone, true); window.removeEventListener('resize', gone); };
   }, [fcol]);
-  const pick = (k, list) => (
-    <select value={f[k]} onChange={(e) => change(k === 'area' ? { area: e.target.value, sc: '', bld: '' } : k === 'sc' ? { sc: e.target.value, bld: '' } : { [k]: e.target.value })}>
-      <option value="">All</option>{list.map((x) => <option key={x} value={x}>{titleCase(x)}</option>)}
-    </select>
-  );
+  const pick = (k, list) => <CheckList options={list} selected={f[k]} onChange={(v) => setPlace(k, v)} />;
   const ends = () => <>
     {EXPIRY.map(([v, l]) => <label className="cb" key={v}><input type="radio" name="hexp" checked={f.exp === v} onChange={() => change({ exp: v })} />{l}</label>)}
     <div className="pair" style={{ marginTop: 6 }}>
@@ -654,6 +700,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
 
   return (
     <>
+      <div className="owners-page">
       {busy && <div className="loadbar" />}
       {target && <TargetBar t={target} />}
       <div className="head gut">
@@ -664,31 +711,28 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
         {side && <aside className="filters">
           <button className="hide-side" onClick={() => setSide(false)} title="Hide filters to see the whole table">‹ Hide filters</button>
           <div><input id="q" type="search" placeholder="Search owner, building or unit" value={f.q} autoComplete="off" onChange={(e) => change({ q: e.target.value }, true)} /></div>
-          {areas.length > 1 && <div><h3>Area</h3>{pick('area', areas)}</div>}
-          <div><h3>Sub-community</h3>{pick('sc', subcommunities)}</div>
-          <div><h3>Building</h3>
-            <select id="bld" value={f.bld} onChange={(e) => change({ bld: e.target.value })}>
-              <option value="">All</option>{buildings.map((b) => <option key={b} value={b}>{titleCase(b)}</option>)}
-            </select></div>
-          <div><h3>Lease</h3>{['Live Ejari', 'No live Ejari', 'Not confirmed'].map((v) => box('st', v))}</div>
-          <div><h3>Contract ends</h3>
+          {areas.length > 1 && <MultiSelect label="Area" options={areas} selected={f.area} onChange={(v) => setPlace('area', v)} />}
+          <MultiSelect label="Sub-community" options={subcommunities} selected={f.sc} onChange={(v) => setPlace('sc', v)} />
+          <MultiSelect label="Building" options={buildings} selected={f.bld} onChange={(v) => setPlace('bld', v)} />
+          <Section title="Lease" on={f.st.length}>{['Live Ejari', 'No live Ejari', 'Not confirmed'].map((v) => box('st', v))}</Section>
+          <Section title="Contract ends" on={f.exp || f.from || f.to}>
             {EXPIRY.map(([v, l]) => <label className="cb" key={v}><input type="radio" name="exp" checked={f.exp === v} onChange={() => change({ exp: v })} />{l}</label>)}
             <div className="pair" style={{ marginTop: 6 }}>
               <input type="date" aria-label="Ends from" value={f.from} onChange={(e) => change({ from: e.target.value })} />
               <input type="date" aria-label="Ends to" value={f.to} onChange={(e) => change({ to: e.target.value })} />
-            </div></div>
-          <div><h3>Type</h3>{box('type', 'Apartment')}{box('type', 'Villa')}</div>
-          <div><h3>Beds</h3>{BEDS.map((b) => box('beds', b, bedsLabel(b)))}</div>
-          <div><h3>Size, sq ft</h3><div className="pair">{num('smin', 'Min')}{num('smax', 'Max')}</div></div>
-          <div><h3>Rent, AED a year</h3><div className="pair">{num('rmin', 'Min')}{num('rmax', 'Max')}</div></div>
-          <div><h3>Tenancy</h3>{flag('first', 'First year (no renewals)')}{flag('ren2', 'Renewed 2+ times')}{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</div>
-          <div><h3>Last sale price, AED</h3><div className="pair">{num('pmin', 'Min')}{num('pmax', 'Max')}</div></div>
-          <div><h3>Owner</h3>{flag('port', 'Owns 2+ units here')}{flag('mort', 'Mortgaged')}{flag('ind', 'Individuals only')}{flag('phone', 'Has a mobile number')}</div>
-          <div><h3>Calls</h3>{flag('free', 'Hide owners others are working')}{flag('ncall', 'Never called')}{flag('called', 'Called before')}</div>
+            </div></Section>
+          <Section title="Type" on={f.type.length}>{box('type', 'Apartment')}{box('type', 'Villa')}</Section>
+          <Section title="Beds" on={f.beds.length}><div className="cols">{BEDS.map((b) => box('beds', b, bedsLabel(b)))}</div></Section>
+          <Section title="Size, sq ft" on={f.smin || f.smax}><div className="pair">{num('smin', 'Min')}{num('smax', 'Max')}</div></Section>
+          <Section title="Rent, AED a year" on={f.rmin || f.rmax}><div className="pair">{num('rmin', 'Min')}{num('rmax', 'Max')}</div></Section>
+          <Section title="Tenancy" on={f.first || f.ren2 || f.up || f.down}>{flag('first', 'First year (no renewals)')}{flag('ren2', 'Renewed 2+ times')}{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</Section>
+          <Section title="Last sale price, AED" on={f.pmin || f.pmax}><div className="pair">{num('pmin', 'Min')}{num('pmax', 'Max')}</div></Section>
+          <Section title="Owner" on={f.port || f.mort || f.ind || f.phone}>{flag('port', 'Owns 2+ units here')}{flag('mort', 'Mortgaged')}{flag('ind', 'Individuals only')}{flag('phone', 'Has a mobile number')}</Section>
+          <Section title="Calls" open on={f.ncall || f.called}>{flag('free', 'Hide owners others are working')}{flag('ncall', 'Never called')}{flag('called', 'Called before')}</Section>
           <button className="link" style={{ textAlign: 'left' }} onClick={() => { setF(EMPTY); load(EMPTY, tab, sort, 1); }}>Clear filters</button>
         </aside>}
 
-        <section style={{ minWidth: 0 }}>
+        <section className="listcol">
           <nav className="tabs">
             {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '') + (k === 'callbacks' && c[k] ? ' due' : '')}
               title={k === 'callbacks' ? 'Owners whose last call this week got no answer. Work through them on Friday.' : undefined}
@@ -752,6 +796,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
 
         </section>
       </main>
+      </div>
       {calling && <CallFlow unitId={calling.r.id} owner={{ id: (calling.owner || {}).id ?? calling.r.owner_id, name: (calling.owner || {}).name ?? calling.r.owner_name }} force={!!calling.force}
         label={`${(calling.owner || {}).name ?? calling.r.owner_name}, ${placeOf(calling.r)} ${calling.r.unit_no}`}
         onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(f, tab, sort, 1); }} />}
@@ -940,6 +985,53 @@ function TargetBar({ t }) {
         </div>
         {done && <div className="t-burst" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ '--a': `${i * 26}deg`, '--d': `${(i % 4) * 60}ms` }} />)}</div>}
       </div>
+    </div>
+  );
+}
+
+// ── Filter building blocks ──────────────────────────────────────────────────
+// Tick-box list with a search box, for areas, clusters and buildings
+function CheckList({ options, selected, onChange }) {
+  const [q, setQ] = useState('');
+  const shown = q ? options.filter((o) => String(o).toLowerCase().includes(q.toLowerCase())) : options;
+  const toggle = (o) => onChange(selected.includes(o) ? selected.filter((x) => x !== o) : [...selected, o]);
+  return (
+    <div className="checklist">
+      {options.length > 6 && <input type="search" className="cl-search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />}
+      <div className="cl-acts">
+        <button className="link" onClick={() => onChange([...new Set([...selected, ...shown])])}>Select {q ? 'shown' : 'all'}</button>
+        {selected.length > 0 && <button className="link" onClick={() => onChange([])}>Clear</button>}
+      </div>
+      <div className="cl-list">
+        {shown.length === 0 && <span className="faint">Nothing matches</span>}
+        {shown.map((o) => <label key={o} className="cb"><input type="checkbox" checked={selected.includes(o)} onChange={() => toggle(o)} />{titleCase(o)}</label>)}
+      </div>
+    </div>
+  );
+}
+// A filter that shows what's picked, and opens its tick-box list underneath when clicked
+function MultiSelect({ label, options, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const summary = selected.length === 0 ? 'All' : selected.length === 1 ? titleCase(selected[0]) : `${selected.length} selected`;
+  return (
+    <div className={'ms' + (open ? ' open' : '')}>
+      <h3>{label}</h3>
+      <button className={'ms-btn' + (selected.length ? ' on' : '')} onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="ms-sum">{summary}</span><span className="chev">▾</span>
+      </button>
+      {open && <CheckList options={options} selected={selected} onChange={onChange} />}
+    </div>
+  );
+}
+// A filter group that folds away. Opens by itself when something in it is switched on.
+function Section({ title, on, open: startOpen, children }) {
+  const [open, setOpen] = useState(!!startOpen || !!on);
+  return (
+    <div className={'sec' + (open ? ' open' : '')}>
+      <button className="sec-h" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span>{title}{on ? <i className="sec-dot" /> : null}</span><span className="chev">▾</span>
+      </button>
+      {open && <div className="sec-b">{children}</div>}
     </div>
   );
 }
