@@ -8,6 +8,15 @@ import { createClient } from '@supabase/supabase-js';
 
 // ── Settings you might want to change ───────────────────────────────────────
 const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
+// One-tap notes offered after a call and in the unit's Notes box. Brokers can still type their own.
+const QUICK_NOTES = ['Cold, no reply', 'Cold, no reply. WhatsApp sent', 'Cold, no reply. WhatsApp unavailable', 'Cold, unreachable'];
+function QuickNotes({ value, onPick }) {
+  return (
+    <div className="qnotes">
+      {QUICK_NOTES.map((q) => <button type="button" key={q} className={'chip' + (value === q ? ' on' : '')} onClick={() => onPick(value === q ? '' : q)}>{q}</button>)}
+    </div>
+  );
+}
 const HOT_OUTCOMES = ['Wants valuation', 'Listing opportunity', 'Wants to sell']; // these tick "Send to Kendal" automatically
 const TABS = [
   ['all', 'All units'], ['exp90', 'Ending in 90 days'], ['up', 'Rent up 10%+'],
@@ -70,6 +79,17 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .meta{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-block:10px;color:var(--muted);flex-wrap:wrap}
 .tw{overflow:auto;max-height:calc(100vh - 130px);transition:opacity .15s;border:1px solid var(--line);border-radius:8px} .tw.busy{opacity:.55}
 table.grid{min-width:0;width:100%}
+table.grid.fixed{table-layout:fixed;min-width:100%}
+.grid.fixed td{overflow:hidden;text-overflow:ellipsis}
+.grid.fixed .clip{max-width:100%}
+.grid th{position:sticky}
+.rz{position:absolute;top:0;right:-4px;width:9px;height:100%;cursor:col-resize;z-index:2}
+.rz::after{content:'';position:absolute;top:25%;bottom:25%;left:4px;width:2px;border-radius:2px;background:transparent}
+th:hover .rz::after,.col-resizing .rz::after{background:var(--line)} .rz:hover::after{background:var(--accent)!important}
+body.col-resizing{cursor:col-resize;user-select:none}
+.qnotes{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.qnotes .chip{font-size:12px}
+.qnotes + textarea{margin-top:8px}
 .grid th{position:sticky;top:0;background:var(--bg);padding:9px 14px;border-bottom:1px solid var(--line);font-size:11.5px;letter-spacing:.02em}
 .grid td{padding:0 14px;height:44px;vertical-align:middle;white-space:nowrap;border-bottom:1px solid var(--line)}
 .grid tbody tr:last-child td{border-bottom:none}
@@ -415,6 +435,27 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   const timer = useRef(null);
   const [calling, setCalling] = useState(null);
   const [cols, setColsState] = useState(() => (start.cols.length ? start.cols : loadCols()));
+  const [widths, setWidthsState] = useState(() => ({ ...loadWidths(), ...(prefs?.widths || {}) }));
+  const setWidths = (w) => { setWidthsState(w); try { localStorage.setItem('colWidths', JSON.stringify(w)); } catch {} };
+  const wOf = (k) => widths[k] || COL_W[k] || 130;
+  // Drag the right edge of a heading to resize; double-click it to reset
+  const resizing = useRef(null);
+  const startResize = (k, e) => {
+    e.preventDefault(); e.stopPropagation();
+    const x0 = e.clientX, w0 = wOf(k);
+    resizing.current = k;
+    let last = w0;
+    const move = (ev) => { last = Math.max(60, Math.min(600, Math.round(w0 + ev.clientX - x0))); setWidthsState((w) => ({ ...w, [k]: last })); };
+    const up = () => {
+      document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+      document.body.classList.remove('col-resizing');
+      setWidthsState((w) => { const n = { ...w, [k]: last }; try { localStorage.setItem('colWidths', JSON.stringify(n)); } catch {} return n; });
+      setTimeout(() => { resizing.current = null; }, 0);
+    };
+    document.body.classList.add('col-resizing');
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  };
+  const resetWidth = (k) => { const n = { ...widths }; delete n[k]; setWidths(n); };
   const setCols = (next) => { setColsState(next); try { localStorage.setItem('columns', JSON.stringify(next)); } catch {} };
   const shown = cols.map((k) => COLUMNS.find((c) => c.k === k)).filter(Boolean);
   // Drag a column heading onto another to move it
@@ -474,13 +515,13 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   const goTab = (t) => { setTab(t); setPage(1); load(f, t, sort, 1); };
   const goSort = (s) => { setSort(s); setPage(1); load(f, tab, s, 1); };
   // Saved view: compare what's on screen with what was saved
-  const snap = { f, tab, sort, cols, side };
+  const snap = { f, tab, sort, cols, side, widths };
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const savedSnap = prefs ? { f: { ...EMPTY, ...(prefs.f || {}) }, tab: prefs.tab || 'all', sort: prefs.sort || 'unit', cols: prefs.cols || cols, side: prefs.side !== false } : null;
+  const savedSnap = prefs ? { f: { ...EMPTY, ...(prefs.f || {}) }, tab: prefs.tab || 'all', sort: prefs.sort || 'unit', cols: prefs.cols || cols, side: prefs.side !== false, widths: prefs.widths || {} } : null;
   const isSaved = savedSnap && same(snap, savedSnap);
   const [savingView, setSavingView] = useState(false);
   const saveView = async () => { setSavingView(true); try { await onSavePrefs(snap); } finally { setSavingView(false); } };
-  const backToSaved = () => { setF(savedSnap.f); setTab(savedSnap.tab); setSort(savedSnap.sort); setCols(savedSnap.cols); setSide(savedSnap.side); load(savedSnap.f, savedSnap.tab, savedSnap.sort, 1); };
+  const backToSaved = () => { setF(savedSnap.f); setTab(savedSnap.tab); setSort(savedSnap.sort); setCols(savedSnap.cols); setSide(savedSnap.side); setWidths(savedSnap.widths); load(savedSnap.f, savedSnap.tab, savedSnap.sort, 1); };
   const activeFilters = Object.keys(EMPTY).filter((k) => k !== 'free' && (Array.isArray(f[k]) ? f[k].length : !!f[k])).length;
 
   const areas = useMemo(() => [...new Set(places.map((p) => p.area))], [places]);
@@ -611,15 +652,15 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
           </div>
           {err && <p className="err">{err}</p>}
           <div className={'tw' + (busy ? ' busy' : '')} ref={tw}>
-            <table className="grid">
+            <table className="grid fixed" style={{ width: shown.reduce((a, c) => a + wOf(c.k), canOverride ? 180 : 130) }}>
               <thead><tr>
                 {shown.map((col) => {
                   const hf = HEAD_FILTERS[col.k];
                   const on = hf && isOn(hf.on);
                   return (
                     <th key={col.k} className={(col.right ? 'r' : '') + (overCol === col.k && dragCol && dragCol !== col.k ? ' dropto' : '') + (dragCol === col.k ? ' dragging' : '')}
-                      draggable title="Drag to move this column"
-                      onDragStart={(e) => { setDragCol(col.k); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', col.k); }}
+                      draggable title="Drag to move this column" style={{ width: wOf(col.k) }}
+                      onDragStart={(e) => { if (resizing.current) { e.preventDefault(); return; } setDragCol(col.k); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', col.k); }}
                       onDragOver={(e) => { e.preventDefault(); if (overCol !== col.k) setOverCol(col.k); }}
                       onDragLeave={() => setOverCol((o) => (o === col.k ? null : o))}
                       onDrop={(e) => { e.preventDefault(); moveCol(dragCol, col.k); setDragCol(null); setOverCol(null); }}
@@ -631,10 +672,12 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
                           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 2.5h9L7 6.6v3.2l-2 .9V6.6z" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>
                         </button>}
                       </span>
+                      <span className="rz" title="Drag to resize · double-click to reset" draggable={false}
+                        onMouseDown={(e) => startResize(col.k, e)} onDoubleClick={(e) => { e.stopPropagation(); resetWidth(col.k); }} onClick={(e) => e.stopPropagation()} />
                     </th>
                   );
                 })}
-                <th className="callcol" aria-label="Call" />
+                <th className="callcol" aria-label="Call" style={{ width: canOverride ? 180 : 130 }} />
               </tr></thead>
               <tbody>
                 {data && rows.length === 0 && <tr><td colSpan={shown.length + 1} className="empty">Nothing matches. Try clearing a filter.</td></tr>}
@@ -721,6 +764,12 @@ const COLUMN_SETS = [
   ['Everything', COLUMNS.map((c) => c.k)],
 ];
 const DEFAULT_COLS = COLUMN_SETS[1][1];
+// Starting widths (px) for each column; brokers can drag them wider or narrower
+const COL_W = { unit: 110, area: 140, place: 170, sc: 160, type: 100, beds: 80, size: 110, lease: 125, renewals: 95, ends: 125,
+  days: 95, rent: 115, change: 110, sale: 135, owner: 230, mobile: 150, owned: 105, coowners: 100, mortgaged: 105,
+  lastcall: 120, outcome: 140, note: 240 };
+function loadWidths() { try { const w = JSON.parse(localStorage.getItem('colWidths') || '{}'); return w && typeof w === 'object' ? w : {}; } catch { return {}; } }
+
 function loadCols() {
   try {
     const v = JSON.parse(localStorage.getItem('columns') || 'null');
@@ -947,6 +996,7 @@ function Notes({ unitId, notes, onAdded }) {
   }
   return (
     <div className="blk"><h4>Notes</h4>
+      <QuickNotes value={text} onPick={setText} />
       <textarea className="notebox" placeholder="Add a note about this unit or owner" value={text} maxLength={2000}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save(); }} />
@@ -1043,7 +1093,8 @@ function OutcomeForm({ requestId, onSaved, big }) {
           : <label className="cb" key={o}><input type="radio" name={`oc-${requestId}`} checked={pick === o} onChange={() => choose(o)} />{o}</label>)}
       </div>
       <label className="cb" style={{ marginTop: 10 }}><input type="checkbox" checked={kendal} onChange={(e) => setKendal(e.target.checked)} />Send to Kendal as a lead</label>
-      <textarea placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
+      <QuickNotes value={note} onPick={setNote} />
+      <textarea placeholder="Or type your own note" value={note} onChange={(e) => setNote(e.target.value)} />
       {err && <p className="err">{err}</p>}
       <button className={big ? 'bigcall' : 'btn primary'} disabled={!pick || busy} onClick={save}>{busy ? 'Saving…' : 'Save outcome'}</button>
     </div>
