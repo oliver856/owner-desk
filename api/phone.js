@@ -10,6 +10,9 @@ let followReady = null;
 const ensureFollow = () => (followReady ??= sql`alter table desk.calls add column if not exists followup_at timestamptz`
   .catch((e) => { followReady = null; throw e; }));
 const NO_WHATSAPP = ['Wrong number', 'Do not call'];
+// Quick notes that mean WhatsApp isn't possible, so no follow-up is offered
+const NO_WA_NOTES = ['called, no reply. whatsapp unavailable', 'called, unreachable, no whatsapp'];
+const noWaNote = (n) => NO_WA_NOTES.some((x) => String(n || '').toLowerCase().startsWith(x));
 
 const actions = {
   // The newest call waiting to be tapped, and the last tapped call with no outcome yet (masked numbers only)
@@ -28,7 +31,7 @@ const actions = {
     // After a call the phone only ever deals with the broker's latest tapped call: its outcome first, then the
     // WhatsApp follow-up. Older calls left without an outcome stay on the record but don't queue up here.
     const [last] = await sql`
-      select cr.id, c.outcome, o.name as owner_name, o.is_company, ph.masked, u.unit_no, u.unit_type, u.beds,
+      select cr.id, c.outcome, c.note, c.outcome_at, o.name as owner_name, o.is_company, ph.masked, u.unit_no, u.unit_type, u.beds,
              b.subcommunity, b.name as building, a.name as area, (c.followup_at is not null) as followed_up,
              (cr.used_at > now() - interval '1 hour') as recent,
              exists (select 1 from desk.do_not_call d where d.owner_id = cr.owner_id) as dnc
@@ -42,8 +45,8 @@ const actions = {
       where cr.user_id = ${s.user_id} and cr.used_at > now() - interval '2 hours'
       order by cr.used_at desc limit 1`;
     let awaiting = null, followup = null;
-    if (last && !last.outcome) awaiting = last;
-    else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome)) followup = last;
+    if (last && !last.outcome_at) awaiting = last;
+    else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome) && !noWaNote(last.note)) followup = last;
     res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup || null });
   },
 
@@ -69,7 +72,8 @@ const actions = {
   async outcome(req, res, s, ip) {
     if (req.method !== 'POST') return res.status(405).end();
     const { requestId, outcome, note, kendal } = body(req);
-    if (!OUTCOMES.includes(outcome)) return res.status(400).json({ error: 'Pick an outcome.' });
+    if (outcome && !OUTCOMES.includes(outcome)) return res.status(400).json({ error: 'Pick an outcome.' });
+    if (!outcome && !String(note || '').trim()) return res.status(400).json({ error: 'Pick an outcome or add a note.' });
     const ok = await saveOutcome(s, Number(requestId), outcome, note, !!kendal, ip);
     if (!ok) return res.status(404).json({ error: 'That call wasn\'t found. Was the blue button tapped on your phone?' });
     res.json({ ok: true });
