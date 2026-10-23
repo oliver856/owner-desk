@@ -50,9 +50,9 @@ export function whereSql(q, areas, me) {
 
   one('q').toLowerCase().replace(/[%_\\]/g, '').split(/\s+/).filter(Boolean).slice(0, 5)
     .forEach((word) => w.push(sql`search_text like ${'%' + word + '%'}`));
-  if (one('area')) w.push(sql`area_id = (select id from desk.areas where name = ${one('area')})`);
-  if (one('sc')) w.push(sql`subcommunity = ${one('sc')}`);
-  if (one('bld')) w.push(sql`building = ${one('bld')}`);
+  if (many('area').length) w.push(sql`area_id in (select id from desk.areas where name = any(${many('area')}))`);
+  if (many('sc').length) w.push(sql`subcommunity = any(${many('sc')})`);
+  if (many('bld').length) w.push(sql`building = any(${many('bld')})`);
   if (many('st').length) w.push(sql`lease_status = any(${many('st')})`);
   if (many('type').length) w.push(sql`unit_type = any(${many('type')})`);
   if (many('beds').length) w.push(sql`beds = any(${many('beds')})`);
