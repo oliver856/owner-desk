@@ -627,6 +627,17 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   }, []);
   useEffect(() => { load(start.f, start.tab, start.sort, 1); }, [load, start]);
 
+  // After a call, update just that unit's row and the tab counts, so the page stays exactly where it was
+  const refreshRow = useCallback((id) => {
+    api('/api/desk?action=units&only=' + id + '&' + toParams(f, tab, sort, 1).toString())
+      .then((j) => {
+        const nr = j.rows?.[0];
+        if (nr) setRows((rs) => rs.map((x) => (x.id === id ? nr : x)));
+        if (j.counts) setData((d) => (d ? { ...d, counts: j.counts } : d));
+      })
+      .catch(() => {});
+  }, [f, tab, sort]);
+
   // Keep scrolling: the next 100 load in the background as you near the bottom of the list
   const loadMore = useCallback(() => {
     if (moreBusy || busy || !data) return;
@@ -851,7 +862,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
       </div>
       {calling && <CallFlow unitId={calling.r.id} owner={{ id: (calling.owner || {}).id ?? calling.r.owner_id, name: (calling.owner || {}).name ?? calling.r.owner_name }} force={!!calling.force}
         label={`${(calling.owner || {}).name ?? calling.r.owner_name}, ${placeOf(calling.r)} ${calling.r.unit_no}`}
-        onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(f, tab, sort, 1); }} />}
+        onClose={(saved) => { const id = calling.r.id; setCalling(null); onCaps(); if (saved) refreshRow(id); }} />}
     </>
   );
 }
