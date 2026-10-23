@@ -202,7 +202,10 @@ textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:7px;b
 .callcard,.alerts{border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:6px}
 .callcard .who{font-size:20px;font-weight:600} .alerts .ok{color:var(--accent);font-weight:600}
 .bigcall{background:var(--blue);color:#fff;border:none;border-radius:999px;padding:16px;font-size:17px;font-weight:600;margin-top:10px;width:100%}
-.bigcall[disabled]{opacity:.5} .bigcall.wa{background:#1f9d55}
+.bigcall[disabled]{opacity:.5}
+.wa-laptop{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:8px}
+.wa-laptop .who{font-weight:600} .wa-laptop .wamsg{min-height:110px!important;font-size:13.5px}
+.wa-laptop .bigcall{padding:11px;font-size:14px;margin-top:6px} .bigcall.wa{background:#1f9d55}
 .wamsg{min-height:170px!important;font-size:15px;margin:8px 0 0!important;border-radius:10px!important}
 .waiting{color:var(--muted);text-align:center;padding:50px 0}
 .outcomes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -963,6 +966,23 @@ function Notes({ unitId, notes, onAdded }) {
 }
 
 // Laptop side of a call: send to phone, wait for the tap, then log the outcome
+// After the outcome is saved on the laptop: offer the WhatsApp follow-up here too (it also shows on the phone)
+function DoneStep({ requestId, onClose }) {
+  const [f, setF] = useState(undefined);
+  const [me, setMe] = useState('');
+  const [sent, setSent] = useState(false);
+  useEffect(() => {
+    api('/api/phone?action=pending').then((j) => { setMe(j.name); setF(j.followup && j.followup.id === requestId ? j.followup : null); }).catch(() => setF(null));
+  }, [requestId]);
+  return <>
+    <h3>Saved</h3>
+    <p className="muted">The outcome is on the unit&apos;s call history.</p>
+    {f && !sent && <FollowUp laptop f={f} me={me} onDone={(opened) => setSent(opened ? 'sent' : 'skipped')} />}
+    {sent === 'sent' && <p className="muted">WhatsApp opened in a new tab.</p>}
+    <button className="btn" style={{ marginTop: 10 }} onClick={onClose}>Close</button>
+  </>;
+}
+
 function CallFlow({ unitId, owner, label, onClose, force }) {
   const [stage, setStage] = useState('sending');
   const [msg, setMsg] = useState('');
@@ -996,7 +1016,7 @@ function CallFlow({ unitId, owner, label, onClose, force }) {
           <button className="btn" onClick={() => onClose(false)}>Cancel</button></>}
         {stage === 'expired' && <><h3>Call expired</h3><p className="muted">It wasn&apos;t tapped on your phone in time. Press Call again.</p><button className="btn" onClick={() => onClose(false)}>Close</button></>}
         {stage === 'dialled' && <><h3>How did it go?</h3><p className="muted">{label}</p><OutcomeForm requestId={req.requestId} onSaved={() => setStage('done')} /></>}
-        {stage === 'done' && <><h3>Saved</h3><p className="muted">The outcome is on the unit&apos;s call history. Your phone now shows a WhatsApp follow-up for this owner.</p><button className="btn" onClick={() => onClose(true)}>Close</button></>}
+        {stage === 'done' && <DoneStep requestId={req.requestId} onClose={() => onClose(true)} />}
       </div>
     </div>
   );
@@ -1182,21 +1202,24 @@ function whatsappText(f, me) {
     .replace('{me}', String(me || '').split(/\s+/)[0]).replace('{property}', place).replace('{area}', f.area || '');
 }
 
-function FollowUp({ f, me, onDone }) {
+function FollowUp({ f, me, onDone, laptop }) {
   const [text, setText] = useState(() => whatsappText(f, me));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   async function send(skip) {
     setBusy(true); setErr('');
+    // On the laptop WhatsApp opens in a new tab (WhatsApp Desktop or WhatsApp Web). The tab is opened
+    // straight away so the browser doesn't block it, then pointed at WhatsApp once the server answers.
+    const w = laptop && !skip ? window.open('', '_blank') : null;
     try {
       const j = await api('/api/phone?action=whatsapp', { method: 'POST', body: { requestId: f.id, text, skip } });
-      onDone();
-      if (j.url) window.location.href = j.url;
-    } catch (e) { setErr(e.message); }
+      if (j.url) { if (w) w.location.href = j.url; else if (laptop) window.open(j.url, '_blank'); else window.location.href = j.url; }
+      onDone(!skip);
+    } catch (e) { w?.close(); setErr(e.message); }
     setBusy(false);
   }
   return (
-    <div className="callcard">
+    <div className={laptop ? 'wa-laptop' : 'callcard'}>
       <span className="muted">Follow up on WhatsApp · {f.outcome}</span>
       <span className="who">{titleCase(f.owner_name)}</span>
       <span>{phonePlace({ ...f, subcommunity: titleCase(f.subcommunity), building: titleCase(f.building) })}</span>
