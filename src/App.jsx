@@ -22,9 +22,9 @@ function noteTone(text) {
   if (hit(QUICK_NOTES.Cold) || t.startsWith('cold') || hit(['No answer', 'Not interested', 'Wrong number', 'Do not call'])) return 'cold';
   return '';
 }
-function NoteTag({ text, clip }) {
+function NoteTag({ text, clip, wrap }) {
   const tone = noteTone(text);
-  return <span className={'notetag ' + tone + (clip ? ' clip' : '')} title={text}>{tone && <i className="nd" />}<span className="nt">{text}</span></span>;
+  return <span className={'notetag ' + tone + (clip ? ' clip' : '') + (wrap ? ' wrap' : '')} title={text}>{tone && <i className="nd" />}<span className="nt">{text}</span></span>;
 }
 const KENDAL_NOTES = ['Unit available, send WhatsApp', 'Wants to sell', 'Wants to rent', 'Wants to buy'];
 function QuickNotes({ value, onPick }) {
@@ -152,8 +152,12 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .stack{display:flex;flex-direction:column;gap:2px;padding:6px 0} .stack>div{min-height:30px;display:flex;align-items:center;min-width:0}
 .grid td.callcol .stack{align-items:flex-end}
 .nstack{display:flex;flex-direction:column;gap:4px;padding:6px 0;min-width:0}
-.nitem{display:flex;align-items:center;gap:8px;min-width:0}
-.nmeta{flex:none;font-size:11px;color:var(--faint);white-space:nowrap}
+.nitem{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.nmeta{flex:none;font-size:11px;color:var(--faint);white-space:nowrap;padding-top:3px}
+.grid td:has(.nstack){white-space:normal}
+.notetag.wrap{white-space:normal;overflow-wrap:anywhere;align-items:flex-start;line-height:1.35}
+.notetag.wrap.hot,.notetag.wrap.cold{border-radius:10px;padding:2px 9px}
+.notetag.wrap .nd{margin-top:5px}
 .nitem .notetag{min-width:0;flex:0 1 auto}
 .tab.due .c{background:var(--cold);color:#fff;border-radius:999px;padding:0 7px;margin-left:6px}
 .notetag{display:inline-flex;align-items:center;gap:6px;max-width:100%}
@@ -858,7 +862,7 @@ const COLUMNS = [
   { k: 'outcome', label: 'Last outcome', cell: (r) => r.last_outcome ?? dash },
   { k: 'note', label: 'Notes', cell: (r) => (r.notes?.length
     ? <div className="nstack">{r.notes.map((n, i) => (
-        <div key={i} className="nitem"><span className="nmeta">{fdt(n.t)} · {String(n.by || '').split(' ')[0]}</span><NoteTag text={n.text} clip /></div>))}</div>
+        <div key={i} className="nitem"><span className="nmeta">{fdt(n.t)} · {String(n.by || '').split(' ')[0]}</span><NoteTag text={n.text} wrap /></div>))}</div>
     : dash) },
 ];
 
