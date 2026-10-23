@@ -10,9 +10,8 @@ let followReady = null;
 const ensureFollow = () => (followReady ??= sql`alter table desk.calls add column if not exists followup_at timestamptz`
   .catch((e) => { followReady = null; throw e; }));
 const NO_WHATSAPP = ['Wrong number', 'Do not call'];
-// Quick notes that mean WhatsApp isn't possible, so no follow-up is offered
-const NO_WA_NOTES = ['called, no reply. whatsapp unavailable', 'called, unreachable, no whatsapp'];
-const noWaNote = (n) => NO_WA_NOTES.some((x) => String(n || '').toLowerCase().startsWith(x));
+// What happened on the WhatsApp step is added to the call's note, e.g. "Called, no reply. WhatsApp sent"
+const WA_RESULT = { sent: 'WhatsApp sent', unavailable: 'WhatsApp unavailable', not_sent: 'WhatsApp not sent' };
 
 const actions = {
   // The newest call waiting to be tapped, and the last tapped call with no outcome yet (masked numbers only)
@@ -46,7 +45,7 @@ const actions = {
       order by cr.used_at desc limit 1`;
     let awaiting = null, followup = null;
     if (last && !last.outcome_at) awaiting = last;
-    else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome) && !noWaNote(last.note)) followup = last;
+    else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome)) followup = last;
     res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup || null });
   },
 
@@ -85,12 +84,15 @@ const actions = {
     if (req.method !== 'POST') return res.status(405).end();
     const b = body(req);
     const id = Number(b.requestId);
-    const skip = !!b.skip;
+    const result = WA_RESULT[b.result] ? b.result : b.skip ? 'not_sent' : 'sent';
+    const skip = result !== 'sent';
     const text = String(b.text || '').trim().slice(0, 1000);
     if (!skip && !text) return res.status(400).json({ error: 'Write a message first.' });
     await ensureFollow();
+    const add = WA_RESULT[result];
     const [c] = await sql`
-      update desk.calls c set followup_at = now()
+      update desk.calls c set followup_at = now(),
+        note = case when coalesce(c.note, '') = '' then ${add} else rtrim(c.note, '. ') || '. ' || ${add} end
       from desk.call_requests cr
       where cr.id = c.request_id and cr.id = ${id} and cr.user_id = ${s.user_id}
         and cr.used_at > now() - interval '1 hour' and c.followup_at is null
@@ -98,7 +100,7 @@ const actions = {
         and not exists (select 1 from desk.do_not_call d where d.owner_id = c.owner_id)
       returning c.unit_id, c.owner_id`;
     if (!c) return res.status(410).json({ error: 'This follow-up has expired or was already sent.' });
-    await audit(s.user_id, skip ? 'whatsapp_skipped' : 'whatsapp_opened', { unitId: c.unit_id, detail: { request_id: id, owner_id: c.owner_id }, ip });
+    await audit(s.user_id, result === 'sent' ? 'whatsapp_opened' : result === 'unavailable' ? 'whatsapp_unavailable' : 'whatsapp_skipped', { unitId: c.unit_id, detail: { request_id: id, owner_id: c.owner_id }, ip });
     if (skip) return res.json({ ok: true });
     const [ph] = await sql`select phone from desk.owner_phones where owner_id = ${c.owner_id}`;
     res.json({ url: `https://wa.me/${ph.phone}?text=${encodeURIComponent(text)}` });
