@@ -83,17 +83,34 @@ const actions = {
                select c.note, coalesce(c.outcome_at, c.called_at) from desk.calls c
                where c.unit_id = v_unit_list.id and c.note is not null and c.note <> '') x
              order by x.t desc limit 1) as last_note,
+            (select coalesce(json_agg(y order by y.t desc), '[]') from (
+               select n.body as text, n.created_at as t, st.full_name as by
+               from desk.notes n join desk.staff st on st.user_id = n.user_id where n.unit_id = v_unit_list.id
+               union all
+               select coalesce(nullif(c.note, ''), c.outcome), coalesce(c.outcome_at, c.called_at), st.full_name
+               from desk.calls c join desk.staff st on st.user_id = c.user_id
+               where c.unit_id = v_unit_list.id and (coalesce(c.note, '') <> '' or c.outcome is not null)
+               order by 2 desc limit 3) y) as notes,
+            (select coalesce(json_agg(json_build_object('id', o.id, 'name', o.name, 'masked', ph.masked, 'has_phone', ph.owner_id is not null,
+                      'dnc', exists (select 1 from desk.do_not_call d where d.owner_id = o.id),
+                      'hold', (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
+                               from desk.owner_hold(o.id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user))
+                    order by o.is_company, o.id), '[]')
+             from desk.unit_owners uo join desk.owners o on o.id = uo.owner_id
+             left join desk.owner_phones ph on ph.owner_id = o.id
+             where uo.unit_id = v_unit_list.id and uo.role = 'owner') as owners,
             (select a.name from desk.areas a where a.id = v_unit_list.area_id) as area,
             (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
                from desk.owner_hold(v_unit_list.owner_id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user) as hold
-          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)} and ${tabSql(tab)}
+          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}
           order by ${sortSql(q.get('sort'))} limit ${PAGE} offset ${(page - 1) * PAGE}`,
       more ? Promise.resolve([null]) : sql`select count(*)::int as all,
             count(*) filter (where ${tabSql('exp90')})::int as exp90,
             count(*) filter (where ${tabSql('up')})::int as up,
             count(*) filter (where ${tabSql('port')})::int as port,
             count(*) filter (where ${tabSql('mort')})::int as mort,
-            count(*) filter (where ${tabSql('never')})::int as never
+            count(*) filter (where ${tabSql('never')})::int as never,
+            count(*) filter (where ${tabSql('callbacks', s.user_id, s.role !== 'broker')})::int as callbacks
           from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)}`,
     ]);
     const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more'].includes(k));
@@ -163,7 +180,10 @@ const actions = {
     if (!x) return res.status(403).json({ error: 'This owner isn\'t in your areas or has no mobile.' });
     const [dnc] = await sql`select 1 from desk.do_not_call where owner_id = ${ownerId}`;
     if (dnc) return res.status(403).json({ error: 'This owner asked not to be called.' });
-    const hold = await holdFor(ownerId, s.user_id);
+    // Co-owners count together: if someone else is working any owner of this unit, it's held for everyone else
+    const co = await sql`select owner_id from desk.unit_owners where unit_id = ${unitId} and role = 'owner'`;
+    let hold = await holdFor(ownerId, s.user_id);
+    for (const o of co) { if (hold) break; if (o.owner_id !== ownerId) hold = await holdFor(o.owner_id, s.user_id); }
     if (hold && !(body(req).force && s.role !== 'broker')) {
       await audit(s.user_id, 'call_blocked_hold', { unitId, detail: { owner_id: ownerId, held_by: hold.by_name, why: hold.why }, ip });
       const when = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(hold.until));
