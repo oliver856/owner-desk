@@ -152,14 +152,18 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .qcol.hot .chip.on{border-color:var(--hot);color:var(--hot);background:color-mix(in srgb,var(--hot) 10%,var(--bg))}
 .stack{display:flex;flex-direction:column;gap:2px;padding:6px 0} .stack>div{min-height:30px;display:flex;align-items:center;min-width:0}
 .grid td.callcol .stack{align-items:flex-end}
-.nstack{display:flex;flex-direction:column;gap:4px;padding:6px 0;min-width:0}
-.nitem{display:flex;align-items:flex-start;gap:8px;min-width:0}
-.nmeta{flex:none;font-size:11px;color:var(--faint);white-space:nowrap;padding-top:3px}
+.nstack{display:flex;flex-direction:column;gap:4px;padding:6px 0;min-width:0;width:100%}
+/* Time on the left at a fixed width, the note takes the rest; each note is at most 3 lines (full text on hover) */
+.nitem{display:flex;flex-wrap:wrap;column-gap:8px;row-gap:2px;align-items:flex-start;min-width:0}
+.nitem>.nmeta{flex:none}
+.nitem>.notetag.wrap{flex:1 1 130px;min-width:0}
+.nmeta{font-size:11px;color:var(--faint);white-space:nowrap;padding-top:3px}
 .grid td:has(.nstack){white-space:normal}
-.notetag.wrap{white-space:normal;overflow-wrap:anywhere;align-items:flex-start;line-height:1.35}
+.notetag.wrap{display:block;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.35;
+  overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3}
 .notetag.wrap.hot,.notetag.wrap.cold{border-radius:10px;padding:2px 9px}
-.notetag.wrap .nd{margin-top:5px}
-.nitem .notetag{min-width:0;flex:0 1 auto}
+.notetag.wrap .nd{display:inline-block;vertical-align:middle;margin:-2px 6px 0 0}
+.notetag.wrap .nt{display:inline}
 .tab.due .c{background:var(--cold);color:#fff;border-radius:999px;padding:0 7px;margin-left:6px}
 .notetag{display:inline-flex;align-items:center;gap:6px;max-width:100%}
 .notetag.hot,.notetag.cold{padding:2px 9px;border-radius:999px;font-size:12.5px;font-weight:500}
@@ -577,7 +581,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   const [cols, setColsState] = useState(() => (start.cols.length ? start.cols : loadCols()));
   const [widths, setWidthsState] = useState(() => ({ ...loadWidths(), ...(prefs?.widths || {}) }));
   const setWidths = (w) => { setWidthsState(w); try { localStorage.setItem('colWidths', JSON.stringify(w)); } catch {} };
-  const wOf = (k) => widths[k] || COL_W[k] || 130;
+  const wOf = (k) => { const w = widths[k] || COL_W[k] || 130; return k === 'note' ? Math.max(200, w) : w; };
   // Drag the right edge of a heading to resize; double-click it to reset
   const resizing = useRef(null);
   const startResize = (k, e) => {
@@ -585,7 +589,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
     const x0 = e.clientX, w0 = wOf(k);
     resizing.current = k;
     let last = w0;
-    const move = (ev) => { last = Math.max(60, Math.min(600, Math.round(w0 + ev.clientX - x0))); setWidthsState((w) => ({ ...w, [k]: last })); };
+    const move = (ev) => { last = Math.max(k === 'note' ? 200 : 60, Math.min(600, Math.round(w0 + ev.clientX - x0))); setWidthsState((w) => ({ ...w, [k]: last })); };
     const up = () => {
       document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
       document.body.classList.remove('col-resizing');
