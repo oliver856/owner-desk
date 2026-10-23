@@ -9,11 +9,21 @@ import { createClient } from '@supabase/supabase-js';
 // ── Settings you might want to change ───────────────────────────────────────
 const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
 // One-tap notes offered after a call and in the unit's Notes box. Brokers can still type their own.
-const QUICK_NOTES = ['Cold, no reply', 'Cold, no reply. WhatsApp sent', 'Cold, no reply. WhatsApp unavailable', 'Cold, unreachable'];
+// Each one also picks the WhatsApp follow-up message (see WHATSAPP_BY_NOTE). 'kendal' ticks "Send to Kendal".
+const QUICK_NOTES = {
+  Cold: ['Called, no reply', 'Called, no reply. WhatsApp sent', 'Called, no reply. WhatsApp unavailable', 'Called, unreachable, no WhatsApp'],
+  Hot: ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Wants to sell', 'Wants to rent', 'Wants to buy'],
+};
+const KENDAL_NOTES = ['Unit available, send WhatsApp', 'Wants to sell', 'Wants to rent', 'Wants to buy'];
 function QuickNotes({ value, onPick }) {
   return (
     <div className="qnotes">
-      {QUICK_NOTES.map((q) => <button type="button" key={q} className={'chip' + (value === q ? ' on' : '')} onClick={() => onPick(value === q ? '' : q)}>{q}</button>)}
+      {Object.entries(QUICK_NOTES).map(([group, list]) => (
+        <div key={group} className={'qcol ' + group.toLowerCase()}>
+          <span className="qh">{group}</span>
+          {list.map((q) => <button type="button" key={q} className={'chip' + (value === q ? ' on' : '')} onClick={() => onPick(value === q ? '' : q)}>{q}</button>)}
+        </div>
+      ))}
     </div>
   );
 }
@@ -27,6 +37,17 @@ const EXPIRY = [['30', 'Within 30 days'], ['90', 'Within 90 days'], ['180', 'Wit
 // WhatsApp follow-up after a call. {first} = owner's first name, {me} = broker's first name,
 // {property} = e.g. "villa 12 in Maple 1" or "apartment 504 in Acacia A", {area} = e.g. "Dubai Hills Estate".
 // The broker can edit the message before it opens in WhatsApp. No message is offered for Wrong number or Do not call.
+// Message for each quick note. Used first when the note starts with one of these; otherwise the outcome decides.
+const WHATSAPP_BY_NOTE = {
+  'Called, no reply': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
+  'Unit available, send WhatsApp': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As discussed, could you send me a few details on your {property}, {area}: photos, when it\'s available and the price you have in mind? I\'ll take it from there.',
+  'In discussion': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Saving my number here so we can keep the conversation going.',
+  'Replied': 'Hi {first}, this is {me} from Apex Homes. Thanks for getting back to me about your {property}, {area}. When is a good time for a quick call?',
+  'Follow up': 'Hi {first}, this is {me} from Apex Homes, following up on our conversation about your {property}, {area}. Let me know a good time to catch up.',
+  'Wants to sell': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. As discussed, I\'ll put together a valuation and recent sales for your {property}, {area} and send it over shortly.',
+  'Wants to rent': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. As discussed, I\'ll pull together current rents for your {property}, {area} and come back to you with a plan to get it rented.',
+  'Wants to buy': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. Send me your budget and what you\'re looking for, and I\'ll share the best options available.',
+};
 const WHATSAPP = {
   'No answer': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
   'Call back': 'Hi {first}, this is {me} from Apex Homes. Thanks for picking up just now. As discussed, I\'ll call you back regarding your {property}, {area}. Save my number and message me here any time.',
@@ -87,8 +108,13 @@ table.grid.fixed{table-layout:fixed;min-width:100%}
 .rz::after{content:'';position:absolute;top:25%;bottom:25%;left:4px;width:2px;border-radius:2px;background:transparent}
 th:hover .rz::after,.col-resizing .rz::after{background:var(--line)} .rz:hover::after{background:var(--accent)!important}
 body.col-resizing{cursor:col-resize;user-select:none}
-.qnotes{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
-.qnotes .chip{font-size:12px}
+.qnotes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.qcol{display:flex;flex-direction:column;align-items:flex-start;gap:5px;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.qcol .qh{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.qcol.cold .qh{color:var(--blue)} .qcol.hot .qh{color:var(--warn)}
+.qcol.cold .chip.on{border-color:var(--blue);color:var(--blue)} .qcol.hot .chip.on{border-color:var(--warn);color:var(--warn)}
+.qnotes .chip{font-size:12px;text-align:left}
+@media (max-width:520px){.qnotes{grid-template-columns:1fr}}
 .qnotes + textarea{margin-top:8px}
 .grid th{position:sticky;top:0;background:var(--bg);padding:9px 14px;border-bottom:1px solid var(--line);font-size:11.5px;letter-spacing:.02em}
 .grid td{padding:0 14px;height:44px;vertical-align:middle;white-space:nowrap;border-bottom:1px solid var(--line)}
@@ -1078,7 +1104,8 @@ function OutcomeForm({ requestId, onSaved, big }) {
   const [kendal, setKendal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const choose = (o) => { setPick(o); setKendal(HOT_OUTCOMES.includes(o)); };
+  const choose = (o) => { const n = pick === o ? '' : o; setPick(n); setKendal(HOT_OUTCOMES.includes(n) || KENDAL_NOTES.includes(note)); };
+  const pickNote = (q) => { setNote(q); setKendal(HOT_OUTCOMES.includes(pick) || KENDAL_NOTES.includes(q)); };
   async function save() {
     setBusy(true); setErr('');
     try { await api('/api/phone?action=outcome', { method: 'POST', body: { requestId, outcome: pick, note, kendal } }); onSaved(); }
@@ -1090,13 +1117,14 @@ function OutcomeForm({ requestId, onSaved, big }) {
       <div className={big ? 'outcomes' : 'radios'}>
         {OUTCOMES.map((o) => big
           ? <button key={o} type="button" className={pick === o ? 'on' : ''} onClick={() => choose(o)}>{o}</button>
-          : <label className="cb" key={o}><input type="radio" name={`oc-${requestId}`} checked={pick === o} onChange={() => choose(o)} />{o}</label>)}
+          : <label className="cb" key={o}><input type="radio" name={`oc-${requestId}`} checked={pick === o} onChange={() => {}} onClick={() => choose(o)} />{o}</label>)}
       </div>
       <label className="cb" style={{ marginTop: 10 }}><input type="checkbox" checked={kendal} onChange={(e) => setKendal(e.target.checked)} />Send to Kendal as a lead</label>
-      <QuickNotes value={note} onPick={setNote} />
+      <QuickNotes value={note} onPick={pickNote} />
       <textarea placeholder="Or type your own note" value={note} onChange={(e) => setNote(e.target.value)} />
       {err && <p className="err">{err}</p>}
-      <button className={big ? 'bigcall' : 'btn primary'} disabled={!pick || busy} onClick={save}>{busy ? 'Saving…' : 'Save outcome'}</button>
+      <button className={big ? 'bigcall' : 'btn primary'} disabled={(!pick && !note.trim()) || busy} onClick={save}>{busy ? 'Saving…' : pick ? 'Save outcome' : 'Save note'}</button>
+      <p className="faint" style={{ margin: '6px 0 0', fontSize: 12 }}>An outcome is optional. A note on its own is enough.</p>
     </div>
   );
 }
@@ -1248,7 +1276,9 @@ function Activity() {
 function whatsappText(f, me) {
   const first = f.is_company ? '' : titleCase(String(f.owner_name || '').split(/\s+/)[0]);
   const place = f.unit_type === 'Villa' ? `villa ${f.unit_no} in ${titleCase(f.subcommunity)}` : `apartment ${f.unit_no} in ${titleCase(f.building)}`;
-  return (WHATSAPP[f.outcome] || WHATSAPP.default)
+  const n = String(f.note || '').toLowerCase();
+  const byNote = Object.keys(WHATSAPP_BY_NOTE).sort((a, b) => b.length - a.length).find((k) => n.startsWith(k.toLowerCase()));
+  return (byNote ? WHATSAPP_BY_NOTE[byNote] : WHATSAPP[f.outcome] || WHATSAPP.default)
     .replace('{first}', first).replace('Hi , ', 'Hi, ')
     .replace('{me}', String(me || '').split(/\s+/)[0]).replace('{property}', place).replace('{area}', f.area || '');
 }
@@ -1271,7 +1301,7 @@ function FollowUp({ f, me, onDone, laptop }) {
   }
   return (
     <div className={laptop ? 'wa-laptop' : 'callcard'}>
-      <span className="muted">Follow up on WhatsApp · {f.outcome}</span>
+      <span className="muted">Follow up on WhatsApp · {f.outcome || String(f.note || '').split('.')[0]}</span>
       <span className="who">{titleCase(f.owner_name)}</span>
       <span>{phonePlace({ ...f, subcommunity: titleCase(f.subcommunity), building: titleCase(f.building) })}</span>
       <textarea className="wamsg" value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
