@@ -102,12 +102,13 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .meta-l,.meta-r{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap}
 .btn.saved{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line));opacity:1}
 .more{padding:14px;text-align:center;color:var(--faint);font-size:12px;min-height:44px}
-.owners-page{display:flex;flex-direction:column;height:calc(100dvh - var(--toph, 49px));overflow:hidden}
-.owners-page>.layout{flex:1;min-height:0;align-items:stretch;padding-block:14px 16px}
-.listcol{min-width:0;display:flex;flex-direction:column;min-height:0}
-.listcol>.tw{flex:1;min-height:0;max-height:none}
+.owners-page{display:block}
+.owners-page>.layout{align-items:start;padding-block:14px 24px}
+.listcol{min-width:0}
+/* The page scrolls normally. Once the call bar has scrolled away, the filters and the table each fill the screen. */
+.listcol>.tw{max-height:calc(100vh - var(--toph, 49px) - 24px)}
 .owners-page .head{padding-block:14px 0}
-.filters{display:flex;flex-direction:column;gap:14px;height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+.filters{display:flex;flex-direction:column;gap:14px;position:sticky;top:calc(var(--toph, 49px) + 12px);max-height:calc(100vh - var(--toph, 49px) - 24px);overflow-y:auto;
   scroll-behavior:smooth;scrollbar-width:thin;padding:2px 6px 24px 2px}
 .filters::-webkit-scrollbar{width:6px} .filters::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}
 .ms-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font-size:12.5px;text-align:left}
@@ -179,7 +180,7 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .grid .callcol{width:1%;text-align:right;border-left:none}
 .grid .up{color:var(--accent)} .grid .down{color:var(--bad)}
 .picker{position:relative}
-.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;width:320px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:30;max-height:calc(100vh - var(--toph, 49px) - 90px);overflow-y:auto;overscroll-behavior:contain;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;width:320px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
 .sets{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:10px;margin-bottom:8px;border-bottom:1px solid var(--line)}
 .chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:3px 10px;font-size:12px}
 .chip.on{border-color:var(--accent);color:var(--accent)}
@@ -218,7 +219,7 @@ dl{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;margin:0} dt{color:
 .owner{display:flex;justify-content:space-between;gap:10px;padding-block:8px} .owner+.owner{border-top:1px dashed var(--line)}
 .fine{color:var(--faint);font-size:12px;margin-top:14px}
 .modal{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(0,0,0,.25);padding:16px}
-.box{background:var(--bg);border-radius:8px;width:min(400px,100%);padding:20px 22px;border:1px solid var(--line)}
+.box{background:var(--bg);border-radius:8px;width:min(440px,100%);padding:20px 22px;border:1px solid var(--line);max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain}
 .box h3{margin:0 0 4px;font-size:16px;font-weight:600}
 .radios{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin:14px 0}
 .hold{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--warn);background:color-mix(in srgb,var(--warn) 11%,var(--bg));border-radius:999px;padding:3px 9px;white-space:nowrap}
@@ -932,13 +933,24 @@ function loadCols() {
 function ColumnPicker({ cols, setCols }) {
   const [open, setOpen] = useState(false);
   const [drag, setDrag] = useState(null);
+  const [maxH, setMaxH] = useState(null);
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return;
     const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    const esc = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
   }, [open]);
+  // Make room for the menu: if it wouldn't fit below the button, scroll the page up first, then size it to the screen
+  const toggleOpen = () => {
+    if (open) return setOpen(false);
+    const top = () => ref.current.getBoundingClientRect();
+    const head = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--toph')) || 49;
+    if (window.innerHeight - top().bottom < 480) window.scrollBy({ top: top().top - head - 12 });
+    setMaxH(Math.max(240, window.innerHeight - top().bottom - 16));
+    setOpen(true);
+  };
   const label = (k) => COLUMNS.find((c) => c.k === k)?.label;
   const remove = (k) => { if (cols.length > 1) setCols(cols.filter((x) => x !== k)); };
   const add = (k) => setCols([...cols, k]);
@@ -950,9 +962,9 @@ function ColumnPicker({ cols, setCols }) {
   const hidden = COLUMNS.filter((c) => !cols.includes(c.k));
   return (
     <div className="picker" ref={ref}>
-      <button className="btn" onClick={() => setOpen(!open)} aria-expanded={open}>Columns · {cols.length}</button>
+      <button className="btn" onClick={toggleOpen} aria-expanded={open}>Columns · {cols.length}</button>
       {open && (
-        <div className="menu cpick">
+        <div className="menu cpick" style={maxH ? { maxHeight: maxH } : undefined}>
           <div className="sets">
             {COLUMN_SETS.map(([name, keys]) => (
               <button key={name} className={'chip' + (same(cols, keys) ? ' on' : '')} onClick={() => setCols(keys)}>{name}</button>
@@ -1075,7 +1087,7 @@ function TargetBar({ t }) {
             {board.slice(0, 3).filter((b) => b.calls > 0).map((b, i) => <span key={i} className={b.me ? 'mine' : ''}>{medal[i]} {b.me ? 'You' : first(b.name)} <b>{b.calls}</b></span>)}
             {myRank > 3 && <span className="mine">#{myRank} You <b>{made}</b></span>}
           </span>
-          <span className="faint">{t.team} calls across the team today</span>
+          <span className="faint">{t.team} call{t.team === 1 ? '' : 's'} across the team today</span>
         </div>
         {done && <div className="t-burst" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ '--a': `${i * 26}deg`, '--d': `${(i % 4) * 60}ms` }} />)}</div>}
       </div>
