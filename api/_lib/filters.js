@@ -27,7 +27,7 @@ export function sortSql(k) {
   }
 }
 
-export function whereSql(q, areas) {
+export function whereSql(q, areas, me) {
   const one = (k) => (q.get(k) || '').trim();
   const many = (k) => q.getAll(k).filter(Boolean);
   const num = (k) => { const v = one(k).replace(/,/g, ''); return v === '' || isNaN(Number(v)) ? null : Number(v); };
@@ -62,6 +62,13 @@ export function whereSql(q, areas) {
   if (one('ind')) w.push(sql`not is_company`);
   if (one('phone')) w.push(sql`has_phone`);
   if (one('ncall')) w.push(sql`last_called is null`);
+  // Hide owners another broker is holding (called recently, or calling right now)
+  // Only owners other brokers have touched recently are checked, so this stays fast on big lists.
+  if (one('free') && me) w.push(sql`(owner_id is null or owner_id not in (
+      select x.owner_id from (
+        select owner_id from desk.calls where user_id <> ${me} and called_at > now() - interval '180 days'
+        union select owner_id from desk.call_requests where user_id <> ${me} and created_at > now() - interval '1 day') x
+      where exists (select 1 from desk.owner_hold(x.owner_id, ${me}))))`);
   if (one('called')) w.push(sql`last_called is not null`);
   if (many('oc').length) w.push(sql`last_outcome = any(${many('oc')})`);
   return w.reduce((a, b) => sql`${a} and ${b}`);
