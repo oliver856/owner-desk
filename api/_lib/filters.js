@@ -65,6 +65,13 @@ export function whereSql(q, areas, me) {
     if (x != null) w.push(sql`${sql(col)} >= ${x}`);
     if (y != null) w.push(sql`${sql(col)} <= ${y}`);
   };
+  // Unit number range and series use the number at the end of the unit (DL-J105 -> 105, 1302 -> 1302)
+  const unitNo = sql`nullif(substring(unit_no from '([0-9]+)[^0-9]*$'), '')`;
+  const ua = num('umin'), ub = num('umax');
+  if (ua != null) w.push(sql`${unitNo}::bigint >= ${ua}`);
+  if (ub != null) w.push(sql`${unitNo}::bigint <= ${ub}`);
+  const series = one('useries').replace(/\D/g, '').slice(0, 4);
+  if (series) w.push(sql`${unitNo} like ${'%' + series}`);
   range('smin', 'smax', 'size_sqft');
   range('rmin', 'rmax', 'annual_rent');
   range('pmin', 'pmax', 'last_sale_price');
