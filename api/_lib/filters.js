@@ -4,10 +4,25 @@ import { sql } from './core.js';
 
 const today = () => sql`(now() at time zone 'Asia/Dubai')::date`;
 
-export const TABS = ['all', 'exp90', 'up', 'port', 'mort', 'never'];
+export const TABS = ['all', 'exp90', 'up', 'port', 'mort', 'never', 'callbacks'];
 
-export function tabSql(tab) {
+// Callbacks: units whose latest call this week (Monday 00:00 Dubai onwards) got no answer.
+// Brokers see their own; managers and admins see everyone's.
+function callbacksSql(me, all) {
+  return sql`id in (
+    select x.unit_id from (
+      select distinct on (c.unit_id) c.unit_id, c.user_id, c.outcome, c.note
+      from desk.calls c
+      where c.called_at >= date_trunc('week', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai'
+      order by c.unit_id, c.called_at desc) x
+    where (${all} or x.user_id = ${me})
+      and (x.outcome = 'No answer'
+        or (x.outcome is null and (coalesce(x.note, '') = '' or x.note ~* '^(called, no reply|called, unreachable|cold)'))))`;
+}
+
+export function tabSql(tab, me, all = false) {
   switch (tab) {
+    case 'callbacks': return me ? callbacksSql(me, all) : sql`false`;
     case 'exp90': return sql`end_date between ${today()} and ${today()} + 90`;
     case 'up': return sql`annual_rent >= prev_rent * 1.1 and prev_rent > 0`;
     case 'port': return sql`owner_units >= 2`;
