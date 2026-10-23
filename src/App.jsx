@@ -11,9 +11,19 @@ const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation',
 // One-tap notes offered after a call and in the unit's Notes box. Brokers can still type their own.
 // Each one also picks the WhatsApp follow-up message (see WHATSAPP_BY_NOTE). 'kendal' ticks "Send to Kendal".
 const QUICK_NOTES = {
-  Cold: ['Called, no reply', 'Called, no reply. WhatsApp sent', 'Called, no reply. WhatsApp unavailable', 'Called, unreachable, no WhatsApp'],
+  Cold: ['Called, no reply', 'Called, unreachable'],
   Hot: ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Wants to sell', 'Wants to rent', 'Wants to buy'],
 };
+// Hot or cold, from how a note starts. Shown as green (hot) or red (cold) wherever notes appear.
+function noteTone(text) {
+  const t = String(text || '').toLowerCase();
+  const hit = (list) => list.some((q) => t.startsWith(q.toLowerCase()));
+  return hit(QUICK_NOTES.Hot) ? 'hot' : hit(QUICK_NOTES.Cold) || t.startsWith('cold') ? 'cold' : '';
+}
+function NoteTag({ text, clip }) {
+  const tone = noteTone(text);
+  return <span className={'notetag ' + tone + (clip ? ' clip' : '')} title={text}>{tone && <i className="nd" />}<span className="nt">{text}</span></span>;
+}
 const KENDAL_NOTES = ['Unit available, send WhatsApp', 'Wants to sell', 'Wants to rent', 'Wants to buy'];
 function QuickNotes({ value, onPick }) {
   return (
@@ -40,6 +50,7 @@ const EXPIRY = [['30', 'Within 30 days'], ['90', 'Within 90 days'], ['180', 'Wit
 // Message for each quick note. Used first when the note starts with one of these; otherwise the outcome decides.
 const WHATSAPP_BY_NOTE = {
   'Called, no reply': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
+  'Called, unreachable': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
   'Unit available, send WhatsApp': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As discussed, could you send me a few details on your {property}, {area}: photos, when it\'s available and the price you have in mind? I\'ll take it from there.',
   'In discussion': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Saving my number here so we can keep the conversation going.',
   'Replied': 'Hi {first}, this is {me} from Apex Homes. Thanks for getting back to me about your {property}, {area}. When is a good time for a quick call?',
@@ -58,12 +69,12 @@ const DATA_NOTE = 'Tenancies are registered Ejari contracts loaded to the end of
 // ── Styles ──────────────────────────────────────────────────────────────────
 const CSS = `
 :root{--bg:#ffffff;--ink:#1c2120;--muted:#6b7472;--faint:#9aa29f;--line:#e7e9e8;--hover:#f4f6f5;
-  --accent:#0f5c56;--accent-ink:#ffffff;--blue:#1a6fe0;--warn:#a15c00;--bad:#b3261e;
+  --accent:#0f5c56;--accent-ink:#ffffff;--blue:#1a6fe0;--warn:#a15c00;--bad:#b3261e;--hot:#1e8a4c;--cold:#c62f26;
   --f:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color-scheme:light}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141817;--ink:#e4e8e6;--muted:#9aa4a1;--faint:#6e7875;
-  --line:#262d2b;--hover:#1b2120;--accent:#6cc3b8;--accent-ink:#0b1f1c;--blue:#4c95f5;--warn:#e9b25a;--bad:#ff8f86;color-scheme:dark}}
+  --line:#262d2b;--hover:#1b2120;--accent:#6cc3b8;--accent-ink:#0b1f1c;--blue:#4c95f5;--warn:#e9b25a;--bad:#ff8f86;--hot:#4fd18b;--cold:#ff7a70;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#141817;--ink:#e4e8e6;--muted:#9aa4a1;--faint:#6e7875;--line:#262d2b;--hover:#1b2120;
-  --accent:#6cc3b8;--accent-ink:#0b1f1c;--blue:#4c95f5;--warn:#e9b25a;--bad:#ff8f86;color-scheme:dark}
+  --accent:#6cc3b8;--accent-ink:#0b1f1c;--blue:#4c95f5;--warn:#e9b25a;--bad:#ff8f86;--hot:#4fd18b;--cold:#ff7a70;color-scheme:dark}
 *{box-sizing:border-box} html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:13px;line-height:1.45}
 button,input,select,textarea{font:inherit;color:inherit} button{cursor:pointer}
@@ -111,8 +122,17 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .qnotes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 .qcol{display:flex;flex-direction:column;align-items:flex-start;gap:5px;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .qcol .qh{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-.qcol.cold .qh{color:var(--blue)} .qcol.hot .qh{color:var(--warn)}
-.qcol.cold .chip.on{border-color:var(--blue);color:var(--blue)} .qcol.hot .chip.on{border-color:var(--warn);color:var(--warn)}
+.qcol.cold{border-color:color-mix(in srgb,var(--cold) 35%,var(--line))} .qcol.hot{border-color:color-mix(in srgb,var(--hot) 35%,var(--line))}
+.qcol.cold .qh{color:var(--cold)} .qcol.hot .qh{color:var(--hot)}
+.qcol.cold .chip.on{border-color:var(--cold);color:var(--cold);background:color-mix(in srgb,var(--cold) 10%,var(--bg))}
+.qcol.hot .chip.on{border-color:var(--hot);color:var(--hot);background:color-mix(in srgb,var(--hot) 10%,var(--bg))}
+.notetag{display:inline-flex;align-items:center;gap:6px;max-width:100%}
+.notetag.hot,.notetag.cold{padding:2px 9px;border-radius:999px;font-size:12.5px;font-weight:500}
+.notetag.hot{color:var(--hot);background:color-mix(in srgb,var(--hot) 12%,var(--bg))}
+.notetag.cold{color:var(--cold);background:color-mix(in srgb,var(--cold) 10%,var(--bg))}
+.notetag .nd{flex:none;width:7px;height:7px;border-radius:50%;background:currentColor}
+.notetag.clip{overflow:hidden;white-space:nowrap} .notetag.clip .nt{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.wa-other{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
 .qnotes .chip{font-size:12px;text-align:left}
 @media (max-width:520px){.qnotes{grid-template-columns:1fr}}
 .qnotes + textarea{margin-top:8px}
@@ -780,7 +800,7 @@ const COLUMNS = [
   { k: 'mortgaged', label: 'Mortgaged', cell: (r) => (r.mortgaged ? 'Yes' : dash) },
   { k: 'lastcall', label: 'Last called', cell: (r) => (r.last_called ? fd(r.last_called) : <span className="faint">Never</span>) },
   { k: 'outcome', label: 'Last outcome', cell: (r) => r.last_outcome ?? dash },
-  { k: 'note', label: 'Last note', cell: (r) => (r.last_note ? <span className="clip" title={r.last_note}>{r.last_note}</span> : dash) },
+  { k: 'note', label: 'Last note', cell: (r) => (r.last_note ? <NoteTag text={r.last_note} clip /> : dash) },
 ];
 
 const COLUMN_SETS = [
@@ -995,7 +1015,7 @@ function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
           <Notes unitId={u.id} notes={d.notes} onAdded={(n) => setD((x) => ({ ...x, notes: [n, ...x.notes] }))} />
           <div className="blk"><h4>Calls</h4>
             {d.calls.length === 0 ? <p className="muted">Not called yet</p> : d.calls.map((c, i) => (
-              <div key={i} className="owner"><span>{c.outcome ?? 'No outcome logged'}{c.note && <span className="sub">{c.note}</span>}</span>
+              <div key={i} className="owner"><span>{c.outcome ?? (c.note ? '' : 'No outcome logged')}{c.note && <span className="sub"><NoteTag text={c.note} /></span>}</span>
                 <span className="muted">{c.full_name}, {fdt(c.called_at)}</span></div>
             ))}
           </div>
@@ -1033,7 +1053,7 @@ function Notes({ unitId, notes, onAdded }) {
       {err && <p className="err">{err}</p>}
       {notes.length === 0 ? <p className="muted">No notes yet</p> : notes.map((n) => (
         <div key={n.id} className="note">
-          <p>{n.body}</p>
+          <p><NoteTag text={n.body} /></p>
           <span className="faint">{n.full_name}, {fdt(n.created_at)}</span>
         </div>
       ))}
@@ -1053,8 +1073,8 @@ function DoneStep({ requestId, onClose }) {
   return <>
     <h3>Saved</h3>
     <p className="muted">The outcome is on the unit&apos;s call history.</p>
-    {f && !sent && <FollowUp laptop f={f} me={me} onDone={(opened) => setSent(opened ? 'sent' : 'skipped')} />}
-    {sent === 'sent' && <p className="muted">WhatsApp opened in a new tab.</p>}
+    {f && !sent && <FollowUp laptop f={f} me={me} onDone={(r) => setSent(r)} />}
+    {sent && <p className="muted">{sent === 'sent' ? 'WhatsApp opened in a new tab. Added "WhatsApp sent" to the note.' : sent === 'unavailable' ? 'Added "WhatsApp unavailable" to the note.' : 'Added "WhatsApp not sent" to the note.'}</p>}
     <button className="btn" style={{ marginTop: 10 }} onClick={onClose}>Close</button>
   </>;
 }
@@ -1287,15 +1307,16 @@ function FollowUp({ f, me, onDone, laptop }) {
   const [text, setText] = useState(() => whatsappText(f, me));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  async function send(skip) {
+  // result: 'sent' opens WhatsApp; 'unavailable' or 'not_sent' just records it. Each is added to the call's note.
+  async function send(result) {
     setBusy(true); setErr('');
     // On the laptop WhatsApp opens in a new tab (WhatsApp Desktop or WhatsApp Web). The tab is opened
     // straight away so the browser doesn't block it, then pointed at WhatsApp once the server answers.
-    const w = laptop && !skip ? window.open('', '_blank') : null;
+    const w = laptop && result === 'sent' ? window.open('', '_blank') : null;
     try {
-      const j = await api('/api/phone?action=whatsapp', { method: 'POST', body: { requestId: f.id, text, skip } });
+      const j = await api('/api/phone?action=whatsapp', { method: 'POST', body: { requestId: f.id, text, result } });
       if (j.url) { if (w) w.location.href = j.url; else if (laptop) window.open(j.url, '_blank'); else window.location.href = j.url; }
-      onDone(!skip);
+      onDone(result);
     } catch (e) { w?.close(); setErr(e.message); }
     setBusy(false);
   }
@@ -1306,8 +1327,11 @@ function FollowUp({ f, me, onDone, laptop }) {
       <span>{phonePlace({ ...f, subcommunity: titleCase(f.subcommunity), building: titleCase(f.building) })}</span>
       <textarea className="wamsg" value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
       {err && <p className="err">{err}</p>}
-      <button className="bigcall wa" disabled={busy || !text.trim()} onClick={() => send(false)}>WhatsApp</button>
-      <button className="link" style={{ alignSelf: 'center', marginTop: 6 }} disabled={busy} onClick={() => send(true)}>Skip</button>
+      <button className="bigcall wa" disabled={busy || !text.trim()} onClick={() => send('sent')}>Open WhatsApp · mark as sent</button>
+      <div className="wa-other">
+        <button className="btn" disabled={busy} onClick={() => send('unavailable')}>WhatsApp unavailable</button>
+        <button className="btn" disabled={busy} onClick={() => send('not_sent')}>Not sent</button>
+      </div>
     </div>
   );
 }
