@@ -43,7 +43,7 @@ export async function staffFor(req) {
   if (!id) return null;
   const [s] = await sql`
     select s.user_id, s.full_name, s.email, s.role, s.team,
-      case when s.role = 'admin' then (select coalesce(array_agg(id), '{}') from desk.areas)
+      case when s.role in ('admin', 'director') then (select coalesce(array_agg(id), '{}') from desk.areas)
            else coalesce((select array_agg(area_id) from desk.staff_areas sa where sa.user_id = s.user_id
                  and (sa.expires_at is null or sa.expires_at >= (now() at time zone 'Asia/Dubai')::date)), '{}')
       end as areas,
@@ -119,7 +119,19 @@ export async function callTarget(userId) {
       (select count(*) from per)::int as callers,
       (1 + (select count(*) from per where n > coalesce((select n from per where user_id = ${userId}), 0)))::int as rank,
       (select value from desk.settings where key = 'call_hours') as hours`;
-  return { goal: r.goal, made: r.made, team: r.team, callers: r.callers, rank: r.rank, hours: r.hours || { from: '09:00', to: '18:00' } };
+  // Today's race: everyone (not admins) who has made a call, plus you
+  const board = await sql`
+    with day as (select date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start)
+    select st.user_id, st.full_name as name, st.team, count(c.id)::int as calls, max(c.called_at) as last_at
+    from desk.staff st
+    left join desk.calls c on c.user_id = st.user_id and c.called_at >= (select start from day)
+    where st.active and (st.role <> 'admin' or st.user_id = ${userId})
+    group by st.user_id, st.full_name, st.team
+    having count(c.id) > 0 or st.user_id = ${userId}
+    order by calls desc, last_at asc nulls last
+    limit 12`;
+  return { goal: r.goal, made: r.made, team: r.team, callers: r.callers, rank: r.rank, hours: r.hours || { from: '09:00', to: '18:00' },
+    board: board.map((b) => ({ me: b.user_id === userId, name: b.name, team: b.team, calls: b.calls })) };
 }
 
 export async function withinCallHours() {
