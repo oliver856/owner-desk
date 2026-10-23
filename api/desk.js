@@ -210,11 +210,11 @@ const actions = {
   async callStatus(req, res, s) {
     const id = Number(query(req).get('id'));
     const [r] = await sql`
-      select cr.used_at, (cr.expires_at < now()) as expired, c.outcome
+      select cr.used_at, (cr.expires_at < now()) as expired, c.outcome_at
       from desk.call_requests cr left join desk.calls c on c.request_id = cr.id
       where cr.id = ${id} and cr.user_id = ${s.user_id}`;
     if (!r) return res.status(404).json({ error: 'Not found' });
-    res.json({ status: r.outcome ? 'done' : r.used_at ? 'dialled' : r.expired ? 'expired' : 'sent' });
+    res.json({ status: r.outcome_at ? 'done' : r.used_at ? 'dialled' : r.expired ? 'expired' : 'sent' });
   },
 
   async activity(req, res, s) {
