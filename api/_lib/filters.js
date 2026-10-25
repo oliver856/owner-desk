@@ -49,7 +49,8 @@ export function whereSql(q, areas, me) {
   const w = [sql`area_id = any(${areas})`];
 
   one('q').toLowerCase().replace(/[%_\\]/g, '').split(/\s+/).filter(Boolean).slice(0, 5)
-    .forEach((word) => w.push(sql`search_text like ${'%' + word + '%'}`));
+    .forEach((word) => w.push(sql`(search_text like ${'%' + word + '%'}
+      or id in (select u.id from desk.units u where lower(u.old_code) like ${'%' + word + '%'}))`));
   if (many('area').length) w.push(sql`area_id in (select id from desk.areas where name = any(${many('area')}))`);
   if (many('sc').length) w.push(sql`subcommunity = any(${many('sc')})`);
   if (many('bld').length) w.push(sql`building = any(${many('bld')})`);
@@ -66,7 +67,7 @@ export function whereSql(q, areas, me) {
     if (y != null) w.push(sql`${sql(col)} <= ${y}`);
   };
   // Unit number range and series use the number at the end of the unit (DL-J105 -> 105, 1302 -> 1302)
-  const unitNo = sql`nullif(substring(unit_no from '([0-9]+)[^0-9]*$'), '')`;
+  const unitNo = sql`nullif(coalesce(substring(unit_no from '^([0-9]+)[A-Z]?, Street'), substring(unit_no from '([0-9]+)[^0-9]*$')), '')`;
   const ua = num('umin'), ub = num('umax');
   if (ua != null) w.push(sql`${unitNo}::bigint >= ${ua}`);
   if (ub != null) w.push(sql`${unitNo}::bigint <= ${ub}`);
