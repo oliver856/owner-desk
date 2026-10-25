@@ -1222,7 +1222,8 @@ function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
       <aside className="panel" aria-label="Unit">
         <div className="panel-head">
           <div>{u ? <><h2>{u.unit_type === 'Villa' ? 'Villa' : 'Unit'} {u.unit_no}</h2>
-            <div className="muted">{place} · {bedsLabel(u.beds)} · {u.size_sqft ? `${fmt(u.size_sqft)} sq ft` : 'size not recorded'}</div></> : <h2>{err ? 'Not available' : 'Loading…'}</h2>}</div>
+            <div className="muted">{[titleCase(place), u.layout, u.beds ? bedsLabel(u.beds) : null, u.size_sqft ? `${fmt(u.size_sqft)} sq ft` : null].filter(Boolean).join(' · ')}</div>
+            {u.old_code && <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>Old unit code: {u.old_code}</div>}</> : <h2>{err ? 'Not available' : 'Loading…'}</h2>}</div>
           <button className="x" aria-label="Close" onClick={onClose}>×</button>
         </div>
         {err && <p className="err">{err}</p>}
