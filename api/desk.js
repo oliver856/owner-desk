@@ -30,6 +30,14 @@ const ensurePrefs = () => (prefsReady ??= sql`create table if not exists desk.st
 
 // The notes table is created by the server the first time it's needed, so no SQL has to be run by hand.
 let notesReady = null;
+// Older unit codes and villa types (e.g. Springs/Meadows/Lakes) live in two optional columns
+let extrasReady;
+function ensureUnitExtras() {
+  extrasReady ??= sql`alter table desk.units add column if not exists old_code text, add column if not exists layout text`
+    .catch((e) => { extrasReady = null; throw e; });
+  return extrasReady;
+}
+
 function ensureNotes() {
   notesReady ??= (async () => {
     await sql`create table if not exists desk.notes (
@@ -125,7 +133,7 @@ const actions = {
     const q = query(req);
     const tab = TABS.includes(q.get('tab')) ? q.get('tab') : 'all';
     const page = Math.max(1, Number(q.get('page')) || 1);
-    await Promise.all([ensureNotes(), ensureHolds()]);
+    await Promise.all([ensureNotes(), ensureHolds(), ensureUnitExtras()]);
     const more = q.get('more') === '1';
     // only=<unit id>: refresh one row in place (after a call) without reloading the list
     const only = Number(q.get('only')) || 0;
@@ -183,9 +191,9 @@ const actions = {
       await audit(s.user_id, 'limit_hit', { unitId: id, detail: { limit: 'profiles' }, ip });
       return res.status(429).json({ error: `You've opened ${c.profileCap} owner profiles today. Ask your manager if you need more.` });
     }
-    await Promise.all([ensureNotes(), ensureHolds()]);
+    await Promise.all([ensureNotes(), ensureHolds(), ensureUnitExtras()]);
     const inArea = sql`exists (select 1 from desk.mv_units m where m.id = ${id} and m.area_id = any(${s.areas}))`;
-    const [[u], owners, calls, notes] = await Promise.all([
+    const [[u], owners, calls, notes, [extra]] = await Promise.all([
       sql`select * from desk.v_unit_list where id = ${id} and area_id = any(${s.areas})`,
       sql`select o.id, o.name, o.is_company, uo.role, ph.masked, (ph.owner_id is not null) as has_phone,
                  (select count(*) from desk.unit_owners x where x.owner_id = o.id and x.role = 'owner')::int as units,
@@ -200,9 +208,11 @@ const actions = {
       sql`select n.id, n.body, n.created_at, st.full_name, (n.user_id = ${s.user_id}) as mine
           from desk.notes n join desk.staff st on st.user_id = n.user_id
           where n.unit_id = ${id} and ${inArea} order by n.created_at desc limit 50`,
+      sql`select old_code, layout from desk.units where id = ${id}`,
     ]);
     if (!u) return res.status(404).json({ error: 'That unit isn\'t in your areas.' });
     delete u.search_text;
+    Object.assign(u, extra || {});
     const [, others] = await Promise.all([
       audit(s.user_id, 'opened_unit', { unitId: id, ip }),
       sql`select uo.owner_id, u.id, u.unit_no, u.unit_type, b.subcommunity, b.name as building
