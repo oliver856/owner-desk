@@ -1,5 +1,6 @@
 // Office-only actions: /api/desk?action=...
 // Every action checks the office IP and the signed-in broker before touching data.
+import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
 import { sql, route, query, body, audit, caps, setting, withinCallHours, callTarget } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
@@ -270,7 +271,7 @@ const actions = {
 
     const parts = x.owner_name.toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()).split(' ');
     const shortName = parts.length > 2 ? `${parts[0]} ${parts[parts.length - 1]}` : parts.join(' ');
-    const place = x.unit_type === 'Villa' ? `${x.subcommunity} villa ${x.unit_no}` : `${x.building} ${x.unit_no}`;
+    const place = x.unit_type === 'Villa' ? (/^Street /.test(x.unit_no) ? `${x.subcommunity} ${x.unit_no}` : `${x.subcommunity} villa ${x.unit_no}`) : `${x.building} ${x.unit_no}`;
     let phones = 0;
     try { phones = await pushToUser(s.user_id, { title: `Call ${shortName}`, body: `${place} · tap to call`, url: '/phone', tag: 'call' }); } catch { phones = 0; }
     res.json({ requestId: Number(r.id), phones, minutes });
@@ -315,6 +316,74 @@ const actions = {
       where ${all ? sql`true` : sql`a.user_id = ${s.user_id}`}
       order by a.at desc limit 300`;
     res.json({ rows, all });
+  },
+
+  // ── Team: who can use the desk (admins and directors) ──
+  async team(req, res, s) {
+    if (!['admin', 'director'].includes(s.role)) return res.status(403).json({ error: 'Only admins and directors can manage the team.' });
+    await ensureInvites();
+    const [people, invites, areas] = await Promise.all([
+      sql`select s.user_id, s.full_name, s.email, s.role, s.team, s.active, s.created_at,
+            coalesce((select array_agg(sa.area_id order by sa.area_id) from desk.staff_areas sa where sa.user_id = s.user_id and sa.kind = 'core'), '{}') as areas,
+            (select max(a.at) from desk.audit_log a where a.user_id = s.user_id) as last_seen
+          from desk.staff s order by s.active desc, s.full_name`,
+      sql`select email, full_name, role, team, areas, created_at from desk.staff_invites where claimed_at is null order by created_at desc`,
+      sql`select id, name from desk.areas where name <> 'Lookups' order by name`,
+    ]);
+    res.json({ people, invites, areas, me: s.user_id });
+  },
+
+  async invite(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    if (!['admin', 'director'].includes(s.role)) return res.status(403).json({ error: 'Only admins and directors can add people.' });
+    await ensureInvites();
+    const b = body(req);
+    const email = cleanEmail(b.email);
+    const name = String(b.full_name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    const role = ROLES.includes(b.role) ? b.role : 'broker';
+    if (role === 'admin' && s.role !== 'admin') return res.status(403).json({ error: 'Only admins can add another admin.' });
+    const team = String(b.team || '').trim().slice(0, 60) || null;
+    const areas = (Array.isArray(b.areas) ? b.areas : []).map(Number).filter(Number.isFinite);
+    if (!name) return res.status(400).json({ error: 'Add their name.' });
+    if (!validEmail(email)) return res.status(400).json({ error: 'That email doesn\'t look right.' });
+    const [has] = await sql`select 1 from desk.staff where lower(email) = ${email}`;
+    if (has) return res.status(409).json({ error: 'That person is already on the desk. Edit them in the list instead.' });
+    await sql`insert into desk.staff_invites (email, full_name, role, team, areas, created_by)
+              values (${email}, ${name}, ${role}, ${team}, ${areas}::bigint[], ${s.user_id})
+              on conflict (email) do update set full_name = excluded.full_name, role = excluded.role, team = excluded.team,
+                areas = excluded.areas, created_by = excluded.created_by, created_at = now(), claimed_at = null, user_id = null`;
+    await audit(s.user_id, 'person_added', { detail: { email, role, team }, ip });
+    res.json({ ok: true });
+  },
+
+  async cancelInvite(req, res, s) {
+    if (req.method !== 'POST') return res.status(405).end();
+    if (!['admin', 'director'].includes(s.role)) return res.status(403).json({ error: 'Not allowed' });
+    await ensureInvites();
+    await sql`delete from desk.staff_invites where email = ${cleanEmail(body(req).email)} and claimed_at is null`;
+    res.json({ ok: true });
+  },
+
+  async saveStaff(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    if (!['admin', 'director'].includes(s.role)) return res.status(403).json({ error: 'Only admins and directors can change people.' });
+    await ensureInvites();
+    const b = body(req);
+    const [p] = await sql`select user_id, role from desk.staff where user_id = ${String(b.user_id || '')}`;
+    if (!p) return res.status(404).json({ error: 'Person not found' });
+    const role = ROLES.includes(b.role) ? b.role : p.role;
+    if ((role === 'admin' || p.role === 'admin') && s.role !== 'admin') return res.status(403).json({ error: 'Only admins can change an admin.' });
+    if (p.user_id === s.user_id && (role !== p.role || b.active === false)) return res.status(400).json({ error: 'You can\'t change your own role or switch yourself off.' });
+    const name = String(b.full_name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    const team = String(b.team || '').trim().slice(0, 60) || null;
+    const areas = (Array.isArray(b.areas) ? b.areas : []).map(Number).filter(Number.isFinite);
+    await sql.begin(async (tx) => {
+      await tx`update desk.staff set role = ${role}, team = ${team}, active = ${b.active !== false}
+               ${name ? tx`, full_name = ${name}` : tx``} where user_id = ${p.user_id}`;
+      await setAreas(tx, p.user_id, areas, s.user_id);
+    });
+    await audit(s.user_id, 'person_changed', { detail: { user: p.user_id, role, team, active: b.active !== false }, ip });
+    res.json({ ok: true });
   },
 
   async copyBlocked(req, res, s, ip) {
