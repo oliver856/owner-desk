@@ -247,6 +247,13 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .r-podium{display:flex;gap:10px;font-size:12px;white-space:nowrap} .r-podium b{font-variant-numeric:tabular-nums}
 .r-podium .mine{color:var(--accent);font-weight:600}
 .dash{padding-block:20px 60px;max-width:1300px}
+.teamp .dash-ctl input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-width:200px}
+.teamp .card{margin-bottom:12px} .teamp td.wrapc{white-space:normal;max-width:340px} .teamp tr.idle td{color:var(--faint)}
+.box.person{display:flex;flex-direction:column;gap:10px;width:min(480px,calc(100vw - 32px))} .box.person h3{margin:0 0 4px}
+.box.person label:not(.cb){display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.box.person input:not([type=checkbox]),.box.person select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font-size:14px}
+.box.person .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px} .box.person .lbl{font-size:12px;color:var(--muted)}
+.box.person .cl-list{max-height:220px} .box.person .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 .dash-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
 .dash-head h1{font-size:22px;margin:0;font-weight:650} .dash-head p{margin:4px 0 0}
 .dash-ctl{display:flex;gap:10px;align-items:center} .dash-ctl select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
@@ -343,6 +350,7 @@ textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:7px;b
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;z-index:90}
 .audit div{display:grid;grid-template-columns:120px 160px 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)} .audit .bad{color:var(--bad)}
 .login{max-width:340px;margin:12vh auto;padding:0 20px} .login h1{font-size:20px;margin:0 0 4px}
+.login-alt{margin-top:16px;font-size:13px;color:var(--muted)}
 .login form{display:flex;flex-direction:column;gap:10px;margin-top:20px} .login input{padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
 .phone{max-width:460px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top,0px)) 20px 40px;min-height:100vh;display:flex;flex-direction:column;gap:18px}
 .phone h1{font-size:18px;margin:0}
@@ -421,28 +429,49 @@ export default function App() {
 }
 
 function Login() {
+  const [mode, setMode] = useState('in'); // 'in' = sign in, 'new' = first time, set a password
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const switchTo = (m) => { setMode(m); setErr(''); setPassword(''); setConfirm(''); };
   async function submit(e) {
     e.preventDefault();
-    setBusy(true); setErr('');
-    const sb = await getSupa();
-    const { error } = await sb.auth.signInWithPassword({ email, password });
+    setErr('');
+    if (mode === 'new') {
+      if (password.length < 8) return setErr('Use at least 8 characters for your password.');
+      if (password !== confirm) return setErr('The two passwords don\'t match.');
+    }
+    setBusy(true);
+    try {
+      if (mode === 'new') {
+        const r = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { setErr(j.error || 'Something went wrong. Try again.'); setBusy(false); return; }
+      }
+      const sb = await getSupa();
+      const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) setErr(mode === 'new' ? 'Your password is set. Sign in with it now.' : 'Email or password is wrong.');
+      if (error && mode === 'new') switchTo('in');
+    } catch { setErr('Something went wrong. Try again.'); }
     setBusy(false);
-    if (error) setErr('Email or password is wrong.');
   }
   return (
     <main className="login">
       <h1>Apex Owner Desk</h1>
-      <p className="muted">Sign in with your Apex account.</p>
+      <p className="muted">{mode === 'in' ? 'Sign in with your Apex account.' : 'First time here? Enter your work email and choose a password.'}</p>
       <form onSubmit={submit}>
-        <input id="email" type="email" autoComplete="username" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input id="password" type="password" autoComplete="current-password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <input id="email" type="email" autoComplete="username" placeholder="Work email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input id="password" type="password" autoComplete={mode === 'in' ? 'current-password' : 'new-password'} placeholder={mode === 'in' ? 'Password' : 'Choose a password (8+ characters)'}
+          value={password} onChange={(e) => setPassword(e.target.value)} required />
+        {mode === 'new' && <input id="confirm" type="password" autoComplete="new-password" placeholder="Confirm password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />}
         {err && <span className="err">{err}</span>}
-        <button className="btn primary" disabled={busy} type="submit">{busy ? 'Signing in…' : 'Sign in'}</button>
+        <button className="btn primary" disabled={busy} type="submit">{busy ? (mode === 'in' ? 'Signing in…' : 'Setting up…') : mode === 'in' ? 'Sign in' : 'Set password and sign in'}</button>
       </form>
+      <p className="login-alt">{mode === 'in'
+        ? <>First time here? <button className="link" type="button" onClick={() => switchTo('new')}>Set your password</button></>
+        : <>Already set up? <button className="link" type="button" onClick={() => switchTo('in')}>Sign in</button></>}</p>
     </main>
   );
 }
@@ -540,6 +569,7 @@ function Desk() {
             <button className={view === 'lookup' ? 'on' : ''} onClick={() => setView('lookup')}>Lookup</button>
             {me && me.staff.role !== 'broker' && <button className={view === 'dash' ? 'on' : ''} onClick={() => setView('dash')}>Dashboard</button>}
             <button className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>Activity</button>
+            {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
             <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
           </nav>
           <div className="right">
@@ -551,7 +581,7 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? (me ? <Owners places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : <Activity />}
+      {view === 'owners' ? (me ? <Owners places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : view === 'team' ? <Team myRole={me?.staff.role} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {toast && <div className="toast">{toast}</div>}
     </>
@@ -1221,7 +1251,7 @@ function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
       <div className="scrim" onClick={onClose} />
       <aside className="panel" aria-label="Unit">
         <div className="panel-head">
-          <div>{u ? <><h2>{u.unit_type === 'Villa' ? 'Villa' : 'Unit'} {u.unit_no}</h2>
+          <div>{u ? <><h2>{/^Street /.test(u.unit_no) ? '' : u.unit_type === 'Villa' ? 'Villa ' : 'Unit '}{u.unit_no}</h2>
             <div className="muted">{[titleCase(place), u.layout, u.beds ? bedsLabel(u.beds) : null, u.size_sqft ? `${fmt(u.size_sqft)} sq ft` : null].filter(Boolean).join(' · ')}</div>
             {u.old_code && <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>Old unit code: {u.old_code}</div>}</> : <h2>{err ? 'Not available' : 'Loading…'}</h2>}</div>
           <button className="x" aria-label="Close" onClick={onClose}>×</button>
@@ -1518,6 +1548,98 @@ const ACTIVITY_LABEL = {
 const ACTIVITY_BAD = ['call_blocked_hold', 'copy_blocked', 'limit_hit', 'call_blocked_hours', 'dial_refused'];
 
 // ── Dashboard: managers see their team, directors and admins see every team ──
+// ── Team: add people and choose their areas (admins and directors) ─────────
+const ROLE_LABEL = { broker: 'Broker', manager: 'Manager', director: 'Director', admin: 'Admin' };
+function Team({ myRole }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [edit, setEdit] = useState(null); // { mode: 'new' | 'edit', ...person }
+  const [q, setQ] = useState('');
+  const load = useCallback(() => api('/api/desk?action=team').then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message)), []);
+  useEffect(() => { load(); }, [load]);
+  if (err && !d) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p></main>;
+  if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
+  const areaName = Object.fromEntries(d.areas.map((a) => [Number(a.id), a.name]));
+  const teams = [...new Set(d.people.map((p) => p.team).filter(Boolean))].sort();
+  const areasOf = (ids) => (ids || []).map((i) => areaName[Number(i)]).filter(Boolean);
+  const match = (p) => !q || `${p.full_name} ${p.email} ${p.team || ''}`.toLowerCase().includes(q.toLowerCase());
+  return (
+    <main className="gut dash teamp">
+      <div className="dash-head">
+        <div><h1>Team</h1><p className="muted">Add someone here, then they go to the sign-in page, click "Set your password" and use their email.</p></div>
+        <div className="dash-ctl">
+          <input type="search" placeholder="Search people" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button className="btn primary" onClick={() => setEdit({ mode: 'new', full_name: '', email: '', role: 'broker', team: '', areas: [] })}>Add person</button>
+        </div>
+      </div>
+      {d.invites.length > 0 && <section className="card">
+        <h4>Waiting to set a password · {d.invites.length}</h4>
+        <table className="mini"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Team</th><th>Areas</th><th>Added</th><th /></tr></thead>
+          <tbody>{d.invites.filter(match).map((i) => (
+            <tr key={i.email}><td><b>{i.full_name}</b></td><td className="muted">{i.email}</td><td>{ROLE_LABEL[i.role]}</td><td>{i.team || <span className="faint">—</span>}</td>
+              <td className="wrapc">{['admin', 'director'].includes(i.role) ? <span className="faint">All areas</span> : areasOf(i.areas).join(', ') || <span className="faint">None yet</span>}</td>
+              <td className="muted">{fdt(i.created_at)}</td>
+              <td className="r"><button className="link" onClick={() => setEdit({ mode: 'new', ...i, areas: (i.areas || []).map(Number) })}>Edit</button>{' · '}
+                <button className="link" onClick={() => api('/api/desk?action=cancelInvite', { method: 'POST', body: { email: i.email } }).then(load)}>Remove</button></td></tr>))}</tbody></table>
+      </section>}
+      <section className="card">
+        <h4>On the desk · {d.people.filter((p) => p.active).length}</h4>
+        <table className="mini"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Team</th><th>Areas</th><th>Last active</th><th /></tr></thead>
+          <tbody>{d.people.filter(match).map((p) => (
+            <tr key={p.user_id} className={p.active ? '' : 'idle'}><td><b>{p.full_name}</b>{!p.active && <span className="faint"> · switched off</span>}</td><td className="muted">{p.email}</td>
+              <td>{ROLE_LABEL[p.role] || p.role}</td><td>{p.team || <span className="faint">—</span>}</td>
+              <td className="wrapc">{['admin', 'director'].includes(p.role) ? <span className="faint">All areas</span> : areasOf(p.areas).join(', ') || <span className="faint">None</span>}</td>
+              <td className="muted">{p.last_seen ? fdt(p.last_seen) : 'Never'}</td>
+              <td className="r"><button className="link" onClick={() => setEdit({ mode: 'edit', ...p, areas: (p.areas || []).map(Number) })}>Edit</button></td></tr>))}</tbody></table>
+      </section>
+      {edit && <PersonForm p={edit} areas={d.areas} teams={teams} myRole={myRole} isMe={edit.user_id === d.me} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
+    </main>
+  );
+}
+
+function PersonForm({ p, areas, teams, myRole, isMe, onClose, onSaved }) {
+  const [v, setV] = useState({ full_name: p.full_name || '', email: p.email || '', role: p.role || 'broker', team: p.team || '', areas: p.areas || [], active: p.active !== false });
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const isNew = p.mode === 'new';
+  const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
+  const allAreas = ['admin', 'director'].includes(v.role);
+  const names = areas.map((a) => a.name);
+  const picked = areas.filter((a) => v.areas.includes(Number(a.id))).map((a) => a.name);
+  const pick = (list) => setV({ ...v, areas: areas.filter((a) => list.includes(a.name)).map((a) => Number(a.id)) });
+  async function save(e) {
+    e.preventDefault(); setBusy(true); setErr('');
+    try {
+      await api(`/api/desk?action=${isNew ? 'invite' : 'saveStaff'}`, { method: 'POST', body: isNew ? v : { ...v, user_id: p.user_id } });
+      onSaved();
+    } catch (x) { setErr(x.message); }
+    setBusy(false);
+  }
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="box person" role="dialog" aria-label="Person" onSubmit={save}>
+        <h3>{isNew ? (p.email ? 'Edit invite' : 'Add person') : `Edit ${p.full_name}`}</h3>
+        <label>Full name<input value={v.full_name} onChange={set('full_name')} required autoFocus={isNew} /></label>
+        <label>Work email<input type="email" value={v.email} onChange={set('email')} required disabled={!isNew} /></label>
+        <div className="pair">
+          <label>Role<select value={v.role} onChange={set('role')} disabled={isMe}>
+            {Object.entries(ROLE_LABEL).filter(([k]) => k !== 'admin' || myRole === 'admin').map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+          <label>Team<input list="team-names" value={v.team} onChange={set('team')} placeholder="e.g. Mahan's team" />
+            <datalist id="team-names">{teams.map((t) => <option key={t} value={t} />)}</datalist></label>
+        </div>
+        <div className="lbl">Areas</div>
+        {allAreas ? <p className="faint" style={{ margin: 0 }}>{ROLE_LABEL[v.role]}s see every area.</p>
+          : <CheckList options={names} selected={picked} onChange={pick} />}
+        {!isNew && !isMe && <label className="cb"><input type="checkbox" checked={!v.active} onChange={(e) => setV({ ...v, active: !e.target.checked })} />Switch off their access</label>}
+        {err && <p className="err">{err}</p>}
+        <div className="acts"><button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy}>{busy ? 'Saving…' : isNew ? 'Save' : 'Save changes'}</button></div>
+        {isNew && <p className="faint" style={{ margin: 0, fontSize: 12 }}>They then open the desk, click "Set your password" and enter this email. The invite lasts 14 days.</p>}
+      </form>
+    </div>
+  );
+}
+
 function Dashboard() {
   const [period, setPeriod] = useState('today');
   const [team, setTeam] = useState('');
@@ -1630,7 +1752,9 @@ function Activity() {
 // ── Phone screen (/phone) ───────────────────────────────────────────────────
 function whatsappText(f, me) {
   const first = f.is_company ? '' : titleCase(String(f.owner_name || '').split(/\s+/)[0]);
-  const place = f.unit_type === 'Villa' ? `villa ${f.unit_no} in ${titleCase(f.subcommunity)}` : `apartment ${f.unit_no} in ${titleCase(f.building)}`;
+  const st = /^Street (\d+), Villa (\S+)$/.exec(String(f.unit_no || ''));
+  const place = st ? `villa ${st[2]} on Street ${st[1]} in ${titleCase(f.subcommunity)}`
+    : f.unit_type === 'Villa' ? `villa ${f.unit_no} in ${titleCase(f.subcommunity)}` : `apartment ${f.unit_no} in ${titleCase(f.building)}`;
   const n = String(f.note || '').toLowerCase();
   const byNote = Object.keys(WHATSAPP_BY_NOTE).sort((a, b) => b.length - a.length).find((k) => n.startsWith(k.toLowerCase()));
   return (byNote ? WHATSAPP_BY_NOTE[byNote] : WHATSAPP[f.outcome] || WHATSAPP.default)
@@ -1671,7 +1795,7 @@ function FollowUp({ f, me, onDone, laptop }) {
   );
 }
 
-const phonePlace = (x) => (x.unit_type === 'Villa' ? `${x.subcommunity} · villa ${x.unit_no}` : `${x.building} · ${x.unit_no}`);
+const phonePlace = (x) => (x.unit_type === 'Villa' ? `${x.subcommunity} · ${/^Street /.test(x.unit_no) ? '' : 'villa '}${x.unit_no}` : `${x.building} · ${x.unit_no}`);
 
 function PhoneScreen() {
   const [st, setSt] = useState({ name: '', pending: null, awaiting: null, followup: null });
