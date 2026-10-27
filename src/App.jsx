@@ -1753,7 +1753,8 @@ function Activity() {
 function whatsappText(f, me) {
   const first = f.is_company ? '' : titleCase(String(f.owner_name || '').split(/\s+/)[0]);
   const st = /^Street (\d+), Villa (\S+)$/.exec(String(f.unit_no || ''));
-  const place = st ? `villa ${st[2]} on Street ${st[1]} in ${titleCase(f.subcommunity)}`
+  const place = f.area === 'Commercial' ? `unit ${f.unit_no} in ${titleCase(f.building || f.subcommunity)}`
+    : st ? `villa ${st[2]} on Street ${st[1]} in ${titleCase(f.subcommunity)}`
     : f.unit_type === 'Villa' ? `villa ${f.unit_no} in ${titleCase(f.subcommunity)}` : `apartment ${f.unit_no} in ${titleCase(f.building)}`;
   const n = String(f.note || '').toLowerCase();
   const byNote = Object.keys(WHATSAPP_BY_NOTE).sort((a, b) => b.length - a.length).find((k) => n.startsWith(k.toLowerCase()));
