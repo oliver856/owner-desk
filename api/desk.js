@@ -1,5 +1,6 @@
 // Office-only actions: /api/desk?action=...
 // Every action checks the office IP and the signed-in broker before touching data.
+import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
@@ -318,6 +319,27 @@ const actions = {
       where ${all ? sql`true` : sql`a.user_id = ${s.user_id}`}
       order by a.at desc limit 300`;
     res.json({ rows, all });
+  },
+
+  // ── Personal WhatsApp messages: your own, or (admins and directors) anyone's ──
+  async templates(req, res, s) {
+    const who = String(query(req).get('user') || s.user_id);
+    if (who !== s.user_id && !['admin', 'director'].includes(s.role)) return res.status(403).json({ error: 'Not allowed' });
+    const [p] = await sql`select full_name from desk.staff where user_id = ${who}`;
+    if (!p) return res.status(404).json({ error: 'Person not found' });
+    res.json({ name: p.full_name, templates: await getTemplates(who) });
+  },
+
+  async saveTemplates(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    const b = body(req);
+    const who = String(b.user || s.user_id);
+    if (who !== s.user_id && !['admin', 'director'].includes(s.role)) return res.status(403).json({ error: 'Not allowed' });
+    const [p] = await sql`select 1 from desk.staff where user_id = ${who}`;
+    if (!p) return res.status(404).json({ error: 'Person not found' });
+    const t = await saveTemplates(who, b.templates);
+    await audit(s.user_id, 'templates_saved', { detail: { user: who }, ip });
+    res.json({ ok: true, templates: t });
   },
 
   // ── Call out mode ──
