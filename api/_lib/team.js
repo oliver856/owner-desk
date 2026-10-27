@@ -1,11 +1,11 @@
 // People on the desk: invites (added by an admin or director) and setting up a first password.
 import { createClient } from '@supabase/supabase-js';
-import { sql } from './core.js';
+import { sql, schemaOk } from './core.js';
 
 export const ROLES = ['broker', 'manager', 'director', 'admin'];
 
 let invitesReady = null;
-export const ensureInvites = () => (invitesReady ??= sql`create table if not exists desk.staff_invites (
+export const ensureInvites = () => (invitesReady ??= schemaOk().then((ok) => ok || sql`create table if not exists desk.staff_invites (
     email text primary key,
     full_name text not null,
     role text not null,
@@ -18,7 +18,7 @@ export const ensureInvites = () => (invitesReady ??= sql`create table if not exi
   .then(() => sql`alter table desk.staff_invites enable row level security`)
   .then(() => sql`revoke all on desk.staff_invites from anon, authenticated`)
   .then(() => sql`alter table desk.staff drop constraint if exists staff_role_check`)
-  .then(() => sql`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`)
+  .then(() => sql`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`))
   .catch((e) => { invitesReady = null; throw e; }));
 
 export const cleanEmail = (e) => String(e || '').trim().toLowerCase();
