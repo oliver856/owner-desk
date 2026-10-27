@@ -21,6 +21,31 @@ const authClient = createClient(SUPA_URL, SUPA_ANON, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
 
+// Schema check. The server used to run "create/alter table if not exists" on every cold start. ALTER TABLE takes a
+// table-wide lock, so during a big import (or with many brokers at once) every request queued behind it and the site hung
+// on "Loading...". Now one cheap catalogue read per server instance confirms everything is already in place, and the
+// set-up statements only run if something is genuinely missing.
+let schemaOkP = null;
+export function schemaOk() {
+  schemaOkP ??= sql`select
+      to_regclass('desk.staff_prefs') is not null and to_regclass('desk.notes') is not null
+      and to_regclass('desk.notes_unit_idx') is not null and to_regclass('desk.lookups') is not null
+      and to_regclass('desk.lookup_units') is not null and to_regclass('desk.staff_invites') is not null
+      and to_regclass('desk.calls_owner_time_idx') is not null and to_regclass('desk.calls_time_idx') is not null
+      and to_regclass('desk.call_requests_owner_time_idx') is not null
+      and exists (select 1 from pg_attribute where attrelid = 'desk.units'::regclass and attname = 'layout' and not attisdropped)
+      and exists (select 1 from pg_attribute where attrelid = 'desk.units'::regclass and attname = 'old_code' and not attisdropped)
+      and exists (select 1 from pg_attribute where attrelid = 'desk.calls'::regclass and attname = 'followup_at' and not attisdropped)
+      and exists (select 1 from pg_constraint where conname = 'staff_role_check' and pg_get_constraintdef(oid) like '%director%')
+      and exists (select 1 from desk.settings where key = 'call_holds')
+      and exists (select 1 from desk.areas where name = 'Lookups')
+      and coalesce(obj_description(to_regprocedure('desk.owner_hold(bigint, uuid)'), 'pg_proc'), '') = 'hold v1' as ok`
+    .then(([r]) => !!r?.ok)
+    .then((ok) => { if (!ok) schemaOkP = null; return ok; })
+    .catch(() => { schemaOkP = null; return false; });
+  return schemaOkP;
+}
+
 export function clientIp(req) {
   const f = req.headers['x-forwarded-for'];
   if (f) return String(f).split(',')[0].trim();
@@ -125,7 +150,7 @@ export async function callTarget(userId) {
     select st.user_id, st.full_name as name, st.team, count(c.id)::int as calls, max(c.called_at) as last_at
     from desk.staff st
     left join desk.calls c on c.user_id = st.user_id and c.called_at >= (select start from day)
-    where st.active and (st.role <> 'admin' or st.user_id = ${userId})
+    where st.active
     group by st.user_id, st.full_name, st.team
     having count(c.id) > 0 or st.user_id = ${userId}
     order by calls desc, last_at asc nulls last
