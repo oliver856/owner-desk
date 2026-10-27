@@ -1,8 +1,9 @@
 // Office-only actions: /api/desk?action=...
 // Every action checks the office IP and the signed-in broker before touching data.
+import { ensureCallouts, currentCallout } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
-import { sql, route, query, body, audit, caps, setting, withinCallHours, callTarget } from './_lib/core.js';
+import { sql, schemaOk, route, query, body, audit, caps, setting, withinCallHours, callTarget } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
@@ -16,17 +17,17 @@ const places = new Map(); // building list per area set, kept for 1 minute
 
 // Adds the 'director' role (sees every team, like an admin, but can't change settings)
 let rolesReady = null;
-const ensureRoles = () => (rolesReady ??= sql`alter table desk.staff drop constraint if exists staff_role_check`
-  .then(() => sql`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`)
+const ensureRoles = () => (rolesReady ??= schemaOk().then((ok) => ok || sql`alter table desk.staff drop constraint if exists staff_role_check`
+  .then(() => sql`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`))
   .catch((e) => { rolesReady = null; throw e; }));
 
 // Each broker's saved view (filters, tab, sort, columns, filter panel). Created by the server on first use.
 let prefsReady = null;
-const ensurePrefs = () => (prefsReady ??= sql`create table if not exists desk.staff_prefs (
+const ensurePrefs = () => (prefsReady ??= schemaOk().then((ok) => ok || sql`create table if not exists desk.staff_prefs (
     user_id uuid primary key references desk.staff(user_id) on delete cascade,
     prefs jsonb not null, updated_at timestamptz not null default now())`
   .then(() => sql`alter table desk.staff_prefs enable row level security`)
-  .then(() => sql`revoke all on desk.staff_prefs from anon, authenticated`)
+  .then(() => sql`revoke all on desk.staff_prefs from anon, authenticated`))
   .catch((e) => { prefsReady = null; throw e; }));
 
 // The notes table is created by the server the first time it's needed, so no SQL has to be run by hand.
@@ -34,13 +35,14 @@ let notesReady = null;
 // Older unit codes and villa types (e.g. Springs/Meadows/Lakes) live in two optional columns
 let extrasReady;
 function ensureUnitExtras() {
-  extrasReady ??= sql`alter table desk.units add column if not exists old_code text, add column if not exists layout text`
+  extrasReady ??= schemaOk().then((ok) => ok || sql`alter table desk.units add column if not exists old_code text, add column if not exists layout text`)
     .catch((e) => { extrasReady = null; throw e; });
   return extrasReady;
 }
 
 function ensureNotes() {
   notesReady ??= (async () => {
+    if (await schemaOk()) return;
     await sql`create table if not exists desk.notes (
       id bigint generated always as identity primary key,
       unit_id bigint not null references desk.units(id),
@@ -316,6 +318,58 @@ const actions = {
       where ${all ? sql`true` : sql`a.user_id = ${s.user_id}`}
       order by a.at desc limit 300`;
     res.json({ rows, all });
+  },
+
+  // ── Call out mode ──
+  async callout(req, res, s) {
+    res.json(await currentCallout(s));
+  },
+
+  async calloutStart(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    if (s.role === 'broker') return res.status(403).json({ error: 'Only managers and directors can start a call out.' });
+    await ensureCallouts();
+    const b = body(req);
+    const minutes = Math.min(180, Math.max(5, Math.round(Number(b.minutes) || 30)));
+    // A manager's call out is for their own team; directors and admins choose
+    let teams = (Array.isArray(b.teams) ? b.teams : []).map((t) => String(t).slice(0, 60)).filter(Boolean);
+    if (s.role === 'manager') teams = [s.team || 'No team'];
+    const target = Math.min(500, Math.max(0, Math.round(Number(b.target) || 0)));
+    const prize = String(b.prize || '').trim().slice(0, 80) || null;
+    const mode = ['calls', 'hot', 'points'].includes(b.mode) ? b.mode : 'calls';
+    const [co] = await sql.begin(async (tx) => {
+      await tx`update desk.callouts set ended_at = now() where ended_at is null and ends_at > now()`;
+      return tx`insert into desk.callouts (started_by, starts_at, ends_at, minutes, teams, target, prize, mode)
+                values (${s.user_id}, now() + interval '10 seconds', now() + interval '10 seconds' + make_interval(mins => ${minutes}),
+                        ${minutes}, ${teams.length ? teams : null}, ${target}, ${prize}, ${mode})
+                returning id`;
+    });
+    await audit(s.user_id, 'callout_started', { detail: { id: co.id, minutes, teams, target, mode }, ip });
+    res.json({ ok: true, id: co.id });
+  },
+
+  async calloutEnd(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    if (s.role === 'broker') return res.status(403).json({ error: 'Only managers and directors can end a call out.' });
+    await ensureCallouts();
+    const r = await sql`update desk.callouts set ended_at = now() where ended_at is null and ends_at > now() returning id`;
+    if (r.length) await audit(s.user_id, 'callout_ended', { detail: { id: r[0].id }, ip });
+    res.json({ ok: true });
+  },
+
+  async calloutExtend(req, res, s) {
+    if (req.method !== 'POST') return res.status(405).end();
+    if (s.role === 'broker') return res.status(403).json({ error: 'Only managers and directors can change a call out.' });
+    await ensureCallouts();
+    await sql`update desk.callouts set ends_at = ends_at + interval '10 minutes', minutes = minutes + 10 where ended_at is null and ends_at > now()`;
+    res.json({ ok: true });
+  },
+
+  async calloutTeams(req, res, s) {
+    if (s.role === 'broker') return res.status(403).json({ error: 'Not allowed' });
+    const rows = await sql`select coalesce(team, 'No team') as team, count(*)::int as people from desk.staff
+                           where active and role in ('broker', 'manager') group by 1 order by 1`;
+    res.json({ teams: rows, myTeam: s.team, role: s.role });
   },
 
   // ── Team: who can use the desk (admins and directors) ──
