@@ -294,6 +294,13 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .co-lbr.me{background:var(--hover);outline:1px solid var(--accent)} .co-lbr .top{color:var(--warn);font-weight:700} .co-lbr b{text-align:right} .co-lbr b small{color:var(--muted);font-weight:400}
 .co-lbr>span:last-child{text-align:right;font-size:12px} .co-ctl{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--line);padding-top:12px}
 @media (max-width:760px){.co-item{grid-template-columns:1fr 1fr}.co-big{font-size:120px}.co-podium{gap:6px}.co-step{width:30vw}}
+.box.msg-ed{width:min(680px,calc(100vw - 32px));display:flex;flex-direction:column;gap:14px} .box.msg-ed h3{margin:0}
+.msg-ed code{background:var(--hover);border-radius:4px;padding:0 4px;font-size:12px}
+.msg-f{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:12px} .msg-h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.msg-h .link{margin-left:auto} .msg-f textarea{font:inherit;font-size:14px;line-height:1.45;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical}
+.msg-std{margin:0;color:var(--muted)} .msg-prev{background:#e7f6e9;color:#14301b;border-radius:10px;padding:10px 12px;font-size:13px;white-space:pre-wrap}
+.msg-prev .lbl{display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#4b6b53;margin-bottom:4px}
+.msg-ed .acts{display:flex;justify-content:flex-end;gap:8px}
 .dash{padding-block:20px 60px;max-width:1300px}
 .teamp .dash-ctl input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-width:200px}
 .teamp .card{margin-bottom:12px} .teamp td.wrapc{white-space:normal;max-width:340px} .teamp tr.idle td{color:var(--faint)}
@@ -407,7 +414,7 @@ textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:7px;b
 .bigcall{background:var(--blue);color:#fff;border:none;border-radius:999px;padding:16px;font-size:17px;font-weight:600;margin-top:10px;width:100%}
 .bigcall[disabled]{opacity:.5}
 .wa-laptop{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:8px}
-.wa-laptop .who{font-weight:600} .wa-laptop .wamsg{min-height:110px!important;font-size:13.5px}
+.wa-laptop .who{font-weight:600} .wa-laptop .wamsg{min-height:200px!important;font-size:13.5px}
 .wa-laptop .bigcall{padding:11px;font-size:14px;margin-top:6px} .bigcall.wa{background:#1f9d55}
 .wamsg{min-height:170px!important;font-size:15px;margin:8px 0 0!important;border-radius:10px!important}
 .waiting{color:var(--muted);text-align:center;padding:50px 0}
@@ -616,6 +623,7 @@ function Desk() {
   // Call out mode: polled so every screen switches together (every 4s while one runs, every 15s otherwise)
   const [co, setCo] = useState(null);
   const [startOpen, setStartOpen] = useState(false);
+  const [msgFor, setMsgFor] = useState(null); // 'me' or a user id (admins) for the WhatsApp messages editor
   const [, setTick] = useState(0);
   const loadCo = useCallback(() => api('/api/desk?action=callout')
     .then((j) => setCo({ ...j, offset: j.callout ? new Date(j.callout.serverNow).getTime() - Date.now() : 0 })).catch(() => {}), []);
@@ -672,15 +680,17 @@ function Desk() {
             {me && <span>Profiles <span className="n">{me.caps.profiles}/{me.caps.profileCap}</span></span>}
             {me && <span>Calls <span className="n">{me.caps.calls}/{me.caps.callCap}</span></span>}
             <ThemeToggle />
+            {me && <button className="link" onClick={() => setMsgFor('me')}>My messages</button>}
             {me && <span>{me.staff.name}</span>}
             <button className="link" onClick={() => getSupa().then((sb) => sb.auth.signOut())}>Sign out</button>
           </div>
         </div>
       </header>
-      {view === 'owners' ? (me ? <Owners banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : view === 'team' ? <Team myRole={me?.staff.role} /> : <Activity />}
+      {view === 'owners' ? (me ? <Owners banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
       {phase === 'done' && co?.meIn && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
+      {msgFor && <MessagesEditor user={msgFor === 'me' ? null : msgFor} onClose={() => setMsgFor(null)} />}
       {startOpen && <StartCallout onClose={() => setStartOpen(false)} onStarted={() => { setStartOpen(false); loadCo(); }} />}
       {toast && <div className="toast">{toast}</div>}
     </>
@@ -1806,7 +1816,7 @@ function CalloutResults({ co, onClose }) {
 
 // ── Team: add people and choose their areas (admins and directors) ─────────
 const ROLE_LABEL = { broker: 'Broker', manager: 'Manager', director: 'Director', admin: 'Admin' };
-function Team({ myRole }) {
+function Team({ myRole, onMessages }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
   const [edit, setEdit] = useState(null); // { mode: 'new' | 'edit', ...person }
@@ -1846,7 +1856,7 @@ function Team({ myRole }) {
               <td>{ROLE_LABEL[p.role] || p.role}</td><td>{p.team || <span className="faint">—</span>}</td>
               <td className="wrapc">{['admin', 'director'].includes(p.role) ? <span className="faint">All areas</span> : areasOf(p.areas).join(', ') || <span className="faint">None</span>}</td>
               <td className="muted">{p.last_seen ? fdt(p.last_seen) : 'Never'}</td>
-              <td className="r"><button className="link" onClick={() => setEdit({ mode: 'edit', ...p, areas: (p.areas || []).map(Number) })}>Edit</button></td></tr>))}</tbody></table>
+              <td className="r"><button className="link" onClick={() => onMessages(p.user_id)}>Messages</button>{' · '}<button className="link" onClick={() => setEdit({ mode: 'edit', ...p, areas: (p.areas || []).map(Number) })}>Edit</button></td></tr>))}</tbody></table>
       </section>
       {edit && <PersonForm p={edit} areas={d.areas} teams={teams} myRole={myRole} isMe={edit.user_id === d.me} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
     </main>
@@ -2006,17 +2016,72 @@ function Activity() {
 }
 
 // ── Phone screen (/phone) ───────────────────────────────────────────────────
+// A person's own messages (My messages) replace the standard ones: 'noanswer' for no answer / unreachable, 'spoke' for everything else
+const isNoAnswer = (f) => f.outcome === 'No answer' || /^called, (no reply|unreachable)/i.test(String(f.note || ''));
+function fillTemplate(t, v) {
+  return t.split('{first}').join(v.first).split('{me}').join(v.me).split('{property}').join(v.property).split('{area}').join(v.area)
+    .replace(/Hi ,/g, 'Hi,').replace(/Hi\s+\n/g, 'Hi,\n');
+}
 function whatsappText(f, me) {
   const first = f.is_company ? '' : titleCase(String(f.owner_name || '').split(/\s+/)[0]);
   const st = /^Street (\d+), Villa (\S+)$/.exec(String(f.unit_no || ''));
   const place = f.area === 'Commercial' ? `unit ${f.unit_no} in ${titleCase(f.building || f.subcommunity)}`
     : st ? `villa ${st[2]} on Street ${st[1]} in ${titleCase(f.subcommunity)}`
     : f.unit_type === 'Villa' ? `villa ${f.unit_no} in ${titleCase(f.subcommunity)}` : `apartment ${f.unit_no} in ${titleCase(f.building)}`;
+  const v = { first, me: String(me || '').split(/\s+/)[0], property: place, area: f.area || '' };
+  const own = f.templates || {};
+  const mine = isNoAnswer(f) ? own.noanswer : own.spoke;
+  if (mine) return fillTemplate(mine, v);
   const n = String(f.note || '').toLowerCase();
   const byNote = Object.keys(WHATSAPP_BY_NOTE).sort((a, b) => b.length - a.length).find((k) => n.startsWith(k.toLowerCase()));
-  return (byNote ? WHATSAPP_BY_NOTE[byNote] : WHATSAPP[f.outcome] || WHATSAPP.default)
-    .replace('{first}', first).replace('Hi , ', 'Hi, ')
-    .replace('{me}', String(me || '').split(/\s+/)[0]).replace('{property}', place).replace('{area}', f.area || '');
+  return fillTemplate(byNote ? WHATSAPP_BY_NOTE[byNote] : WHATSAPP[f.outcome] || WHATSAPP.default, v);
+}
+
+// Edit your own WhatsApp messages (admins and directors can open anyone's from the Team page)
+function MessagesEditor({ user, onClose }) {
+  const [d, setD] = useState(null);
+  const [v, setV] = useState({ noanswer: '', spoke: '' });
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    api('/api/desk?action=templates' + (user ? '&user=' + user : '')).then((j) => { setD(j); setV({ noanswer: j.templates.noanswer || '', spoke: j.templates.spoke || '' }); })
+      .catch((e) => setErr(e.message));
+  }, [user]);
+  const first = d ? String(d.name).split(/\s+/)[0] : '';
+  const ex = { first: 'Alaa', me: first, property: 'villa XK2060B in Zinnia', area: 'Damac Hills 2' };
+  const std = { noanswer: WHATSAPP['No answer'], spoke: WHATSAPP.default };
+  async function save() {
+    setBusy(true); setErr('');
+    try { await api('/api/desk?action=saveTemplates', { method: 'POST', body: { user, templates: v } }); setSaved(true); setTimeout(onClose, 700); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+  const box = (k, title, hint) => (
+    <div className="msg-f">
+      <div className="msg-h"><b>{title}</b><span className="muted">{hint}</span>
+        {v[k] ? <button className="link" onClick={() => setV({ ...v, [k]: '' })}>Use the standard message</button>
+          : <button className="link" onClick={() => setV({ ...v, [k]: std[k] })}>Write my own</button>}</div>
+      {v[k] ? <textarea rows={7} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />
+        : <p className="msg-std">Standard message is used{k === 'spoke' ? ' (it changes with the note you pick: wants to sell, follow up and so on)' : ''}.</p>}
+      <div className="msg-prev"><span className="lbl">Preview</span><div>{fillTemplate(v[k] || (k === 'spoke' ? WHATSAPP_BY_NOTE['In discussion'] : std[k]), ex)}</div></div>
+    </div>);
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="box msg-ed" role="dialog" aria-label="WhatsApp messages">
+        <h3>{user && d ? `${d.name}'s WhatsApp messages` : 'My WhatsApp messages'}</h3>
+        <p className="muted" style={{ margin: 0 }}>These fill in by themselves after each call. Use <code>{'{first}'}</code> for the owner's first name, <code>{'{me}'}</code> for {user ? 'their' : 'your'} first name,
+          <code>{'{property}'}</code> for the unit (e.g. villa XK2060B in Zinnia) and <code>{'{area}'}</code> for the area (e.g. Damac Hills 2). It can always be edited before sending.</p>
+        {!d && !err ? <p className="muted">Loading…</p> : <>
+          {box('noanswer', 'No answer', 'Called, no reply · Called, unreachable · No answer')}
+          {box('spoke', 'Spoke to them', 'Every other note or outcome')}
+        </>}
+        {err && <p className="err" style={{ margin: 0 }}>{err}</p>}
+        <div className="acts"><button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy || !d} onClick={save}>{saved ? 'Saved' : busy ? 'Saving…' : 'Save messages'}</button></div>
+      </div>
+    </div>
+  );
 }
 
 function FollowUp({ f, me, onDone, laptop }) {
