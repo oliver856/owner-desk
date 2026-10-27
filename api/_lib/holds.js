@@ -1,13 +1,14 @@
 // Owner holds: stops two brokers calling the same owner one after the other.
 // Whoever last called an owner "holds" them for a while; everyone else sees who and until when.
 // Hold lengths live in desk.settings 'call_holds' so they can be changed without touching code.
-import { sql } from './core.js';
+import { sql, schemaOk } from './core.js';
 
 export const HOLD_DEFAULTS = { in_progress_minutes: 15, no_answer_days: 2, spoke_days: 30, hot_days: 60 };
 
 let ready = null;
 export function ensureHolds() {
   ready ??= (async () => {
+    if (await schemaOk()) return;
     await sql`create index if not exists calls_owner_time_idx on desk.calls (owner_id, called_at desc)`;
     await sql`create index if not exists calls_time_idx on desk.calls (called_at desc)`;
     await sql`create index if not exists call_requests_owner_time_idx on desk.call_requests (owner_id, created_at desc)`;
@@ -41,6 +42,7 @@ export function ensureHolds() {
         limit 1
       $f$`);
     await sql`revoke all on function desk.owner_hold(bigint, uuid) from public, anon, authenticated`;
+    await sql`comment on function desk.owner_hold(bigint, uuid) is 'hold v1'`;
   })().catch((e) => { ready = null; throw e; });
   return ready;
 }
