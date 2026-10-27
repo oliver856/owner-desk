@@ -4,6 +4,7 @@
 import { sql, schemaOk, route, query, body, audit } from './_lib/core.js';
 import { vapidKeys, pushToUser } from './_lib/push.js';
 import { OUTCOMES, saveOutcome } from './_lib/outcome.js';
+import { getTemplates } from './_lib/templates.js';
 
 // One extra column on calls records when the WhatsApp follow-up was sent or skipped. Added by the server itself.
 let followReady = null;
@@ -46,7 +47,8 @@ const actions = {
     let awaiting = null, followup = null;
     if (last && !last.outcome_at) awaiting = last;
     else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome)) followup = last;
-    res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup || null });
+    const templates = followup ? await getTemplates(s.user_id).catch(() => ({})) : {};
+    res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup ? { ...followup, templates } : null });
   },
 
   // The blue button. Releases the number once, for this broker's own unexpired request, and records the call.
