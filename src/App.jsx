@@ -457,6 +457,27 @@ export default function App() {
   const [session, setSession] = useState(undefined);
   const isPhone = window.location.pathname.startsWith('/phone');
 
+  // Picks up new releases by itself: every minute it checks whether the site has been redeployed, and reloads
+  // as soon as nothing is open (no call, panel or pop-up), so no one is left on an old version.
+  useEffect(() => {
+    const mine = [...document.scripts].map((x) => x.src).find((x) => /\/assets\/index-[^/]+\.js/.test(x));
+    if (!mine) return;
+    let newer = false;
+    const check = async () => {
+      try {
+        if (!newer) {
+          const html = await (await fetch('/?v=' + Date.now(), { cache: 'no-store' })).text();
+          const live = (html.match(/\/assets\/index-[^"']+\.js/) || [])[0];
+          newer = !!live && !mine.endsWith(live);
+        }
+        const busy = document.querySelector('.modal,.panel,.co-cover,textarea:focus,input:focus');
+        if (newer && !busy) window.location.reload();
+      } catch {}
+    };
+    const t = setInterval(check, 60000);
+    return () => clearInterval(t);
+  }, []);
+
   useEffect(() => {
     let off;
     getSupa().then((sb) => {
