@@ -268,12 +268,16 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .co-awards span{font-size:11px;color:#a9c9c4;font-weight:600;letter-spacing:.06em} .co-awards b{font-size:17px}
 .co-done{font:inherit;font-size:14px;font-weight:650;padding:12px 22px;border:none;background:#6cc3b8;color:#0b1f1c;border-radius:10px;cursor:pointer;margin-top:6px}
 .co-live{display:flex;flex-direction:column}
-.co-bar{background:#0f2e2b;color:#fff;padding:18px 28px;display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+.co-bar{background:#0f2e2b;color:#fff;padding:16px 24px;border-radius:16px;margin:18px 0 6px;display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+.co-lbs{display:flex;gap:6px;flex-wrap:wrap} .co-lbs span{background:rgba(255,255,255,.1);border-radius:999px;padding:3px 11px 3px 4px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.co-lbs em{font-style:normal;font-size:11px;font-weight:700;background:rgba(255,255,255,.16);border-radius:999px;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center}
+.co-lbs span.me{background:#6cc3b8;color:#0b1f1c} .co-lbs span.me em{background:rgba(0,0,0,.12)} .co-lbs .more{padding:3px 11px}
+.co-me .co-ctl{display:flex;gap:6px;margin-top:6px} .co-me .co-ctl button{font:inherit;font-size:12px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:7px;padding:4px 10px;cursor:pointer}
 .co-clock{display:flex;flex-direction:column;gap:2px;min-width:200px} .co-clock>b{font-size:52px;line-height:1;font-weight:700;letter-spacing:-.02em}
 .co-dim{font-size:13px;color:#a9c9c4} .co-mid{flex:1 1 380px;display:flex;flex-direction:column;gap:9px;min-width:0}
 .co-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap} .co-mid .co-row b{color:#fff;font-size:15px}
 .co-track{height:10px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden} .co-track i{display:block;height:100%;background:#6cc3b8;border-radius:999px;transition:width .6s}
-.co-tick{display:flex;gap:8px;flex-wrap:wrap} .co-tick span{background:rgba(255,255,255,.1);border-radius:999px;padding:3px 11px;font-size:13px}
+.co-tick{display:flex;gap:8px;flex-wrap:wrap} .co-tick span{font-size:12px;color:#a9c9c4} .co-tick span+span::before{content:'· ';}
 .co-me{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:160px} .co-me>b{font-size:38px;line-height:1}
 .co-body{display:flex;gap:22px;padding:22px 28px 40px;flex-wrap:wrap;align-items:flex-start}
 .co-main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:14px} .co-main .co-row b{font-size:15px}
@@ -652,7 +656,7 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' && calloutOn ? <CalloutLive co={co} boss={boss} onChange={loadCo} onCaps={refreshMe} onOpen={setUnitId} /> : view === 'owners' ? (me ? <Owners places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : view === 'team' ? <Team myRole={me?.staff.role} /> : <Activity />}
+      {view === 'owners' ? (me ? <Owners banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : view === 'team' ? <Team myRole={me?.staff.role} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
       {phase === 'done' && co?.meIn && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
@@ -662,7 +666,7 @@ function Desk() {
   );
 }
 
-function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs }) {
+function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs, banner }) {
   // Start from the broker's saved view if they have one
   const start = useRef({
     f: normF(prefs?.f), tab: prefs?.tab || 'all', sort: prefs?.sort || 'unit',
@@ -877,7 +881,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
     <>
       <div className="owners-page">
       {busy && <div className="loadbar" />}
-      {target && <TargetBar t={target} />}
+      {banner || (target && <TargetBar t={target} />)}
       <div className="head gut">
         <h1>Owners</h1>
         <p>{fmt(c.all)} units in your areas · {DATA_NOTE}</p>
@@ -1699,7 +1703,8 @@ function CalloutCountdown({ co }) {
   );
 }
 
-function CalloutLive({ co, boss, onChange, onCaps, onOpen }) {
+// Call out bar: sits where the daily race bar normally is. Brokers keep their normal list, filters and calling.
+function CalloutBar({ co, boss, onChange }) {
   const c = co.callout;
   const board = co.board || [];
   const myIdx = board.findIndex((b) => b.me);
@@ -1711,100 +1716,40 @@ function CalloutLive({ co, boss, onChange, onCaps, onOpen }) {
   // Overtakes since the last poll go in the ticker with the hot leads
   const prev = useRef(null);
   const [moves, setMoves] = useState([]);
+  const order = board.map((b) => b.name).join('|');
   useEffect(() => {
-    const names = board.map((b) => b.name);
+    const names = order ? order.split('|') : [];
     if (prev.current) {
       const out = [];
       names.forEach((n, i) => { const was = prev.current.indexOf(n); if (was > i && prev.current[i] && prev.current[i] !== n && i < 5) out.push(`${n.split(' ')[0]} passed ${prev.current[i].split(' ')[0]} for ${ordinal(i + 1)}`); });
       if (out.length) setMoves((m) => [...out, ...m].slice(0, 3));
     }
     prev.current = names;
-  }, [board.map((b) => b.name).join('|')]); // eslint-disable-line
-  const ticker = [...moves, ...(co.recent || []).map((r) => `${r.name.split(' ')[0]}: ${r.what}`)].slice(0, 4);
-  const ahead = myIdx > 0 ? coScore(co, board[myIdx - 1]) - coScore(co, me) : null;
-  const behind = myIdx === 0 && board[1] ? coScore(co, me) - coScore(co, board[1]) : null;
-
-  // The queue: never-called owners with a number in my areas, held owners skipped; then this week's callbacks
-  const [rows, setRows] = useState(null);
-  const [tab, setTab] = useState('never');
-  const [page, setPage] = useState(1);
-  const [skipped, setSkipped] = useState([]);
-  const [calling, setCalling] = useState(null);
-  const [qErr, setQErr] = useState('');
-  const loadQ = useCallback((t, p, keep) => api(`/api/desk?action=units&more=1&free=1&phone=1&sort=unit&tab=${t}&page=${p}`)
-    .then((j) => {
-      if (!j.rows.length && t === 'never' && p === 1) { setTab('callbacks'); return loadQ('callbacks', 1, false); }
-      setRows((r) => (keep && r ? [...r, ...j.rows.filter((x) => !r.some((y) => y.id === x.id))] : j.rows)); setPage(p); setQErr('');
-    }).catch((e) => setQErr(e.message)), []);
-  useEffect(() => { loadQ('never', 1, false); }, [loadQ]);
-  const queue = (rows || []).filter((r) => !skipped.includes(r.id));
-  useEffect(() => { if (rows && queue.length < 4 && rows.length >= page * 100) loadQ(tab, page + 1, true); }, [queue.length]); // eslint-disable-line
-  const next = queue[0];
-  const done = (id, saved) => { setCalling(null); onCaps(); if (saved) { setRows((r) => r.filter((x) => x.id !== id)); onChange(); } };
-  const skip = () => next && setSkipped((s) => [...s, next.id]);
+  }, [order]);
+  const ticker = [...moves, ...(co.recent || []).map((r) => `${r.name.split(' ')[0]}: ${r.what}`)].slice(0, 3);
+  const ahead = myIdx > 0 && me ? coScore(co, board[myIdx - 1]) - coScore(co, me) : null;
+  const lead = myIdx === 0 && board[1] ? coScore(co, me) - coScore(co, board[1]) : null;
   const control = (a) => api(`/api/desk?action=${a}`, { method: 'POST' }).then(onChange).catch(() => {});
-
   return (
-    <main className="co-live">
-      <section className="co-bar">
-        <div className="co-clock"><span className="co-kicker"><i />CALL OUT LIVE</span>
-          <b className="n">{mmss(end - now)}</b>
-          <span className="co-dim">left · ends {new Date(end).toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' })}{c.prize ? ` · prize: ${c.prize}` : ''}</span></div>
-        <div className="co-mid">
-          <div className="co-dim co-row"><span>Team total <b className="n">{total}</b> {total === 1 ? 'call' : 'calls'}{teamTarget ? ` · target ${teamTarget}` : ''} · {CO_MODE[c.mode]}</span><span>{mmss(now - start)} in</span></div>
-          <div className="co-track"><i style={{ width: `${Math.min(100, teamTarget ? (total / teamTarget) * 100 : ((now - start) / (end - start)) * 100)}%` }} /></div>
-          <div className="co-tick">{ticker.length ? ticker.map((t, i) => <span key={i}>{t}</span>) : <span>First calls coming in…</span>}</div>
-        </div>
-        <div className="co-me"><span className="co-dim">YOU</span>
-          <b>{me ? (coScore(co, me) || myIdx > 0 ? ordinal(myIdx + 1) : '–') : '–'}</b>
-          <span className="co-dim">{me ? <><b className="n" style={{ color: '#fff' }}>{me.calls}</b> {me.calls === 1 ? 'call' : 'calls'}{me.hot ? ` · ${me.hot} hot` : ''}</> : ''}
-            {ahead != null ? ` · ${ahead} behind ${board[myIdx - 1].name.split(' ')[0]}` : behind != null && behind > 0 ? ` · ${behind} ahead` : ''}</span></div>
-      </section>
-
-      <div className="co-body">
-        <div className="co-main">
-          {qErr && <p className="err">{qErr}</p>}
-          {!rows ? <p className="muted">Finding your next owner…</p> : !next ? (
-            <div className="co-next empty"><b>No one left to call in your areas</b><span className="muted">Everyone with a number has been called or is being worked by someone else.</span></div>
-          ) : (
-            <div className="co-next">
-              <div className="co-who">
-                <span className="lbl">NEXT OWNER · {tab === 'never' ? 'NEVER CALLED' : 'CALLBACK THIS WEEK'}</span>
-                <button className="co-name link" onClick={() => onOpen(next.id)}>{ownersOf(next).map((o) => titleCase(o.name)).join(' & ')}</button>
-                <span className="muted">{[next.area, titleCase(placeOf(next) || ''), next.unit_type === 'Villa' && !/^Street /.test(next.unit_no) ? `villa ${next.unit_no}` : next.unit_no, next.beds ? bedsLabel(next.beds) : null].filter(Boolean).join(' · ')}</span>
-                {next.notes?.length ? <span className="faint">Last note: {next.notes[0].text}</span> : null}
-              </div>
-              <div className="co-acts">
-                <button className="btn" onClick={skip}>Skip</button>
-                <div className="co-calls">{ownersOf(next).filter((o) => o.has_phone && !o.dnc).map((o) => (
-                  <button key={o.id} className="co-call" onClick={() => setCalling({ r: next, owner: o })}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>
-                    Call {ownersOf(next).length > 1 ? titleCase(o.name.split(' ')[0]) : 'now'}<span className="co-num">{o.masked}</span></button>))}</div>
-              </div>
-            </div>
-          )}
-          {queue.length > 1 && <>
-            <div className="co-row"><b>Up next in your areas</b><span className="muted">Never called first, then this week's callbacks · held owners are skipped</span></div>
-            <div className="co-list">{queue.slice(1, 7).map((r) => (
-              <div key={r.id} className="co-item"><b>{titleCase(placeOf(r) || '')} · {r.unit_no}</b><span>{ownersOf(r).map((o) => titleCase(o.name)).join(' & ')}</span>
-                <span className="muted">{r.beds ? bedsLabel(r.beds) : ''}</span><span className="muted">{ownersOf(r)[0]?.masked}</span></div>))}</div>
-          </>}
-        </div>
-        <aside className="co-lb">
-          <div className="co-row"><b>Leaderboard</b><span className="muted">this call out</span></div>
-          {board.slice(0, 12).map((b, i) => (
-            <div key={b.name + i} className={'co-lbr' + (b.me ? ' me' : '')}><span className={i < 3 && coScore(co, b) ? 'top' : 'muted'}>{i + 1}</span>
-              <span>{b.name}{b.me ? ' (you)' : ''}</span><b className="n">{coScore(co, b)}<small> {coUnit(c.mode)}</small></b>
-              <span className={b.hot ? 'hotc' : 'faint'}>{c.mode === 'calls' ? (b.hot ? `${b.hot} hot` : '') : `${b.calls} calls`}</span></div>))}
-          {board.length > 12 && <div className="co-lbr"><span /><span className="muted">+{board.length - 12} more</span></div>}
-          <div style={{ flexGrow: 1 }} />
-          {boss && <div className="co-ctl"><button className="btn" onClick={() => control('calloutExtend')}>+10 min</button>
-            <button className="btn" onClick={() => { if (window.confirm('End the call out now for everyone?')) control('calloutEnd'); }}>End now</button></div>}
-        </aside>
+    <div className="gut"><section className="co-bar">
+      <div className="co-clock"><span className="co-kicker"><i />CALL OUT LIVE</span>
+        <b className="n">{mmss(end - now)}</b>
+        <span className="co-dim">left · ends {new Date(end).toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' })}{c.prize ? ` · ${c.prize}` : ''}</span></div>
+      <div className="co-mid">
+        <div className="co-dim co-row"><span>Team total <b className="n">{total}</b> {total === 1 ? 'call' : 'calls'}{teamTarget ? ` · target ${teamTarget}` : ''} · {CO_MODE[c.mode]}</span><span>{mmss(now - start)} in</span></div>
+        <div className="co-track"><i style={{ width: `${Math.min(100, teamTarget ? (total / teamTarget) * 100 : ((now - start) / (end - start)) * 100)}%` }} /></div>
+        <div className="co-lbs">{board.slice(0, 6).map((b, i) => (
+          <span key={b.name + i} className={b.me ? 'me' : ''}><em>{i + 1}</em>{b.me ? 'You' : b.name.split(' ')[0]} <b className="n">{coScore(co, b)}</b></span>))}
+          {board.length > 6 && <span className="more">+{board.length - 6}</span>}</div>
+        {ticker.length > 0 && <div className="co-tick">{ticker.map((t, i) => <span key={i}>{t}</span>)}</div>}
       </div>
-      {calling && <CallFlow unitId={calling.r.id} owner={{ id: calling.owner.id, name: calling.owner.name }} force={false}
-        label={`${calling.owner.name}, ${placeOf(calling.r)} ${calling.r.unit_no}`} onClose={(saved) => done(calling.r.id, saved)} />}
-    </main>
+      <div className="co-me"><span className="co-dim">YOU</span>
+        <b>{me && (coScore(co, me) || myIdx > 0) ? ordinal(myIdx + 1) : '–'}</b>
+        <span className="co-dim">{me ? `${pl(me.calls, 'call')}${me.hot ? ` · ${me.hot} hot` : ''}` : ''}
+          {ahead != null ? ` · ${ahead} behind ${board[myIdx - 1].name.split(' ')[0]}` : lead ? ` · ${lead} ahead` : ''}</span>
+        {boss && <span className="co-ctl"><button onClick={() => control('calloutExtend')}>+10 min</button>
+          <button onClick={() => { if (window.confirm('End the call out now for everyone?')) control('calloutEnd'); }}>End now</button></span>}</div>
+    </section></div>
   );
 }
 
