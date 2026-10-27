@@ -38,7 +38,8 @@ export function sortSql(k) {
     case 'rent': return sql`annual_rent desc nulls last, id`;
     case 'sale': return sql`last_sale_price desc nulls last, id`;
     case 'size': return sql`size_sqft desc nulls last, id`;
-    default: return sql`sort_pos`;
+    // Springs/Meadows/Lakes style "Street 1, Villa 3": street first, then villa number
+    default: return sql`subcommunity, (substring(unit_no from '^Street ([0-9]+),'))::int nulls first, sort_pos`;
   }
 }
 
