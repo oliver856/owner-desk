@@ -246,6 +246,50 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .r-dot .crown{position:absolute;top:-15px;font-style:normal;font-size:13px}
 .r-podium{display:flex;gap:10px;font-size:12px;white-space:nowrap} .r-podium b{font-variant-numeric:tabular-nums}
 .r-podium .mine{color:var(--accent);font-weight:600}
+.co-start{font:inherit;font-weight:600;background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:6px 14px;margin-left:14px;cursor:pointer}
+.co-pill{display:inline-flex;align-items:center;gap:6px;margin-left:14px;font-weight:600;color:var(--accent)} .co-pill i{width:8px;height:8px;border-radius:50%;background:#ff6b5f;animation:copulse 1.2s infinite}
+@keyframes copulse{50%{opacity:.3}}
+.box.co-setup{width:min(560px,calc(100vw - 32px));display:flex;flex-direction:column;gap:16px} .co-setup h3{margin:0 0 4px} .co-setup p{margin:0}
+.co-f{display:flex;flex-direction:column;gap:7px} .co-f .lbl,.co-next .lbl{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.co-f input{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.co-chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center} .co-chips button{font:inherit;font-size:14px;padding:8px 14px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:9px;cursor:pointer}
+.co-chips.round button{border-radius:999px} .co-chips button.on{border:2px solid var(--accent);color:var(--accent);font-weight:650;padding:7px 13px} .co-chips input{width:100px}
+.co-teams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;font-size:14px} .co-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.co-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:14px;flex-wrap:wrap}
+.co-cover{position:fixed;inset:0;z-index:60;background:#0f2e2b;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px;overflow:auto}
+.co-kicker{font-size:12px;font-weight:700;letter-spacing:.13em;color:#6cc3b8;display:inline-flex;align-items:center;gap:8px} .co-kicker i{width:8px;height:8px;border-radius:50%;background:#ff6b5f;animation:copulse 1.2s infinite}
+.co-big{font-size:180px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums} .co-sub{font-size:16px;color:#a9c9c4}
+.co-cover.results h2{margin:0;font-size:40px;letter-spacing:-.02em}
+.co-podium{display:flex;align-items:flex-end;gap:14px;margin-top:14px} .co-step{width:200px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.co-step b{font-size:19px} .co-step span{font-size:13px;color:#a9c9c4}
+.co-step div{width:100%;border-radius:14px 14px 0 0;color:#0f2e2b;font-size:40px;font-weight:800;padding-top:12px;margin-top:4px}
+.co-step.s1 div{height:190px;background:#f2c14e} .co-step.s2 div{height:140px;background:#c9d1cf} .co-step.s3 div{height:100px;background:#d79a6a} .co-step.gap{visibility:hidden}
+.co-awards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center} .co-awards div{background:rgba(255,255,255,.08);border-radius:12px;padding:12px 18px;display:flex;flex-direction:column;gap:2px;min-width:180px;text-align:left}
+.co-awards span{font-size:11px;color:#a9c9c4;font-weight:600;letter-spacing:.06em} .co-awards b{font-size:17px}
+.co-done{font:inherit;font-size:14px;font-weight:650;padding:12px 22px;border:none;background:#6cc3b8;color:#0b1f1c;border-radius:10px;cursor:pointer;margin-top:6px}
+.co-live{display:flex;flex-direction:column}
+.co-bar{background:#0f2e2b;color:#fff;padding:18px 28px;display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+.co-clock{display:flex;flex-direction:column;gap:2px;min-width:200px} .co-clock>b{font-size:52px;line-height:1;font-weight:700;letter-spacing:-.02em}
+.co-dim{font-size:13px;color:#a9c9c4} .co-mid{flex:1 1 380px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.co-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap} .co-mid .co-row b{color:#fff;font-size:15px}
+.co-track{height:10px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden} .co-track i{display:block;height:100%;background:#6cc3b8;border-radius:999px;transition:width .6s}
+.co-tick{display:flex;gap:8px;flex-wrap:wrap} .co-tick span{background:rgba(255,255,255,.1);border-radius:999px;padding:3px 11px;font-size:13px}
+.co-me{display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:160px} .co-me>b{font-size:38px;line-height:1}
+.co-body{display:flex;gap:22px;padding:22px 28px 40px;flex-wrap:wrap;align-items:flex-start}
+.co-main{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:14px} .co-main .co-row b{font-size:15px}
+.co-next{border:2px solid var(--accent);border-radius:16px;padding:20px 22px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.co-next.empty{flex-direction:column;align-items:flex-start;gap:4px;border-style:dashed} .co-who{flex:1 1 320px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.co-name{font-size:24px;font-weight:650;color:var(--ink);text-align:left} .co-who .muted{font-size:14px}
+.co-acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap} .co-calls{display:flex;flex-direction:column;gap:8px}
+.co-call{font:inherit;font-size:16px;font-weight:700;padding:13px 22px;border:none;background:var(--blue);color:#fff;border-radius:12px;display:flex;align-items:center;gap:9px;cursor:pointer}
+.co-call .co-num{font-weight:400;font-size:13px;opacity:.85}
+.co-list{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.co-item{display:grid;grid-template-columns:minmax(150px,1.1fr) minmax(0,2fr) 90px 150px;gap:10px;padding:11px 16px;border-top:1px solid var(--line);font-size:14px} .co-item:first-child{border-top:none}
+.co-lb{flex:1 1 320px;max-width:400px;border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:2px;min-height:420px}
+.co-lb>.co-row{margin-bottom:8px} .co-lbr{display:grid;grid-template-columns:28px minmax(0,1fr) 70px 64px;align-items:center;padding:8px;border-radius:9px;font-size:14px}
+.co-lbr.me{background:var(--hover);outline:1px solid var(--accent)} .co-lbr .top{color:var(--warn);font-weight:700} .co-lbr b{text-align:right} .co-lbr b small{color:var(--muted);font-weight:400}
+.co-lbr>span:last-child{text-align:right;font-size:12px} .co-ctl{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--line);padding-top:12px}
+@media (max-width:760px){.co-item{grid-template-columns:1fr 1fr}.co-big{font-size:120px}.co-podium{gap:6px}.co-step{width:30vw}}
 .dash{padding-block:20px 60px;max-width:1300px}
 .teamp .dash-ctl input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-width:200px}
 .teamp .card{margin-bottom:12px} .teamp td.wrapc{white-space:normal;max-width:340px} .teamp tr.idle td{color:var(--faint)}
@@ -544,6 +588,30 @@ function Desk() {
     return () => clearInterval(t);
   }, [refreshMe]);
 
+  // Call out mode: polled so every screen switches together (every 4s while one runs, every 15s otherwise)
+  const [co, setCo] = useState(null);
+  const [startOpen, setStartOpen] = useState(false);
+  const [, setTick] = useState(0);
+  const loadCo = useCallback(() => api('/api/desk?action=callout')
+    .then((j) => setCo({ ...j, offset: j.callout ? new Date(j.callout.serverNow).getTime() - Date.now() : 0 })).catch(() => {}), []);
+  const phase = calloutPhase(co);
+  useEffect(() => {
+    loadCo();
+    const fast = phase === 'countdown' || phase === 'live';
+    const t = setInterval(() => { if (document.visibilityState === 'visible') loadCo(); }, fast ? 4000 : 15000);
+    return () => clearInterval(t);
+  }, [loadCo, phase]);
+  useEffect(() => {
+    if (phase !== 'countdown' && phase !== 'live') return;
+    const t = setInterval(() => setTick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+  const [seenTick, setSeenTick] = useState(0);
+  const resultsSeen = co?.callout ? (() => { try { return localStorage.getItem('callout-seen-' + co.callout.id) === '1'; } catch { return false; } })() : true;
+  const closeResults = () => { try { localStorage.setItem('callout-seen-' + co.callout.id, '1'); } catch {} setSeenTick(seenTick + 1); };
+  const boss = me && me.staff.role !== 'broker';
+  const calloutOn = phase === 'live' && co?.meIn;
+
   // Copy protection: blocks copying owner data and logs the attempt
   useEffect(() => {
     const onCopy = (e) => {
@@ -572,6 +640,9 @@ function Desk() {
             {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
             <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
           </nav>
+          {boss && (phase === 'live' || phase === 'countdown'
+            ? <span className="co-pill"><i />Call out running</span>
+            : <button className="co-start" onClick={() => setStartOpen(true)}>Start call out</button>)}
           <div className="right">
             {me && <span>Profiles <span className="n">{me.caps.profiles}/{me.caps.profileCap}</span></span>}
             {me && <span>Calls <span className="n">{me.caps.calls}/{me.caps.callCap}</span></span>}
@@ -581,8 +652,11 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? (me ? <Owners places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : view === 'team' ? <Team myRole={me?.staff.role} /> : <Activity />}
+      {view === 'owners' && calloutOn ? <CalloutLive co={co} boss={boss} onChange={loadCo} onCaps={refreshMe} onOpen={setUnitId} /> : view === 'owners' ? (me ? <Owners places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : view === 'team' ? <Team myRole={me?.staff.role} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
+      {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
+      {phase === 'done' && co?.meIn && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
+      {startOpen && <StartCallout onClose={() => setStartOpen(false)} onStarted={() => { setStartOpen(false); loadCo(); }} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -1548,6 +1622,222 @@ const ACTIVITY_LABEL = {
 const ACTIVITY_BAD = ['call_blocked_hold', 'copy_blocked', 'limit_hit', 'call_blocked_hours', 'dial_refused'];
 
 // ── Dashboard: managers see their team, directors and admins see every team ──
+// ── Call out mode ─────────────────────────────────────────────────────────
+// phase: 'countdown' (10s before the start), 'live', 'done' (finished in the last 15 min) or null
+function calloutPhase(co) {
+  const c = co?.callout;
+  if (!c) return null;
+  const now = Date.now() + (co.offset || 0);
+  if (c.running && now < new Date(c.startsAt).getTime()) return 'countdown';
+  if (c.running && now < new Date(c.endsAt).getTime()) return 'live';
+  return 'done';
+}
+const coNow = (co) => Date.now() + (co?.offset || 0);
+const mmss = (ms) => { const t = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+const CO_MODE = { calls: 'Most calls wins', hot: 'Most hot leads wins', points: 'Points: call 1, hot lead 5' };
+const coScore = (co, b) => (co.callout.mode === 'hot' ? b.hot : co.callout.mode === 'points' ? b.points : b.calls);
+const coUnit = (mode) => (mode === 'hot' ? 'hot' : mode === 'points' ? 'pts' : 'calls');
+const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10 < 4 ? n % 10 : 0] || 'th');
+
+function StartCallout({ onClose, onStarted }) {
+  const [info, setInfo] = useState(null);
+  const [v, setV] = useState({ minutes: 45, custom: '', teams: [], target: 15, prize: '', mode: 'calls' });
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api('/api/desk?action=calloutTeams').then(setInfo).catch((e) => setErr(e.message)); }, []);
+  const mins = v.minutes === 'custom' ? Number(v.custom) || 0 : v.minutes;
+  const manager = info?.role === 'manager';
+  const people = info ? (manager ? info.teams.filter((t) => t.team === (info.myTeam || 'No team'))
+    : v.teams.length ? info.teams.filter((t) => v.teams.includes(t.team)) : info.teams).reduce((a, t) => a + t.people, 0) : 0;
+  const toggle = (t) => setV({ ...v, teams: v.teams.includes(t) ? v.teams.filter((x) => x !== t) : [...v.teams, t] });
+  async function start() {
+    if (mins < 5 || mins > 180) return setErr('Pick between 5 and 180 minutes.');
+    setBusy(true); setErr('');
+    try { await api('/api/desk?action=calloutStart', { method: 'POST', body: { ...v, minutes: mins } }); onStarted(); }
+    catch (e) { setErr(e.message); setBusy(false); }
+  }
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="box co-setup" role="dialog" aria-label="Start a call out">
+        <div><h3>Start a call out</h3>
+          <p className="muted">Everyone in it switches into call out mode after a 10 second countdown. Only calls dialled during the timer count.</p></div>
+        <div className="co-f"><span className="lbl">How long</span>
+          <div className="co-chips">{[15, 30, 45, 60].map((m) => <button key={m} className={v.minutes === m ? 'on' : ''} onClick={() => setV({ ...v, minutes: m })}>{m} min</button>)}
+            <button className={v.minutes === 'custom' ? 'on' : ''} onClick={() => setV({ ...v, minutes: 'custom' })}>Custom</button>
+            {v.minutes === 'custom' && <input type="number" min="5" max="180" placeholder="Minutes" value={v.custom} onChange={(e) => setV({ ...v, custom: e.target.value })} autoFocus />}</div></div>
+        <div className="co-f"><span className="lbl">Who's in</span>
+          {!info ? <span className="faint">Loading…</span> : manager ? <span>Your team ({info.myTeam || 'No team'}) · {pl(people, 'person').replace('persons', 'people')}</span>
+            : <div className="co-teams">
+              <label className="cb"><input type="checkbox" checked={v.teams.length === 0} onChange={() => setV({ ...v, teams: [] })} />Everyone ({pl(info.teams.reduce((a, t) => a + t.people, 0), 'person').replace('persons', 'people')})</label>
+              {info.teams.map((t) => <label key={t.team} className="cb"><input type="checkbox" checked={v.teams.includes(t.team)} onChange={() => toggle(t.team)} />{t.team} ({t.people})</label>)}
+            </div>}</div>
+        <div className="co-two">
+          <label className="co-f"><span className="lbl">Target per person</span><input type="number" min="0" value={v.target} onChange={(e) => setV({ ...v, target: e.target.value })} /></label>
+          <label className="co-f"><span className="lbl">Prize (optional)</span><input maxLength={80} placeholder="e.g. Lunch on Ollie" value={v.prize} onChange={(e) => setV({ ...v, prize: e.target.value })} /></label>
+        </div>
+        <div className="co-f"><span className="lbl">What wins</span>
+          <div className="co-chips round">{[['calls', 'Most calls'], ['hot', 'Most hot leads'], ['points', 'Points (call 1, hot 5)']].map(([k, l]) =>
+            <button key={k} className={v.mode === k ? 'on' : ''} onClick={() => setV({ ...v, mode: k })}>{l}</button>)}</div></div>
+        {err && <p className="err" style={{ margin: 0 }}>{err}</p>}
+        <div className="co-foot"><span className="muted">{people ? `${pl(people, 'person').replace('persons', 'people')} · team target ${(Number(v.target) || 0) * people} calls` : ''}</span>
+          <div style={{ display: 'flex', gap: 8 }}><button className="btn" onClick={onClose}>Cancel</button>
+            <button className="btn primary" disabled={busy || !info} onClick={start}>{busy ? 'Starting…' : `Start ${mins || ''} min call out`}</button></div></div>
+      </div>
+    </div>
+  );
+}
+
+function CalloutCountdown({ co }) {
+  const left = Math.ceil((new Date(co.callout.startsAt).getTime() - coNow(co)) / 1000);
+  return (
+    <div className="co-cover" role="status" aria-live="polite">
+      <span className="co-kicker">CALL OUT · {co.callout.minutes} MIN{co.callout.prize ? ` · ${co.callout.prize.toUpperCase()}` : ''}</span>
+      <b className="co-big">{Math.max(1, left)}</b>
+      <span className="co-sub">Get your phone ready. {CO_MODE[co.callout.mode]}.</span>
+    </div>
+  );
+}
+
+function CalloutLive({ co, boss, onChange, onCaps, onOpen }) {
+  const c = co.callout;
+  const board = co.board || [];
+  const myIdx = board.findIndex((b) => b.me);
+  const me = board[myIdx];
+  const total = board.reduce((a, b) => a + b.calls, 0);
+  const teamTarget = (c.target || 0) * board.length;
+  const now = coNow(co);
+  const start = new Date(c.startsAt).getTime(), end = new Date(c.endsAt).getTime();
+  // Overtakes since the last poll go in the ticker with the hot leads
+  const prev = useRef(null);
+  const [moves, setMoves] = useState([]);
+  useEffect(() => {
+    const names = board.map((b) => b.name);
+    if (prev.current) {
+      const out = [];
+      names.forEach((n, i) => { const was = prev.current.indexOf(n); if (was > i && prev.current[i] && prev.current[i] !== n && i < 5) out.push(`${n.split(' ')[0]} passed ${prev.current[i].split(' ')[0]} for ${ordinal(i + 1)}`); });
+      if (out.length) setMoves((m) => [...out, ...m].slice(0, 3));
+    }
+    prev.current = names;
+  }, [board.map((b) => b.name).join('|')]); // eslint-disable-line
+  const ticker = [...moves, ...(co.recent || []).map((r) => `${r.name.split(' ')[0]}: ${r.what}`)].slice(0, 4);
+  const ahead = myIdx > 0 ? coScore(co, board[myIdx - 1]) - coScore(co, me) : null;
+  const behind = myIdx === 0 && board[1] ? coScore(co, me) - coScore(co, board[1]) : null;
+
+  // The queue: never-called owners with a number in my areas, held owners skipped; then this week's callbacks
+  const [rows, setRows] = useState(null);
+  const [tab, setTab] = useState('never');
+  const [page, setPage] = useState(1);
+  const [skipped, setSkipped] = useState([]);
+  const [calling, setCalling] = useState(null);
+  const [qErr, setQErr] = useState('');
+  const loadQ = useCallback((t, p, keep) => api(`/api/desk?action=units&more=1&free=1&phone=1&sort=unit&tab=${t}&page=${p}`)
+    .then((j) => {
+      if (!j.rows.length && t === 'never' && p === 1) { setTab('callbacks'); return loadQ('callbacks', 1, false); }
+      setRows((r) => (keep && r ? [...r, ...j.rows.filter((x) => !r.some((y) => y.id === x.id))] : j.rows)); setPage(p); setQErr('');
+    }).catch((e) => setQErr(e.message)), []);
+  useEffect(() => { loadQ('never', 1, false); }, [loadQ]);
+  const queue = (rows || []).filter((r) => !skipped.includes(r.id));
+  useEffect(() => { if (rows && queue.length < 4 && rows.length >= page * 100) loadQ(tab, page + 1, true); }, [queue.length]); // eslint-disable-line
+  const next = queue[0];
+  const done = (id, saved) => { setCalling(null); onCaps(); if (saved) { setRows((r) => r.filter((x) => x.id !== id)); onChange(); } };
+  const skip = () => next && setSkipped((s) => [...s, next.id]);
+  const control = (a) => api(`/api/desk?action=${a}`, { method: 'POST' }).then(onChange).catch(() => {});
+
+  return (
+    <main className="co-live">
+      <section className="co-bar">
+        <div className="co-clock"><span className="co-kicker"><i />CALL OUT LIVE</span>
+          <b className="n">{mmss(end - now)}</b>
+          <span className="co-dim">left · ends {new Date(end).toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' })}{c.prize ? ` · prize: ${c.prize}` : ''}</span></div>
+        <div className="co-mid">
+          <div className="co-dim co-row"><span>Team total <b className="n">{total}</b> {total === 1 ? 'call' : 'calls'}{teamTarget ? ` · target ${teamTarget}` : ''} · {CO_MODE[c.mode]}</span><span>{mmss(now - start)} in</span></div>
+          <div className="co-track"><i style={{ width: `${Math.min(100, teamTarget ? (total / teamTarget) * 100 : ((now - start) / (end - start)) * 100)}%` }} /></div>
+          <div className="co-tick">{ticker.length ? ticker.map((t, i) => <span key={i}>{t}</span>) : <span>First calls coming in…</span>}</div>
+        </div>
+        <div className="co-me"><span className="co-dim">YOU</span>
+          <b>{me ? (coScore(co, me) || myIdx > 0 ? ordinal(myIdx + 1) : '–') : '–'}</b>
+          <span className="co-dim">{me ? <><b className="n" style={{ color: '#fff' }}>{me.calls}</b> {me.calls === 1 ? 'call' : 'calls'}{me.hot ? ` · ${me.hot} hot` : ''}</> : ''}
+            {ahead != null ? ` · ${ahead} behind ${board[myIdx - 1].name.split(' ')[0]}` : behind != null && behind > 0 ? ` · ${behind} ahead` : ''}</span></div>
+      </section>
+
+      <div className="co-body">
+        <div className="co-main">
+          {qErr && <p className="err">{qErr}</p>}
+          {!rows ? <p className="muted">Finding your next owner…</p> : !next ? (
+            <div className="co-next empty"><b>No one left to call in your areas</b><span className="muted">Everyone with a number has been called or is being worked by someone else.</span></div>
+          ) : (
+            <div className="co-next">
+              <div className="co-who">
+                <span className="lbl">NEXT OWNER · {tab === 'never' ? 'NEVER CALLED' : 'CALLBACK THIS WEEK'}</span>
+                <button className="co-name link" onClick={() => onOpen(next.id)}>{ownersOf(next).map((o) => titleCase(o.name)).join(' & ')}</button>
+                <span className="muted">{[next.area, titleCase(placeOf(next) || ''), next.unit_type === 'Villa' && !/^Street /.test(next.unit_no) ? `villa ${next.unit_no}` : next.unit_no, next.beds ? bedsLabel(next.beds) : null].filter(Boolean).join(' · ')}</span>
+                {next.notes?.length ? <span className="faint">Last note: {next.notes[0].text}</span> : null}
+              </div>
+              <div className="co-acts">
+                <button className="btn" onClick={skip}>Skip</button>
+                <div className="co-calls">{ownersOf(next).filter((o) => o.has_phone && !o.dnc).map((o) => (
+                  <button key={o.id} className="co-call" onClick={() => setCalling({ r: next, owner: o })}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>
+                    Call {ownersOf(next).length > 1 ? titleCase(o.name.split(' ')[0]) : 'now'}<span className="co-num">{o.masked}</span></button>))}</div>
+              </div>
+            </div>
+          )}
+          {queue.length > 1 && <>
+            <div className="co-row"><b>Up next in your areas</b><span className="muted">Never called first, then this week's callbacks · held owners are skipped</span></div>
+            <div className="co-list">{queue.slice(1, 7).map((r) => (
+              <div key={r.id} className="co-item"><b>{titleCase(placeOf(r) || '')} · {r.unit_no}</b><span>{ownersOf(r).map((o) => titleCase(o.name)).join(' & ')}</span>
+                <span className="muted">{r.beds ? bedsLabel(r.beds) : ''}</span><span className="muted">{ownersOf(r)[0]?.masked}</span></div>))}</div>
+          </>}
+        </div>
+        <aside className="co-lb">
+          <div className="co-row"><b>Leaderboard</b><span className="muted">this call out</span></div>
+          {board.slice(0, 12).map((b, i) => (
+            <div key={b.name + i} className={'co-lbr' + (b.me ? ' me' : '')}><span className={i < 3 && coScore(co, b) ? 'top' : 'muted'}>{i + 1}</span>
+              <span>{b.name}{b.me ? ' (you)' : ''}</span><b className="n">{coScore(co, b)}<small> {coUnit(c.mode)}</small></b>
+              <span className={b.hot ? 'hotc' : 'faint'}>{c.mode === 'calls' ? (b.hot ? `${b.hot} hot` : '') : `${b.calls} calls`}</span></div>))}
+          {board.length > 12 && <div className="co-lbr"><span /><span className="muted">+{board.length - 12} more</span></div>}
+          <div style={{ flexGrow: 1 }} />
+          {boss && <div className="co-ctl"><button className="btn" onClick={() => control('calloutExtend')}>+10 min</button>
+            <button className="btn" onClick={() => { if (window.confirm('End the call out now for everyone?')) control('calloutEnd'); }}>End now</button></div>}
+        </aside>
+      </div>
+      {calling && <CallFlow unitId={calling.r.id} owner={{ id: calling.owner.id, name: calling.owner.name }} force={false}
+        label={`${calling.owner.name}, ${placeOf(calling.r)} ${calling.r.unit_no}`} onClose={(saved) => done(calling.r.id, saved)} />}
+    </main>
+  );
+}
+
+function CalloutResults({ co, onClose }) {
+  const c = co.callout;
+  const board = co.board || [];
+  const total = board.reduce((a, b) => a + b.calls, 0);
+  const hot = board.reduce((a, b) => a + b.hot, 0);
+  const wa = board.reduce((a, b) => a + b.wa, 0);
+  const winner = board[0] && coScore(co, board[0]) > 0 ? board[0] : null;
+  const myIdx = board.findIndex((b) => b.me);
+  const me = board[myIdx];
+  const topHot = [...board].sort((a, b) => b.hot - a.hot)[0];
+  const ranked = board.filter((b) => coScore(co, b) > 0);
+  const podium = [ranked[1], ranked[0], ranked[2]];
+  return (
+    <div className="co-cover results" role="dialog" aria-label="Call out results">
+      <span className="co-kicker">CALL OUT FINISHED · {c.minutes} MIN</span>
+      <h2>{winner ? `${winner.name.split(' ')[0]} wins${c.prize ? ` ${c.prize.charAt(0).toLowerCase() + c.prize.slice(1)}` : '!'}` : 'Call out finished'}</h2>
+      <span className="co-sub">{pl(total, 'call')} across the team{c.target ? ` · target was ${c.target * board.length}` : ''} · {pl(hot, 'hot lead')} · {pl(wa, 'WhatsApp')} sent</span>
+      <div className="co-podium">{podium.map((b, i) => b ? (
+        <div key={i} className={'co-step s' + [2, 1, 3][i]}><b>{b.name.split(' ')[0]}</b><span>{pl(b.calls, 'call')} · {b.hot} hot</span><div>{[2, 1, 3][i]}</div></div>
+      ) : <div key={i} className={'co-step s' + [2, 1, 3][i] + ' gap'} />)}</div>
+      <div className="co-awards">
+        {topHot && topHot.hot > 0 && <div><span>MOST HOT LEADS</span><b>{topHot.name.split(' ')[0]} · {topHot.hot}</b></div>}
+        {me && <div><span>YOUR RESULT</span><b>{ordinal(myIdx + 1)} · {pl(me.calls, 'call')}{me.hot ? ` · ${me.hot} hot` : ''}</b></div>}
+        <div><span>PEOPLE CALLING</span><b>{board.filter((b) => b.calls > 0).length} of {board.length}</b></div>
+      </div>
+      <button className="co-done" onClick={onClose}>Back to my owners</button>
+    </div>
+  );
+}
+
 // ── Team: add people and choose their areas (admins and directors) ─────────
 const ROLE_LABEL = { broker: 'Broker', manager: 'Manager', director: 'Director', admin: 'Admin' };
 function Team({ myRole }) {
