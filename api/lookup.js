@@ -3,7 +3,7 @@
 // Owners found here go into a separate "Lookups" area, so the Owners list stays untouched.
 // The API key lives only in Vercel (DXB_HAWK_KEY). Full numbers never reach the laptop.
 import crypto from 'node:crypto';
-import { sql, route, query, body, audit, setting } from './_lib/core.js';
+import { sql, schemaOk, route, query, body, audit, setting } from './_lib/core.js';
 
 const BASE = process.env.DXB_HAWK_URL || 'https://api.sosvoid.com';
 const KEY = () => process.env.DXB_HAWK_KEY || '';
@@ -11,6 +11,7 @@ const KEY = () => process.env.DXB_HAWK_KEY || '';
 let ready = null;
 function ensure() {
   ready ??= (async () => {
+    if (await schemaOk()) return;
     await sql`insert into desk.areas (name) values ('Lookups') on conflict (name) do nothing`;
     await sql`create table if not exists desk.lookups (
       id bigint generated always as identity primary key,
