@@ -300,7 +300,15 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .msg-h .link{margin-left:auto} .msg-f textarea{font:inherit;font-size:14px;line-height:1.45;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical}
 .msg-std{margin:0;color:var(--muted)} .msg-prev{background:#e7f6e9;color:#14301b;border-radius:10px;padding:10px 12px;font-size:13px;white-space:pre-wrap}
 .msg-prev .lbl{display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#4b6b53;margin-bottom:4px}
-.msg-ed .acts{display:flex;justify-content:flex-end;gap:8px}
+.msg-ed .acts{display:flex;justify-content:flex-end;align-items:center;gap:8px}
+.msg-list{display:flex;flex-direction:column;gap:12px;max-height:min(58vh,560px);overflow:auto;padding-right:4px}
+.msg-group{display:flex;flex-direction:column;gap:4px} .msg-group>.lbl{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.msg-row{border:1px solid var(--line);border-radius:10px} .msg-row.open{border-color:var(--accent)}
+.msg-top{display:grid;grid-template-columns:max-content max-content minmax(0,1fr);gap:10px;align-items:center;width:100%;text-align:left;background:none;border:none;padding:9px 12px;cursor:pointer;font:inherit;color:var(--ink)}
+.msg-top .tag{font-size:11px;border-radius:999px;padding:1px 8px;background:var(--hover);color:var(--muted)} .msg-top .tag.mine{background:var(--accent);color:var(--accent-ink)}
+.msg-peek{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-body{display:flex;flex-direction:column;gap:8px;padding:0 12px 12px} .msg-body textarea{font:inherit;font-size:14px;line-height:1.45;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical}
+.msg-acts{display:flex;gap:16px;flex-wrap:wrap}
 .dash{padding-block:20px 60px;max-width:1300px}
 .teamp .dash-ctl input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-width:200px}
 .teamp .card{margin-bottom:12px} .teamp td.wrapc{white-space:normal;max-width:340px} .teamp tr.idle td{color:var(--faint)}
@@ -2029,55 +2037,83 @@ function whatsappText(f, me) {
     : st ? `villa ${st[2]} on Street ${st[1]} in ${titleCase(f.subcommunity)}`
     : f.unit_type === 'Villa' ? `villa ${f.unit_no} in ${titleCase(f.subcommunity)}` : `apartment ${f.unit_no} in ${titleCase(f.building)}`;
   const v = { first, me: String(me || '').split(/\s+/)[0], property: place, area: f.area || '' };
-  const own = f.templates || {};
-  const mine = isNoAnswer(f) ? own.noanswer : own.spoke;
-  if (mine) return fillTemplate(mine, v);
   const n = String(f.note || '').toLowerCase();
   const byNote = Object.keys(WHATSAPP_BY_NOTE).sort((a, b) => b.length - a.length).find((k) => n.startsWith(k.toLowerCase()));
-  return fillTemplate(byNote ? WHATSAPP_BY_NOTE[byNote] : WHATSAPP[f.outcome] || WHATSAPP.default, v);
+  const key = byNote || (WHATSAPP[f.outcome] ? f.outcome : 'default');
+  const own = f.templates || {};
+  const mine = own[key] || (isNoAnswer(f) ? own.noanswer : own.spoke);   // noanswer/spoke: messages saved by the first version
+  return fillTemplate(mine || standardMessage(key), v);
 }
+const standardMessage = (key) => WHATSAPP_BY_NOTE[key] || WHATSAPP[key] || WHATSAPP.default;
+// The messages someone can make their own, in the order the editor shows them
+const MESSAGE_GROUPS = [
+  ['Cold', ['Called, no reply', 'Called, unreachable', 'No answer']],
+  ['Hot', ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Wants to sell', 'Wants to rent', 'Wants to buy', 'Call back']],
+  ['Anything else', ['default']],
+];
+const msgLabel = (k) => (k === 'default' ? 'Any other outcome' : k === 'No answer' || k === 'Call back' ? `${k} (outcome)` : k);
 
-// Edit your own WhatsApp messages (admins and directors can open anyone's from the Team page)
+// Edit your own WhatsApp messages, one per note (admins and directors can open anyone's from the Team page).
+// Every message starts as the standard one; change any of them, and put any back to standard.
 function MessagesEditor({ user, onClose }) {
   const [d, setD] = useState(null);
-  const [v, setV] = useState({ noanswer: '', spoke: '' });
+  const [v, setV] = useState({});
+  const [open, setOpen] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
-    api('/api/desk?action=templates' + (user ? '&user=' + user : '')).then((j) => { setD(j); setV({ noanswer: j.templates.noanswer || '', spoke: j.templates.spoke || '' }); })
-      .catch((e) => setErr(e.message));
+    api('/api/desk?action=templates' + (user ? '&user=' + user : '')).then((j) => {
+      const t = { ...j.templates };
+      // Carry over messages saved by the first version (one for all no-answers, one for everything else)
+      if (t.noanswer) MESSAGE_GROUPS[0][1].forEach((k) => { t[k] ??= t.noanswer; });
+      if (t.spoke) [...MESSAGE_GROUPS[1][1], 'default'].forEach((k) => { t[k] ??= t.spoke; });
+      delete t.noanswer; delete t.spoke;
+      setD(j); setV(t);
+    }).catch((e) => setErr(e.message));
   }, [user]);
   const first = d ? String(d.name).split(/\s+/)[0] : '';
   const ex = { first: 'Alaa', me: first, property: 'villa XK2060B in Zinnia', area: 'Damac Hills 2' };
-  const std = { noanswer: WHATSAPP['No answer'], spoke: WHATSAPP.default };
+  const custom = Object.keys(v).filter((k) => v[k]).length;
   async function save() {
     setBusy(true); setErr('');
     try { await api('/api/desk?action=saveTemplates', { method: 'POST', body: { user, templates: v } }); setSaved(true); setTimeout(onClose, 700); }
     catch (e) { setErr(e.message); }
     setBusy(false);
   }
-  const box = (k, title, hint) => (
-    <div className="msg-f">
-      <div className="msg-h"><b>{title}</b><span className="muted">{hint}</span>
-        {v[k] ? <button className="link" onClick={() => setV({ ...v, [k]: '' })}>Use the standard message</button>
-          : <button className="link" onClick={() => setV({ ...v, [k]: std[k] })}>Write my own</button>}</div>
-      {v[k] ? <textarea rows={7} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} />
-        : <p className="msg-std">Standard message is used{k === 'spoke' ? ' (it changes with the note you pick: wants to sell, follow up and so on)' : ''}.</p>}
-      <div className="msg-prev"><span className="lbl">Preview</span><div>{fillTemplate(v[k] || (k === 'spoke' ? WHATSAPP_BY_NOTE['In discussion'] : std[k]), ex)}</div></div>
-    </div>);
+  const cold = MESSAGE_GROUPS[0][1];
   return (
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="box msg-ed" role="dialog" aria-label="WhatsApp messages">
         <h3>{user && d ? `${d.name}'s WhatsApp messages` : 'My WhatsApp messages'}</h3>
-        <p className="muted" style={{ margin: 0 }}>These fill in by themselves after each call. Use <code>{'{first}'}</code> for the owner's first name, <code>{'{me}'}</code> for {user ? 'their' : 'your'} first name,
-          <code>{'{property}'}</code> for the unit (e.g. villa XK2060B in Zinnia) and <code>{'{area}'}</code> for the area (e.g. Damac Hills 2). It can always be edited before sending.</p>
-        {!d && !err ? <p className="muted">Loading…</p> : <>
-          {box('noanswer', 'No answer', 'Called, no reply · Called, unreachable · No answer')}
-          {box('spoke', 'Spoke to them', 'Every other note or outcome')}
-        </>}
+        <p className="muted" style={{ margin: 0 }}>Each note has its own message. Change any of them to make it {user ? 'theirs' : 'yours'}, or leave the standard one.
+          Use <code>{'{first}'}</code> owner's first name, <code>{'{me}'}</code> {user ? 'their' : 'your'} first name, <code>{'{property}'}</code> the unit (villa XK2060B in Zinnia), <code>{'{area}'}</code> the area (Damac Hills 2).</p>
+        {!d && !err ? <p className="muted">Loading…</p> : <div className="msg-list">
+          {MESSAGE_GROUPS.map(([g, keys]) => (
+            <div key={g} className="msg-group"><span className={'lbl ' + (g === 'Cold' ? 'coldc' : g === 'Hot' ? 'hotc' : '')}>{g}</span>
+              {keys.map((k) => {
+                const mine = !!v[k];
+                const isOpen = open === k;
+                return (
+                  <div key={k} className={'msg-row' + (isOpen ? ' open' : '')}>
+                    <button className="msg-top" onClick={() => setOpen(isOpen ? null : k)} aria-expanded={isOpen}>
+                      <b>{msgLabel(k)}</b><span className={mine ? 'tag mine' : 'tag'}>{mine ? (user ? 'Their own' : 'Your own') : 'Standard'}</span>
+                      <span className="msg-peek">{fillTemplate(v[k] || standardMessage(k), ex).replace(/\s+/g, ' ')}</span></button>
+                    {isOpen && <div className="msg-body">
+                      <textarea rows={7} value={v[k] || standardMessage(k)} onChange={(e) => setV({ ...v, [k]: e.target.value === standardMessage(k) ? '' : e.target.value })} />
+                      <div className="msg-prev"><span className="lbl">Preview</span><div>{fillTemplate(v[k] || standardMessage(k), ex)}</div></div>
+                      <div className="msg-acts">
+                        {mine && <button className="link" onClick={() => setV({ ...v, [k]: '' })}>Put back the standard message</button>}
+                        {mine && cold.includes(k) && <button className="link" onClick={() => setV({ ...v, ...Object.fromEntries(cold.map((c) => [c, v[k]])) })}>Use this for all three no-answer messages</button>}
+                      </div>
+                    </div>}
+                  </div>);
+              })}
+            </div>))}
+        </div>}
         {err && <p className="err" style={{ margin: 0 }}>{err}</p>}
-        <div className="acts"><button className="btn" onClick={onClose}>Cancel</button>
+        <div className="acts"><span className="muted" style={{ marginRight: 'auto' }}>{custom ? `${custom} changed` : 'All standard'}</span>
+          <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn primary" disabled={busy || !d} onClick={save}>{saved ? 'Saved' : busy ? 'Saving…' : 'Save messages'}</button></div>
       </div>
     </div>
