@@ -16,8 +16,7 @@ export function ensureTemplates() {
   return ready;
 }
 
-export const TEMPLATE_KEYS = ['noanswer', 'spoke'];
-
+// One message per note/outcome name (e.g. 'Called, no reply', 'Wants to sell', 'default'). Missing = the standard one.
 export async function getTemplates(userId) {
   await ensureTemplates();
   const [r] = await sql`select templates from desk.staff_templates where user_id = ${userId}`;
@@ -27,7 +26,11 @@ export async function getTemplates(userId) {
 export async function saveTemplates(userId, t) {
   await ensureTemplates();
   const clean = {};
-  for (const k of TEMPLATE_KEYS) { const v = String(t?.[k] || '').replace(/\r/g, '').trim().slice(0, 1000); if (v) clean[k] = v; }
+  for (const [k, raw] of Object.entries(t || {}).slice(0, 30)) {
+    if (!/^[\w ,.'&-]{1,40}$/.test(k)) continue;
+    const v = String(raw || '').replace(/\r/g, '').trim().slice(0, 1000);
+    if (v) clean[k] = v;
+  }
   await sql`insert into desk.staff_templates (user_id, templates) values (${userId}, ${sql.json(clean)})
             on conflict (user_id) do update set templates = excluded.templates, updated_at = now()`;
   return clean;
