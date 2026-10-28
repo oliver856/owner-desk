@@ -209,6 +209,8 @@ const actions = {
              + (select count(*) from desk.calls c where c.unit_id = v_unit_list.id and (coalesce(c.note, '') <> '' or c.outcome is not null)))::int as notes_total,
             (select coalesce(json_agg(json_build_object('id', o.id, 'name', o.name, 'masked', ph.masked, 'has_phone', ph.owner_id is not null,
                       'dnc', exists (select 1 from desk.do_not_call d where d.owner_id = o.id),
+                      'dup', exists (select 1 from desk.unit_owners uo2 join desk.owners o2 on o2.id = uo2.owner_id join desk.owner_phones ph2 on ph2.owner_id = o2.id
+                        where uo2.unit_id = uo.unit_id and uo2.role = 'owner' and ph2.phone = ph.phone and (o2.is_company, o2.id) < (o.is_company, o.id)),
                       'hold', (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
                                from desk.owner_hold(o.id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user))
                     order by o.is_company, o.id), '[]')
@@ -250,6 +252,8 @@ const actions = {
       sql`select o.id, o.name, o.is_company, uo.role, ph.masked, (ph.owner_id is not null) as has_phone,
                  (select count(*) from desk.unit_owners x where x.owner_id = o.id and x.role = 'owner')::int as units,
                  exists (select 1 from desk.do_not_call d where d.owner_id = o.id) as dnc,
+                 (uo.role = 'owner' and exists (select 1 from desk.unit_owners uo2 join desk.owners o2 on o2.id = uo2.owner_id join desk.owner_phones ph2 on ph2.owner_id = o2.id
+                        where uo2.unit_id = uo.unit_id and uo2.role = 'owner' and ph2.phone = ph.phone and (o2.is_company, o2.id) < (o.is_company, o.id))) as dup,
                  (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
                     from desk.owner_hold(o.id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user) as hold
           from desk.unit_owners uo join desk.owners o on o.id = uo.owner_id
@@ -276,6 +280,36 @@ const actions = {
   },
 
   // Laptop presses Call: creates a short-lived request and alerts the broker's phone. No number returned.
+  // Copy one owner's number to the clipboard (it stays hidden on screen). Same checks as a call: in your areas,
+  // not do-not-call, not being worked by someone else. Every copy is logged and there's a daily limit.
+  async copyNumber(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    const unitId = Number(body(req).unitId), ownerId = Number(body(req).ownerId);
+    if (!Number.isInteger(unitId) || !Number.isInteger(ownerId)) return res.status(400).json({ error: 'Bad request' });
+    const c = await caps(s.user_id);
+    if (c.copies >= c.copyCap) {
+      await audit(s.user_id, 'limit_hit', { unitId, detail: { limit: 'copies' }, ip });
+      return res.status(429).json({ error: `You've copied ${c.copyCap} numbers today, the daily limit.` });
+    }
+    const [x] = await sql`
+      select ph.phone from desk.units u join desk.buildings b on b.id = u.building_id
+      join desk.unit_owners uo on uo.unit_id = u.id and uo.owner_id = ${ownerId} and uo.role = 'owner'
+      join desk.owner_phones ph on ph.owner_id = uo.owner_id
+      where u.id = ${unitId} and b.area_id = any(${s.areas})`;
+    if (!x) return res.status(403).json({ error: 'This owner isn\'t in your areas or has no mobile.' });
+    const [dnc] = await sql`select 1 from desk.do_not_call where owner_id = ${ownerId}`;
+    if (dnc) return res.status(403).json({ error: 'This owner asked not to be contacted.' });
+    const co = await sql`select owner_id from desk.unit_owners where unit_id = ${unitId} and role = 'owner'`;
+    let hold = null;
+    for (const o of co) { hold = await holdFor(o.owner_id, s.user_id); if (hold) break; }
+    if (hold && s.role === 'broker') {
+      await audit(s.user_id, 'copy_number_blocked', { unitId, detail: { owner_id: ownerId, held_by: hold.by_name }, ip });
+      return res.status(409).json({ error: `${hold.by_name} is working this owner (${hold.why}).` });
+    }
+    await audit(s.user_id, 'number_copied', { unitId, detail: { owner_id: ownerId }, ip });
+    res.json({ phone: '+' + String(x.phone).replace(/\D/g, ''), copies: c.copies + 1, copyCap: c.copyCap });
+  },
+
   async call(req, res, s, ip) {
     if (req.method !== 'POST') return res.status(405).end();
     const unitId = Number(body(req).unitId), ownerId = Number(body(req).ownerId);
