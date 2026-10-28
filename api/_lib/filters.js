@@ -6,9 +6,9 @@ const today = () => sql`(now() at time zone 'Asia/Dubai')::date`;
 
 // Same lists as the green and red quick notes on screen (QUICK_NOTES in App.jsx)
 const NOTE_HOT = 'unit available, send whatsapp|in discussion|replied|follow up|send report|wants to sell|wants to rent|wants to buy|wants valuation|listing opportunity|call back';
-const NOTE_COLD = 'called, no reply|called, unreachable|phone off|end user|sold|agent|cold|no answer|not interested|wrong number|do not call';
+const NOTE_COLD = 'called, no reply|called, unreachable|called, line busy|phone off|other|end user|sold|agent|cold|no answer|not interested|wrong number|do not call';
 
-export const TABS = ['all', 'exp90', 'up', 'port', 'mort', 'never', 'callbacks', 'reports'];
+export const TABS = ['all', 'exp90', 'up', 'port', 'mort', 'never', 'callbacks', 'reports', 'monthly'];
 
 // Callbacks: units whose latest call this week (Monday 00:00 Dubai onwards) got no answer.
 // Brokers see their own; managers and admins see everyone's.
@@ -21,7 +21,7 @@ function callbacksSql(me, all) {
       order by c.unit_id, c.called_at desc) x
     where (${all} or x.user_id = ${me})
       and (x.outcome = 'No answer'
-        or (x.outcome is null and (coalesce(x.note, '') = '' or x.note ~* '^(called, no reply|called, unreachable|phone off|cold)'))))`;
+        or (x.outcome is null and (coalesce(x.note, '') = '' or x.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|cold)'))))`;
 }
 
 // Reports to send today: units noted "Send report" today (Dubai time). Brokers see their own; managers and admins everyone's.
@@ -36,6 +36,8 @@ function reportsSql(me, all) {
 export function tabSql(tab, me, all = false) {
   switch (tab) {
     case 'reports': return me ? reportsSql(me, all) : sql`false`;
+    // Monthly market report sign-ups. Brokers see their own; managers and admins everyone's.
+    case 'monthly': return me ? sql`id in (select r.unit_id from desk.report_optins r where ${all} or r.user_id = ${me})` : sql`false`;
     case 'callbacks': return me ? callbacksSql(me, all) : sql`false`;
     case 'exp90': return sql`end_date between ${today()} and ${today()} + 90`;
     case 'up': return sql`annual_rent >= prev_rent * 1.1 and prev_rent > 0`;
