@@ -438,6 +438,9 @@ textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:7px;b
 .bigcall[disabled]{opacity:.5}
 .wa-laptop{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:8px}
 .wa-laptop .who{font-weight:600} .wa-laptop .wamsg{min-height:200px!important;font-size:13.5px}
+.wa-warn{margin:0;padding:6px 10px;border-radius:8px;font-size:13px;color:var(--cold);background:color-mix(in srgb,var(--cold) 10%,var(--bg))}
+.wa-how{font-size:12px;text-align:center} .wa-how .link{font-size:12px}
+.wa-fix{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
 .wa-laptop .bigcall{padding:11px;font-size:14px;margin-top:6px} .bigcall.wa{background:#1f9d55}
 .wamsg{min-height:170px!important;font-size:15px;margin:8px 0 0!important;border-radius:10px!important}
 .waiting{color:var(--muted);text-align:center;padding:50px 0}
@@ -1502,7 +1505,8 @@ function DoneStep({ requestId, onClose }) {
     <h3>Saved</h3>
     <p className="muted">The outcome is on the unit&apos;s call history.</p>
     {f && !sent && <FollowUp laptop f={f} me={me} onDone={(r) => setSent(r)} />}
-    {sent && <p className="muted">{sent === 'sent' ? 'WhatsApp opened in a new tab. Added "WhatsApp sent" to the note.' : sent === 'unavailable' ? 'Added "WhatsApp unavailable" to the note.' : 'Added "WhatsApp not sent" to the note.'}</p>}
+    {sent && <p className="muted">{sent === 'sent' ? 'WhatsApp opened. Added "WhatsApp sent" to the note.' : sent === 'unavailable' ? 'Added "WhatsApp unavailable" to the note.' : 'Added "WhatsApp not sent" to the note.'}</p>}
+    {sent === 'sent' && <NotOnWhatsApp requestId={requestId} />}
     <button className="btn" style={{ marginTop: 10 }} onClick={onClose}>Close</button>
   </>;
 }
@@ -2230,19 +2234,28 @@ function MessagesEditor({ user, onClose }) {
   );
 }
 
+// Laptop: WhatsApp Web (default) or the WhatsApp app, remembered in this browser
+const getWaOpen = () => { try { return localStorage.getItem('waOpen') === 'app' ? 'app' : 'web'; } catch { return 'web'; } };
 function FollowUp({ f, me, onDone, laptop }) {
   const [text, setText] = useState(() => whatsappText(f, me));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [how, setHow] = useState(getWaOpen);
+  const flip = () => { const n = how === 'web' ? 'app' : 'web'; setHow(n); try { localStorage.setItem('waOpen', n); } catch {} };
   // result: 'sent' opens WhatsApp; 'unavailable' or 'not_sent' just records it. Each is added to the call's note.
   async function send(result) {
     setBusy(true); setErr('');
-    // On the laptop WhatsApp opens in a new tab (WhatsApp Desktop or WhatsApp Web). The tab is opened
-    // straight away so the browser doesn't block it, then pointed at WhatsApp once the server answers.
-    const w = laptop && result === 'sent' ? window.open('', '_blank') : null;
+    // Laptop, WhatsApp Web: one "WhatsApp" tab is reused for every message and goes straight to the chat.
+    // It's opened right away so the browser doesn't block it, then pointed at the chat once the server answers.
+    const w = laptop && result === 'sent' && how === 'web' ? window.open('', 'apex-whatsapp') : null;
     try {
       const j = await api('/api/phone?action=whatsapp', { method: 'POST', body: { requestId: f.id, text, result } });
-      if (j.url) { if (w) w.location.href = j.url; else if (laptop) window.open(j.url, '_blank'); else window.location.href = j.url; }
+      if (j.url) {
+        if (!laptop) window.location.href = j.url;
+        else if (how === 'app') window.location.href = j.app;
+        else if (w) { w.location.href = j.web; w.focus?.(); }
+        else window.open(j.web, 'apex-whatsapp');
+      }
       onDone(result);
     } catch (e) { w?.close(); setErr(e.message); }
     setBusy(false);
@@ -2252,13 +2265,33 @@ function FollowUp({ f, me, onDone, laptop }) {
       <span className="muted">Follow up on WhatsApp · {f.outcome || String(f.note || '').split('.')[0]}</span>
       <span className="who">{titleCase(f.owner_name)}</span>
       <span>{phonePlace({ ...f, subcommunity: titleCase(f.subcommunity), building: titleCase(f.building) })}</span>
+      {f.wa_missing && <p className="wa-warn">This number wasn&apos;t on WhatsApp last time.</p>}
       <textarea className="wamsg" value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
       {err && <p className="err">{err}</p>}
       <button className="bigcall wa" disabled={busy || !text.trim()} onClick={() => send('sent')}>Open WhatsApp · mark as sent</button>
+      {laptop && <span className="faint wa-how">Opens in {how === 'web' ? 'WhatsApp Web' : 'the WhatsApp app'} · <button className="link" onClick={flip}>use {how === 'web' ? 'the WhatsApp app' : 'WhatsApp Web'} instead</button></span>}
       <div className="wa-other">
-        <button className="btn" disabled={busy} onClick={() => send('unavailable')}>WhatsApp unavailable</button>
+        <button className="btn" disabled={busy} onClick={() => send('unavailable')}>Not on WhatsApp</button>
         <button className="btn" disabled={busy} onClick={() => send('not_sent')}>Not sent</button>
       </div>
+    </div>
+  );
+}
+
+// "WhatsApp sent" turned out wrong because the number isn't on WhatsApp: change the note to "WhatsApp unavailable"
+function NotOnWhatsApp({ requestId, name, onFixed }) {
+  const [st, setSt] = useState('');
+  const fix = async () => {
+    setSt('busy');
+    try { await api('/api/phone?action=whatsappMissing', { method: 'POST', body: { requestId } }); setSt('done'); onFixed?.(); }
+    catch (e) { setSt(e.message); }
+  };
+  if (st === 'done') return <p className="muted wa-fix">Changed to &quot;WhatsApp unavailable&quot;{name ? ` for ${titleCase(name)}` : ''}.</p>;
+  return (
+    <div className="wa-fix">
+      <span className="muted">{name ? `WhatsApp to ${titleCase(name)} marked as sent.` : 'Number not on WhatsApp after all?'}</span>
+      <button className="btn" disabled={st === 'busy'} onClick={fix}>Number not on WhatsApp</button>
+      {st && st !== 'busy' && <span className="err">{st}</span>}
     </div>
   );
 }
@@ -2318,6 +2351,7 @@ function PhoneScreen() {
         </div>
       )}
       {!pending && !awaiting && !saved && followup && <FollowUp key={followup.id} f={followup} me={name} onDone={() => { setSt((x) => ({ ...x, followup: null })); load(); }} />}
+      {!pending && !awaiting && !saved && !followup && st.lastWa && <NotOnWhatsApp key={st.lastWa.id} requestId={st.lastWa.id} name={st.lastWa.owner_name} />}
       {saved && <div className="waiting">Saved</div>}
       <PhoneAlerts onCall={load} />
       {!pending && !awaiting && !saved && !followup && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner and it appears here.</div>}
