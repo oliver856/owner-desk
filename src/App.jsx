@@ -11,7 +11,7 @@ const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation',
 // One-tap notes offered after a call and in the unit's Notes box. Brokers can still type their own.
 // Each one also picks the WhatsApp follow-up message (see WHATSAPP_BY_NOTE). 'kendal' ticks "Send to Kendal".
 const QUICK_NOTES = {
-  Cold: ['Called, no reply', 'Called, unreachable', 'Phone off', 'End user', 'Sold', 'Agent'],
+  Cold: ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'End user', 'Sold', 'Agent', 'Other'],
   Hot: ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy'],
 };
 // Hot or cold, from how a note starts. Shown as green (hot) or red (cold) wherever notes appear.
@@ -27,6 +27,15 @@ function NoteTag({ text, clip, wrap }) {
   return <span className={'notetag ' + tone + (clip ? ' clip' : '') + (wrap ? ' wrap' : '')} title={text}>{tone && <i className="nd" />}<span className="nt">{text}</span></span>;
 }
 const KENDAL_NOTES = ['Unit available, send WhatsApp', 'Wants to sell', 'Wants to rent', 'Wants to buy'];
+// A quick note plus the broker's own words: "Wants to sell. Asking 2.1m, vacant in March".
+// "Other" is a cold note in their own words: "Other: lives abroad, call in December".
+function composeNote(chip, extra) {
+  const e = String(extra || '').trim();
+  if (!chip) return e;
+  if (chip === 'Other') return e ? `Other: ${e}` : '';
+  return e ? `${chip}. ${e}` : chip;
+}
+const notePlaceholder = (chip, fallback) => (chip === 'Other' ? 'Write the note' : chip ? 'Add your own words (optional)' : fallback);
 function QuickNotes({ value, onPick }) {
   return (
     <div className="qnotes">
@@ -41,9 +50,11 @@ function QuickNotes({ value, onPick }) {
 }
 const HOT_OUTCOMES = ['Wants valuation', 'Listing opportunity', 'Wants to sell']; // these tick "Send to Kendal" automatically
 const TABS = [
-  ['all', 'All units'], ['exp90', 'Ending in 90 days'], ['reports', 'Reports today'],
+  ['all', 'All units'], ['exp90', 'Ending in 90 days'], ['reports', 'Reports today'], ['monthly', 'Monthly reports'],
   ['port', 'Portfolio owners'], ['mort', 'Mortgaged'], ['never', 'Never called'], ['callbacks', 'Callbacks this week'],
 ];
+// First week of the month (Dubai): the Monthly reports tab is highlighted as due
+const monthStart = () => Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric' }).format(new Date())) <= 7;
 const BEDS = ['Studio', '1', '2', '3', '4', '5', '6', '7'];
 const EXPIRY = [['30', 'Within 30 days'], ['90', 'Within 90 days'], ['180', 'Within 6 months'], ['365', 'Within a year'], ['', 'Any time']];
 // WhatsApp follow-up after a call. {first} = owner's first name, {me} = broker's first name,
@@ -53,6 +64,7 @@ const EXPIRY = [['30', 'Within 30 days'], ['90', 'Within 90 days'], ['180', 'Wit
 const WHATSAPP_BY_NOTE = {
   'Called, no reply': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
   'Called, unreachable': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
+  'Called, line busy, call again later': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area} but the line was busy. When would be a good time to talk?',
   'Phone off': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
   'End user': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Glad to hear you\'re enjoying living there. If you ever want an up-to-date valuation or have questions about the market, save my number and message me here any time.',
   'Send report': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As promised, I\'ll send over a market report for your {property}, {area} today.',
@@ -180,6 +192,7 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .qnotes .chip{font-size:12px;text-align:left}
 @media (max-width:520px){.qnotes{grid-template-columns:1fr}}
 .qnotes + textarea{margin-top:8px}
+.mrep{display:flex;flex-direction:column;gap:2px} .mrep .faint{font-size:12px;padding-left:22px}
 .grid th{position:sticky;top:0;background:var(--bg);padding:9px 14px;border-bottom:1px solid var(--line);font-size:11.5px;letter-spacing:.02em}
 .grid td{padding:0 14px;height:44px;vertical-align:middle;white-space:nowrap;border-bottom:1px solid var(--line)}
 .grid tbody tr:last-child td{border-bottom:none}
@@ -996,8 +1009,9 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
 
         <section className="listcol">
           <nav className="tabs">
-            {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '') + ((k === 'callbacks' || k === 'reports') && c[k] ? ' due' : '')}
-              title={k === 'callbacks' ? 'Owners whose last call this week got no answer. Work through them on Friday.' : undefined}
+            {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '') + ((k === 'callbacks' || k === 'reports' || (k === 'monthly' && monthStart())) && c[k] ? ' due' : '')}
+              title={k === 'callbacks' ? 'Owners whose last call this week got no answer. Work through them on Friday.'
+                : k === 'monthly' ? 'Owners who asked for a market report every month. Send them at the start of each month.' : undefined}
               onClick={() => goTab(k)}>{l}<span className="c n">{fmt(c[k])}</span></button>)}
           </nav>
           <div className="meta">
@@ -1488,6 +1502,7 @@ function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
               ))}
             </div>
           </div>
+          <MonthlyReport unitId={u.id} report={d.report} onChange={(r) => setD((x) => ({ ...x, report: r }))} />
           <Notes unitId={u.id} notes={d.notes} onAdded={(n) => setD((x) => ({ ...x, notes: [n, ...x.notes] }))} />
           <div className="blk"><h4>Calls</h4>
             {d.calls.length === 0 ? <p className="muted">Not called yet</p> : d.calls.map((c, i) => (
@@ -1504,27 +1519,48 @@ function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
   );
 }
 
+// Monthly market report sign-up for this unit (also ticked from the call outcome)
+function MonthlyReport({ unitId, report, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const toggle = async (on) => {
+    setBusy(true); setErr('');
+    try { await api('/api/desk?action=reportOptin', { method: 'POST', body: { unitId, on } }); onChange(on ? { by: 'You', at: new Date().toISOString() } : null); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  return (
+    <div className="blk mrep">
+      <label className="cb"><input type="checkbox" checked={!!report} disabled={busy} onChange={(e) => toggle(e.target.checked)} />Send a market report every month</label>
+      {report && <span className="faint">Signed up by {report.by}, {fd(report.at)}. Shows in the Monthly reports tab.</span>}
+      {err && <p className="err">{err}</p>}
+    </div>
+  );
+}
+
 // Notes on a unit. Anyone with the area sees them; they stay on the record with the writer's name.
 function Notes({ unitId, notes, onAdded }) {
+  const [chip, setChip] = useState('');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const full = composeNote(chip, text);
   async function save() {
-    if (!text.trim()) return;
+    if (!full) return;
     setBusy(true); setErr('');
-    try { const j = await api('/api/desk?action=addNote', { method: 'POST', body: { unitId, body: text } }); onAdded(j.note); setText(''); }
+    try { const j = await api('/api/desk?action=addNote', { method: 'POST', body: { unitId, body: full } }); onAdded(j.note); setText(''); setChip(''); }
     catch (e) { setErr(e.message); }
     setBusy(false);
   }
   return (
     <div className="blk"><h4>Notes</h4>
-      <QuickNotes value={text} onPick={setText} />
-      <textarea className="notebox" placeholder="Add a note about this unit or owner" value={text} maxLength={2000}
+      <QuickNotes value={chip} onPick={setChip} />
+      <textarea className="notebox" placeholder={notePlaceholder(chip, 'Add a note about this unit or owner')} value={text} maxLength={1800}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save(); }} />
       <div className="noteact">
         <span className="faint">Ctrl/⌘ + Enter to save</span>
-        <button className="btn primary" disabled={!text.trim() || busy} onClick={save}>{busy ? 'Saving…' : 'Save note'}</button>
+        <button className="btn primary" disabled={!full || busy} onClick={save}>{busy ? 'Saving…' : 'Save note'}</button>
       </div>
       {err && <p className="err">{err}</p>}
       {notes.length === 0 ? <p className="muted">No notes yet</p> : notes.map((n) => (
@@ -1597,15 +1633,18 @@ function CallFlow({ unitId, owner, label, onClose, force }) {
 
 function OutcomeForm({ requestId, onSaved, big }) {
   const [pick, setPick] = useState('');
-  const [note, setNote] = useState('');
+  const [chip, setChip] = useState('');
+  const [extra, setExtra] = useState('');
   const [kendal, setKendal] = useState(false);
+  const [report, setReport] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const choose = (o) => { const n = pick === o ? '' : o; setPick(n); setKendal(HOT_OUTCOMES.includes(n) || KENDAL_NOTES.includes(note)); };
-  const pickNote = (q) => { setNote(q); setKendal(HOT_OUTCOMES.includes(pick) || KENDAL_NOTES.includes(q)); };
+  const note = composeNote(chip, extra);
+  const choose = (o) => { const n = pick === o ? '' : o; setPick(n); setKendal(HOT_OUTCOMES.includes(n) || KENDAL_NOTES.includes(chip)); };
+  const pickNote = (q) => { setChip(q); setKendal(HOT_OUTCOMES.includes(pick) || KENDAL_NOTES.includes(q)); };
   async function save() {
     setBusy(true); setErr('');
-    try { await api('/api/phone?action=outcome', { method: 'POST', body: { requestId, outcome: pick, note, kendal } }); onSaved(); }
+    try { await api('/api/phone?action=outcome', { method: 'POST', body: { requestId, outcome: pick, note, kendal, report } }); onSaved(); }
     catch (e) { setErr(e.message); }
     setBusy(false);
   }
@@ -1617,11 +1656,12 @@ function OutcomeForm({ requestId, onSaved, big }) {
           : <label className="cb" key={o}><input type="radio" name={`oc-${requestId}`} checked={pick === o} onChange={() => {}} onClick={() => choose(o)} />{o}</label>)}
       </div>
       <label className="cb" style={{ marginTop: 10 }}><input type="checkbox" checked={kendal} onChange={(e) => setKendal(e.target.checked)} />Send to Kendal as a lead</label>
-      <QuickNotes value={note} onPick={pickNote} />
-      <textarea placeholder="Or type your own note" value={note} onChange={(e) => setNote(e.target.value)} />
+      <label className="cb"><input type="checkbox" checked={report} onChange={(e) => setReport(e.target.checked)} />Send a market report every month</label>
+      <QuickNotes value={chip} onPick={pickNote} />
+      <textarea placeholder={notePlaceholder(chip, 'Or type your own note')} value={extra} maxLength={900} onChange={(e) => setExtra(e.target.value)} />
       {err && <p className="err">{err}</p>}
-      <button className={big ? 'bigcall' : 'btn primary'} disabled={(!pick && !note.trim()) || busy} onClick={save}>{busy ? 'Saving…' : pick ? 'Save outcome' : 'Save note'}</button>
-      <p className="faint" style={{ margin: '6px 0 0', fontSize: 12 }}>An outcome is optional. A note on its own is enough.</p>
+      <button className={big ? 'bigcall' : 'btn primary'} disabled={(!pick && !note) || busy} onClick={save}>{busy ? 'Saving…' : pick ? 'Save outcome' : 'Save note'}</button>
+      <p className="faint" style={{ margin: '6px 0 0', fontSize: 12 }}>{chip === 'Other' && !extra.trim() ? 'Write what happened for "Other".' : 'An outcome is optional. A note on its own is enough.'}</p>
     </div>
   );
 }
@@ -1742,7 +1782,7 @@ function Lookup({ onOpen }) {
 const ACTIVITY_LABEL = {
   searched: 'Searched', opened_unit: 'Opened a unit', call_sent: 'Sent a call to phone', call_dialled: 'Tapped Call on phone',
   outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', number_copied: 'Copied a number', copy_number_blocked: 'Tried to copy a number someone else is working',
-  whatsapp_unavailable: 'Number not on WhatsApp', limit_hit: 'Hit a daily limit',
+  whatsapp_unavailable: 'Number not on WhatsApp', report_optin: 'Signed an owner up for monthly reports', report_optout: 'Took an owner off monthly reports', limit_hit: 'Hit a daily limit',
   call_blocked_hours: 'Tried to call outside 9am–6pm', dial_refused: 'Tapped an expired call', phone_alerts_on: 'Turned on phone alerts',
   note_added: 'Added a note', call_blocked_hold: 'Tried to call an owner someone else is working', call_hold_override: 'Called an owner someone else was working', lookup_property: 'Looked up a unit', lookup_owner: 'Looked up an owner', lookup_failed: 'Lookup failed', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
 };
@@ -2185,7 +2225,7 @@ function Activity() {
 
 // ── Phone screen (/phone) ───────────────────────────────────────────────────
 // A person's own messages (My messages) replace the standard ones: 'noanswer' for no answer / unreachable, 'spoke' for everything else
-const isNoAnswer = (f) => f.outcome === 'No answer' || /^(called, (no reply|unreachable)|phone off)/i.test(String(f.note || ''));
+const isNoAnswer = (f) => f.outcome === 'No answer' || /^(called, (no reply|unreachable|line busy)|phone off)/i.test(String(f.note || ''));
 function fillTemplate(t, v) {
   return t.split('{first}').join(v.first).split('{me}').join(v.me).split('{property}').join(v.property).split('{area}').join(v.area)
     .replace(/Hi ,/g, 'Hi,').replace(/Hi\s+\n/g, 'Hi,\n');
@@ -2207,7 +2247,7 @@ function whatsappText(f, me) {
 const standardMessage = (key) => WHATSAPP_BY_NOTE[key] || WHATSAPP[key] || WHATSAPP.default;
 // The messages someone can make their own, in the order the editor shows them
 const MESSAGE_GROUPS = [
-  ['Cold', ['Called, no reply', 'Called, unreachable', 'Phone off', 'End user', 'No answer']],
+  ['Cold', ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'End user', 'No answer']],
   ['Hot', ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy', 'Call back']],
   ['Anything else', ['default']],
 ];
