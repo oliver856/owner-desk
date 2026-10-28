@@ -4,7 +4,7 @@ import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
-import { sql, schemaOk, route, query, body, audit, caps, setting, withinCallHours, callTarget } from './_lib/core.js';
+import { sql, schemaOk, route, query, body, audit, caps, setting, callTarget } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
@@ -314,15 +314,7 @@ const actions = {
     if (req.method !== 'POST') return res.status(405).end();
     const unitId = Number(body(req).unitId), ownerId = Number(body(req).ownerId);
     if (!Number.isInteger(unitId) || !Number.isInteger(ownerId)) return res.status(400).json({ error: 'Bad request' });
-    if (!(await withinCallHours())) {
-      await audit(s.user_id, 'call_blocked_hours', { unitId, ip });
-      return res.status(403).json({ error: 'Calls can only be made between 9am and 6pm.' });
-    }
-    const c = await caps(s.user_id);
-    if (c.calls >= c.callCap) {
-      await audit(s.user_id, 'limit_hit', { unitId, detail: { limit: 'calls' }, ip });
-      return res.status(429).json({ error: 'You have reached today\'s call limit.' });
-    }
+    // No calling hours and no daily call limit: brokers can call any time, as much as they like
     const [x] = await sql`
       select o.name as owner_name, u.unit_no, u.unit_type, b.subcommunity, b.name as building
       from desk.units u join desk.buildings b on b.id = u.building_id
