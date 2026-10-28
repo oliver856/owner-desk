@@ -709,7 +709,7 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? (me ? <Owners banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
+      {view === 'owners' ? (me ? <Owners keepKey={'ownersNow:' + me.staff.email} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
       {phase === 'done' && co?.meIn && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
@@ -720,12 +720,19 @@ function Desk() {
   );
 }
 
-function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs, banner }) {
-  // Start from the broker's saved view if they have one
-  const start = useRef({
-    f: normF(prefs?.f), tab: prefs?.tab || 'all', sort: prefs?.sort || 'unit',
-    cols: (prefs?.cols || []).filter((k) => COLUMNS.some((c) => c.k === k)), side: prefs?.side !== false,
-  }).current;
+function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs, banner, keepKey }) {
+  // Start where this person left off (filters, tab and sort survive a refresh), otherwise from their saved view
+  const start = useRef((() => {
+    let last = null;
+    try { last = JSON.parse(localStorage.getItem(keepKey) || 'null'); } catch {}
+    const ok = last && typeof last === 'object' && last.f && typeof last.f === 'object';
+    return {
+      f: normF(ok ? last.f : prefs?.f),
+      tab: (ok && TABS.some(([k]) => k === last.tab) ? last.tab : prefs?.tab) || 'all',
+      sort: (ok && typeof last.sort === 'string' ? last.sort : prefs?.sort) || 'unit',
+      cols: (prefs?.cols || []).filter((k) => COLUMNS.some((c) => c.k === k)), side: prefs?.side !== false,
+    };
+  })()).current;
   const [f, setF] = useState(start.f);
   const [tab, setTab] = useState(start.tab);
   const [sort, setSort] = useState(start.sort);
@@ -789,6 +796,8 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
       .finally(() => { if (ctl.current === c) setBusy(false); });
   }, []);
   useEffect(() => { load(start.f, start.tab, start.sort, 1); }, [load, start]);
+  // Remember the filters, tab and sort in this browser so a refresh (or an update reload) keeps them
+  useEffect(() => { try { localStorage.setItem(keepKey, JSON.stringify({ f, tab, sort })); } catch {} }, [keepKey, f, tab, sort]);
 
   // After a call, update just that unit's row and the tab counts, so the page stays exactly where it was
   const refreshRow = useCallback((id) => {
