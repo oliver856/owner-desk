@@ -11,7 +11,7 @@ const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation',
 // One-tap notes offered after a call and in the unit's Notes box. Brokers can still type their own.
 // Each one also picks the WhatsApp follow-up message (see WHATSAPP_BY_NOTE). 'kendal' ticks "Send to Kendal".
 const QUICK_NOTES = {
-  Cold: ['Called, no reply', 'Called, unreachable', 'Phone off', 'Sold', 'Agent'],
+  Cold: ['Called, no reply', 'Called, unreachable', 'Phone off', 'End user', 'Sold', 'Agent'],
   Hot: ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy'],
 };
 // Hot or cold, from how a note starts. Shown as green (hot) or red (cold) wherever notes appear.
@@ -54,6 +54,7 @@ const WHATSAPP_BY_NOTE = {
   'Called, no reply': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
   'Called, unreachable': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
   'Phone off': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
+  'End user': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Glad to hear you\'re enjoying living there. If you ever want an up-to-date valuation or have questions about the market, save my number and message me here any time.',
   'Send report': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As promised, I\'ll send over a market report for your {property}, {area} today.',
   'Unit available, send WhatsApp': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As discussed, could you send me a few details on your {property}, {area}: photos, when it\'s available and the price you have in mind? I\'ll take it from there.',
   'In discussion': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Saving my number here so we can keep the conversation going.',
@@ -2161,7 +2162,7 @@ function whatsappText(f, me) {
 const standardMessage = (key) => WHATSAPP_BY_NOTE[key] || WHATSAPP[key] || WHATSAPP.default;
 // The messages someone can make their own, in the order the editor shows them
 const MESSAGE_GROUPS = [
-  ['Cold', ['Called, no reply', 'Called, unreachable', 'Phone off', 'No answer']],
+  ['Cold', ['Called, no reply', 'Called, unreachable', 'Phone off', 'End user', 'No answer']],
   ['Hot', ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy', 'Call back']],
   ['Anything else', ['default']],
 ];
