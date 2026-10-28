@@ -79,10 +79,10 @@ const actions = {
   // Outcome after the call, from the phone or the laptop
   async outcome(req, res, s, ip) {
     if (req.method !== 'POST') return res.status(405).end();
-    const { requestId, outcome, note, kendal } = body(req);
+    const { requestId, outcome, note, kendal, report } = body(req);
     if (outcome && !OUTCOMES.includes(outcome)) return res.status(400).json({ error: 'Pick an outcome.' });
     if (!outcome && !String(note || '').trim()) return res.status(400).json({ error: 'Pick an outcome or add a note.' });
-    const ok = await saveOutcome(s, Number(requestId), outcome, note, !!kendal, ip);
+    const ok = await saveOutcome(s, Number(requestId), outcome, note, !!kendal, ip, !!report);
     if (!ok) return res.status(404).json({ error: 'That call wasn\'t found. Was the blue button tapped on your phone?' });
     res.json({ ok: true });
   },
