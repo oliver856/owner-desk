@@ -4,7 +4,11 @@ import { sql } from './core.js';
 
 const today = () => sql`(now() at time zone 'Asia/Dubai')::date`;
 
-export const TABS = ['all', 'exp90', 'up', 'port', 'mort', 'never', 'callbacks'];
+// Same lists as the green and red quick notes on screen (QUICK_NOTES in App.jsx)
+const NOTE_HOT = 'unit available, send whatsapp|in discussion|replied|follow up|send report|wants to sell|wants to rent|wants to buy|wants valuation|listing opportunity|call back';
+const NOTE_COLD = 'called, no reply|called, unreachable|phone off|sold|agent|cold|no answer|not interested|wrong number|do not call';
+
+export const TABS = ['all', 'exp90', 'up', 'port', 'mort', 'never', 'callbacks', 'reports'];
 
 // Callbacks: units whose latest call this week (Monday 00:00 Dubai onwards) got no answer.
 // Brokers see their own; managers and admins see everyone's.
@@ -17,11 +21,21 @@ function callbacksSql(me, all) {
       order by c.unit_id, c.called_at desc) x
     where (${all} or x.user_id = ${me})
       and (x.outcome = 'No answer'
-        or (x.outcome is null and (coalesce(x.note, '') = '' or x.note ~* '^(called, no reply|called, unreachable|cold)'))))`;
+        or (x.outcome is null and (coalesce(x.note, '') = '' or x.note ~* '^(called, no reply|called, unreachable|phone off|cold)'))))`;
+}
+
+// Reports to send today: units noted "Send report" today (Dubai time). Brokers see their own; managers and admins everyone's.
+function reportsSql(me, all) {
+  const start = sql`(date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai')`;
+  return sql`id in (
+    select c.unit_id from desk.calls c where coalesce(c.outcome_at, c.called_at) >= ${start} and c.note ~* '^send report' and (${all} or c.user_id = ${me})
+    union
+    select n.unit_id from desk.notes n where n.created_at >= ${start} and n.body ~* '^send report' and (${all} or n.user_id = ${me}))`;
 }
 
 export function tabSql(tab, me, all = false) {
   switch (tab) {
+    case 'reports': return me ? reportsSql(me, all) : sql`false`;
     case 'callbacks': return me ? callbacksSql(me, all) : sql`false`;
     case 'exp90': return sql`end_date between ${today()} and ${today()} + 90`;
     case 'up': return sql`annual_rent >= prev_rent * 1.1 and prev_rent > 0`;
@@ -95,5 +109,19 @@ export function whereSql(q, areas, me) {
       where exists (select 1 from desk.owner_hold(x.owner_id, ${me}))))`);
   if (one('called')) w.push(sql`last_called is not null`);
   if (many('oc').length) w.push(sql`last_outcome = any(${many('oc')})`);
+  // Notes column: green (positive) or red (negative), judged by the latest note on the unit, same as the colour shown
+  const tone = one('tone');
+  if (tone === 'hot' || tone === 'cold') {
+    const isHot = sql`z.txt ~* ${'^(' + NOTE_HOT + ')'}`;
+    const isCold = sql`z.txt ~* ${'^(' + NOTE_COLD + ')'}`;
+    w.push(sql`id in (select z.unit_id from (
+        select distinct on (a.unit_id) a.unit_id, a.txt from (
+          select n.unit_id, n.body as txt, n.created_at as t from desk.notes n
+          union all
+          select c.unit_id, coalesce(nullif(c.note, ''), c.outcome), coalesce(c.outcome_at, c.called_at) from desk.calls c
+          where coalesce(c.note, '') <> '' or c.outcome is not null) a
+        order by a.unit_id, a.t desc) z
+      where ${tone === 'hot' ? isHot : sql`not ${isHot} and ${isCold}`})`);
+  }
   return w.reduce((a, b) => sql`${a} and ${b}`);
 }
