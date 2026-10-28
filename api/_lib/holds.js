@@ -30,7 +30,8 @@ export function ensureHolds() {
           union all
           select c.user_id, c.called_at + make_interval(days => case
                    when c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') then cfg.hot
-                   when c.outcome is null and c.note ~* '^(unit available|in discussion|replied|follow up|wants to)' then cfg.hot
+                   when c.outcome is null and c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)' then cfg.hot
+                   when c.outcome is null and c.note ~* '^(sold|agent)' then cfg.sp
                    when c.outcome is null or c.outcome = 'No answer' then cfg.na
                    else cfg.sp end),
                  coalesce(c.outcome, split_part(c.note, '.', 1), 'Called'), 2
