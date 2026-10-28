@@ -34,7 +34,8 @@ const actions = {
       select cr.id, c.outcome, c.note, c.outcome_at, o.name as owner_name, o.is_company, ph.masked, u.unit_no, u.unit_type, u.beds,
              b.subcommunity, b.name as building, a.name as area, (c.followup_at is not null) as followed_up,
              (cr.used_at > now() - interval '1 hour') as recent,
-             exists (select 1 from desk.do_not_call d where d.owner_id = cr.owner_id) as dnc
+             exists (select 1 from desk.do_not_call d where d.owner_id = cr.owner_id) as dnc,
+             exists (select 1 from desk.calls w where w.owner_id = cr.owner_id and w.note ~* 'whatsapp unavailable') as wa_missing
       from desk.call_requests cr
       join desk.calls c on c.request_id = cr.id
       join desk.owners o on o.id = cr.owner_id
@@ -48,7 +49,13 @@ const actions = {
     if (last && !last.outcome_at) awaiting = last;
     else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome) && !/^(sold|agent)\b/i.test(last.note || '')) followup = last;
     const templates = followup ? await getTemplates(s.user_id).catch(() => ({})) : {};
-    res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup ? { ...followup, templates } : null });
+    // The last WhatsApp marked as sent in the past 30 minutes, so it can be corrected if the number isn't on WhatsApp
+    const [lastWa] = await sql`
+      select cr.id, o.name as owner_name from desk.calls c
+      join desk.call_requests cr on cr.id = c.request_id join desk.owners o on o.id = c.owner_id
+      where c.user_id = ${s.user_id} and c.followup_at > now() - interval '30 minutes' and c.note ~* 'whatsapp sent$'
+      order by c.followup_at desc limit 1`;
+    res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup ? { ...followup, templates } : null, lastWa: lastWa || null });
   },
 
   // The blue button. Releases the number once, for this broker's own unexpired request, and records the call.
@@ -105,7 +112,24 @@ const actions = {
     await audit(s.user_id, result === 'sent' ? 'whatsapp_opened' : result === 'unavailable' ? 'whatsapp_unavailable' : 'whatsapp_skipped', { unitId: c.unit_id, detail: { request_id: id, owner_id: c.owner_id }, ip });
     if (skip) return res.json({ ok: true });
     const [ph] = await sql`select phone from desk.owner_phones where owner_id = ${c.owner_id}`;
-    res.json({ url: `https://wa.me/${ph.phone}?text=${encodeURIComponent(text)}` });
+    const t = encodeURIComponent(text);
+    // url: phones (opens the WhatsApp app). web / app: the laptop goes straight to the chat, skipping the wa.me page.
+    res.json({ url: `https://wa.me/${ph.phone}?text=${t}`, web: `https://web.whatsapp.com/send?phone=${ph.phone}&text=${t}`,
+      app: `whatsapp://send?phone=${ph.phone}&text=${t}` });
+  },
+
+  // The number wasn't on WhatsApp after all: change "WhatsApp sent" on that call to "WhatsApp unavailable".
+  // Only the broker's own call, within 12 hours of the WhatsApp.
+  async whatsappMissing(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    const id = Number(body(req).requestId);
+    const [c] = await sql`
+      update desk.calls c set note = regexp_replace(c.note, 'WhatsApp sent$', 'WhatsApp unavailable', 'i')
+      where c.request_id = ${id} and c.user_id = ${s.user_id} and c.followup_at > now() - interval '12 hours' and c.note ~* 'whatsapp sent$'
+      returning c.unit_id, c.owner_id`;
+    if (!c) return res.status(410).json({ error: 'That WhatsApp can no longer be changed.' });
+    await audit(s.user_id, 'whatsapp_unavailable', { unitId: c.unit_id, detail: { request_id: id, owner_id: c.owner_id, corrected: true }, ip });
+    res.json({ ok: true });
   },
 
   async vapid(req, res) {
