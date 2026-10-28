@@ -90,8 +90,8 @@ const actions = {
     const days = []; for (let d = new Date(b.local_start); d.toISOString().slice(0, 10) <= String(b.today).slice(0, 10); d.setDate(d.getDate() + 1)) days.push(new Date(d));
     const workdays = Math.max(1, days.filter((d) => d.getDay() !== 0 && d.getDay() !== 6).length);
     const goal = Number(await setting('daily_call_target', 50));
-    const HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to)')`;
-    const COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+    const HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
+    const COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|phone off|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
     // Brokers and managers always; admins and directors only once they've made a call in the period
     const people = sql`st.active and (st.role in ('broker', 'manager')
         or exists (select 1 from desk.calls x where x.user_id = st.user_id and x.called_at >= ${b.start}))
@@ -160,6 +160,8 @@ const actions = {
                from desk.calls c join desk.staff st on st.user_id = c.user_id
                where c.unit_id = v_unit_list.id and (coalesce(c.note, '') <> '' or c.outcome is not null)
                order by 2 desc limit 3) y) as notes,
+            ((select count(*) from desk.notes n where n.unit_id = v_unit_list.id)
+             + (select count(*) from desk.calls c where c.unit_id = v_unit_list.id and (coalesce(c.note, '') <> '' or c.outcome is not null)))::int as notes_total,
             (select coalesce(json_agg(json_build_object('id', o.id, 'name', o.name, 'masked', ph.masked, 'has_phone', ph.owner_id is not null,
                       'dnc', exists (select 1 from desk.do_not_call d where d.owner_id = o.id),
                       'hold', (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
@@ -179,7 +181,8 @@ const actions = {
             count(*) filter (where ${tabSql('port')})::int as port,
             count(*) filter (where ${tabSql('mort')})::int as mort,
             count(*) filter (where ${tabSql('never')})::int as never,
-            count(*) filter (where ${tabSql('callbacks', s.user_id, s.role !== 'broker')})::int as callbacks
+            count(*) filter (where ${tabSql('callbacks', s.user_id, s.role !== 'broker')})::int as callbacks,
+            count(*) filter (where ${tabSql('reports', s.user_id, s.role !== 'broker')})::int as reports
           from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)}`,
     ]);
     const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more', 'only'].includes(k));
@@ -208,10 +211,10 @@ const actions = {
           left join desk.owner_phones ph on ph.owner_id = o.id
           where uo.unit_id = ${id} and ${inArea} order by uo.role desc, o.is_company, o.id`,
       sql`select c.called_at, c.outcome, c.note, st.full_name from desk.calls c join desk.staff st on st.user_id = c.user_id
-          where c.unit_id = ${id} and ${inArea} order by c.called_at desc limit 20`,
+          where c.unit_id = ${id} and ${inArea} order by c.called_at desc limit 500`,
       sql`select n.id, n.body, n.created_at, st.full_name, (n.user_id = ${s.user_id}) as mine
           from desk.notes n join desk.staff st on st.user_id = n.user_id
-          where n.unit_id = ${id} and ${inArea} order by n.created_at desc limit 50`,
+          where n.unit_id = ${id} and ${inArea} order by n.created_at desc limit 500`,
       sql`select old_code, layout from desk.units where id = ${id}`,
     ]);
     if (!u) return res.status(404).json({ error: 'That unit isn\'t in your areas.' });
