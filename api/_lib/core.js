@@ -127,9 +127,11 @@ export async function caps(userId) {
     select
       coalesce((select (value #>> '{}')::int from desk.settings where key = 'daily_profile_cap'), 80) as profile_cap,
       coalesce((select (value #>> '{}')::int from desk.settings where key = 'daily_call_cap'), 60) as call_cap,
+      coalesce((select (value #>> '{}')::int from desk.settings where key = 'daily_copy_cap'), 40) as copy_cap,
+      (select count(*) from desk.audit_log, day where user_id = ${userId} and action = 'number_copied' and at >= day.start)::int as copies,
       (select count(*) from desk.audit_log, day where user_id = ${userId} and action = 'opened_unit' and at >= day.start)::int as profiles,
       (select count(*) from desk.audit_log, day where user_id = ${userId} and action = 'call_sent' and at >= day.start)::int as calls`;
-  return { profileCap: r.profile_cap, callCap: r.call_cap, profiles: r.profiles, calls: r.calls };
+  return { profileCap: r.profile_cap, callCap: r.call_cap, profiles: r.profiles, calls: r.calls, copyCap: r.copy_cap, copies: r.copies };
 }
 
 // Today's call target: calls actually dialled (the blue button tapped), the goal, and where you sit on the team
