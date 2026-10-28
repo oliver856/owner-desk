@@ -86,6 +86,9 @@ export function whereSql(q, areas, me) {
   const ua = num('umin'), ub = num('umax');
   if (ua != null) w.push(sql`${unitNo}::bigint >= ${ua}`);
   if (ub != null) w.push(sql`${unitNo}::bigint <= ${ub}`);
+  // Letter before the number: DL-J104 -> J, so Damac Lagoons J and K clusters can be picked apart
+  const letter = one('uletter').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  if (letter) w.push(sql`substring(upper(unit_no) from '([A-Z]+)[0-9]+[^0-9]*$') = ${letter}`);
   const series = one('useries').replace(/\D/g, '').slice(0, 4);
   if (series) w.push(sql`${unitNo} like ${'%' + series}`);
   range('smin', 'smax', 'size_sqft');
