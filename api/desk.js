@@ -8,6 +8,7 @@ import { sql, schemaOk, route, query, body, audit, caps, setting, callTarget } f
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
+import { ensureReports, setReportOptin } from './_lib/reports.js';
 
 const PAGE = 100;
 const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 'size_sqft', 'lease_status', 'end_date', 'annual_rent',
@@ -58,7 +59,7 @@ function ensureNotes() {
 }
 // Hot and cold, the same way the dashboards count them
 const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
-const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|phone off|end user|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|end user|other|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
 
 const actions = {
   // Who am I, today's limits, and the building list for the filters
@@ -182,7 +183,7 @@ const actions = {
     const q = query(req);
     const tab = TABS.includes(q.get('tab')) ? q.get('tab') : 'all';
     const page = Math.max(1, Number(q.get('page')) || 1);
-    await Promise.all([ensureNotes(), ensureHolds(), ensureUnitExtras()]);
+    await Promise.all([ensureNotes(), ensureHolds(), ensureUnitExtras(), ensureReports()]);
     const more = q.get('more') === '1';
     // only=<unit id>: refresh one row in place (after a call) without reloading the list
     const only = Number(q.get('only')) || 0;
@@ -229,7 +230,8 @@ const actions = {
             count(*) filter (where ${tabSql('mort')})::int as mort,
             count(*) filter (where ${tabSql('never')})::int as never,
             count(*) filter (where ${tabSql('callbacks', s.user_id, s.role !== 'broker')})::int as callbacks,
-            count(*) filter (where ${tabSql('reports', s.user_id, s.role !== 'broker')})::int as reports
+            count(*) filter (where ${tabSql('reports', s.user_id, s.role !== 'broker')})::int as reports,
+            count(*) filter (where ${tabSql('monthly', s.user_id, s.role !== 'broker')})::int as monthly
           from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)}`,
     ]);
     const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more', 'only'].includes(k));
@@ -276,7 +278,20 @@ const actions = {
           where uo.owner_id = any(${owners.map((o) => o.id)}) and uo.role = 'owner' and u.id <> ${id}
             and b.area_id = any(${s.areas}) order by b.subcommunity, u.unit_no limit 60`,
     ]);
-    res.json({ unit: u, owners, others, calls, notes, caps: await caps(s.user_id) });
+    await ensureReports();
+    const [report] = await sql`select r.created_at as at, st.full_name as by from desk.report_optins r join desk.staff st on st.user_id = r.user_id where r.unit_id = ${id}`;
+    res.json({ unit: u, owners, others, calls, notes, report: report || null, caps: await caps(s.user_id) });
+  },
+
+  // Monthly market report: sign the unit up, or take it off the list
+  async reportOptin(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    const unitId = Number(body(req).unitId), on = !!body(req).on;
+    const [u] = await sql`select 1 from desk.mv_units where id = ${unitId} and area_id = any(${s.areas})`;
+    if (!u) return res.status(403).json({ error: 'That unit isn\'t in your areas.' });
+    await setReportOptin(s.user_id, unitId, on);
+    await audit(s.user_id, on ? 'report_optin' : 'report_optout', { unitId, ip });
+    res.json({ ok: true });
   },
 
   // Laptop presses Call: creates a short-lived request and alerts the broker's phone. No number returned.
