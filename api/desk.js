@@ -58,7 +58,7 @@ function ensureNotes() {
 }
 // Hot and cold, the same way the dashboards count them
 const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
-const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|phone off|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|phone off|end user|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
 
 const actions = {
   // Who am I, today's limits, and the building list for the filters
