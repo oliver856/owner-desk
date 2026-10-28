@@ -1,9 +1,10 @@
 import { sql, audit } from './core.js';
+import { setReportOptin } from './reports.js';
 
 export const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
 
 // Outcome is optional: a broker can save just a note (e.g. one of the quick notes)
-export async function saveOutcome(s, requestId, outcome, note, kendal, ip) {
+export async function saveOutcome(s, requestId, outcome, note, kendal, ip, report = false) {
   const [c] = await sql`
     update desk.calls set
       -- Saved twice (laptop and phone both open)? Never wipe what's there: keep the first outcome and add the new note to it
@@ -20,6 +21,8 @@ export async function saveOutcome(s, requestId, outcome, note, kendal, ip) {
     await sql`insert into desk.do_not_call (owner_id, added_by, reason) values (${c.owner_id}, ${s.user_id}, 'Owner asked on a call')
               on conflict (owner_id) do nothing`;
   }
-  await audit(s.user_id, 'outcome', { unitId: c.unit_id, detail: { outcome, kendal, call_id: c.id }, ip });
+  // Ticked "Send a market report every month": put the unit on the monthly list
+  if (report) await setReportOptin(s.user_id, c.unit_id, true);
+  await audit(s.user_id, 'outcome', { unitId: c.unit_id, detail: { outcome, kendal, report: !!report, call_id: c.id }, ip });
   return true;
 }
