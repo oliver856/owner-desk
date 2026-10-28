@@ -11,8 +11,8 @@ const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation',
 // One-tap notes offered after a call and in the unit's Notes box. Brokers can still type their own.
 // Each one also picks the WhatsApp follow-up message (see WHATSAPP_BY_NOTE). 'kendal' ticks "Send to Kendal".
 const QUICK_NOTES = {
-  Cold: ['Called, no reply', 'Called, unreachable'],
-  Hot: ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Wants to sell', 'Wants to rent', 'Wants to buy'],
+  Cold: ['Called, no reply', 'Called, unreachable', 'Phone off', 'Sold', 'Agent'],
+  Hot: ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy'],
 };
 // Hot or cold, from how a note starts. Shown as green (hot) or red (cold) wherever notes appear.
 function noteTone(text) {
@@ -41,7 +41,7 @@ function QuickNotes({ value, onPick }) {
 }
 const HOT_OUTCOMES = ['Wants valuation', 'Listing opportunity', 'Wants to sell']; // these tick "Send to Kendal" automatically
 const TABS = [
-  ['all', 'All units'], ['exp90', 'Ending in 90 days'], ['up', 'Rent up 10%+'],
+  ['all', 'All units'], ['exp90', 'Ending in 90 days'], ['reports', 'Reports today'],
   ['port', 'Portfolio owners'], ['mort', 'Mortgaged'], ['never', 'Never called'], ['callbacks', 'Callbacks this week'],
 ];
 const BEDS = ['Studio', '1', '2', '3', '4', '5', '6', '7'];
@@ -53,6 +53,8 @@ const EXPIRY = [['30', 'Within 30 days'], ['90', 'Within 90 days'], ['180', 'Wit
 const WHATSAPP_BY_NOTE = {
   'Called, no reply': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
   'Called, unreachable': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
+  'Phone off': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
+  'Send report': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As promised, I\'ll send over a market report for your {property}, {area} today.',
   'Unit available, send WhatsApp': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As discussed, could you send me a few details on your {property}, {area}: photos, when it\'s available and the price you have in mind? I\'ll take it from there.',
   'In discussion': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Saving my number here so we can keep the conversation going.',
   'Replied': 'Hi {first}, this is {me} from Apex Homes. Thanks for getting back to me about your {property}, {area}. When is a good time for a quick call?',
@@ -155,6 +157,7 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .nstack{display:flex;flex-direction:column;gap:4px;padding:6px 0;min-width:0;width:100%}
 /* Time on the left at a fixed width, the note takes the rest; each note is at most 3 lines (full text on hover) */
 .nitem{display:flex;flex-wrap:wrap;column-gap:8px;row-gap:2px;align-items:flex-start;min-width:0}
+.nmore{font-size:11px;color:var(--accent);padding-left:2px}
 .nitem>.nmeta{flex:none}
 .nitem>.notetag.wrap{flex:1 1 130px;min-width:0}
 .nmeta{font-size:11px;color:var(--faint);white-space:nowrap;padding-top:3px}
@@ -169,6 +172,7 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .notetag.hot,.notetag.cold{padding:2px 9px;border-radius:999px;font-size:12.5px;font-weight:500}
 .notetag.hot{color:var(--hot);background:color-mix(in srgb,var(--hot) 12%,var(--bg))}
 .notetag.cold{color:var(--cold);background:color-mix(in srgb,var(--cold) 10%,var(--bg))}
+.tonepick{display:flex;flex-direction:column;gap:2px}.tonepick .nd{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block;margin-right:2px}.tonepick .hot .nd{background:var(--hot)}.tonepick .cold .nd{background:var(--cold)}.tonepick .small{font-size:11.5px;margin-top:6px}
 .notetag .nd{flex:none;width:7px;height:7px;border-radius:50%;background:currentColor}
 .notetag.clip{overflow:hidden;white-space:nowrap} .notetag.clip .nt{overflow:hidden;text-overflow:ellipsis;min-width:0}
 .wa-other{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
@@ -580,7 +584,7 @@ function ThemeToggle() {
 // ── Laptop: owner list, unit panel, activity ────────────────────────────────
 const EMPTY = { q: '', area: [], sc: [], bld: [], st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', umin: '', umax: '', useries: '', rmin: '', rmax: '', pmin: '', pmax: '',
   first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false,
-  ncall: false, called: false, oc: [], free: true };
+  ncall: false, called: false, oc: [], free: true, tone: '' };
 
 // Older saved views stored one area/cluster/building as text; these are now lists
 function normF(f) {
@@ -905,6 +909,10 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
     mortgaged: { on: ['mort'], ui: () => flag('mort', 'Mortgaged') },
     lastcall: { on: ['ncall', 'called'], ui: () => <>{flag('ncall', 'Never called')}{flag('called', 'Called before')}{flag('free', 'Hide owners others are working')}</> },
     outcome: { on: ['oc'], ui: () => OUTCOMES.map((o) => box('oc', o)) },
+    note: { on: ['tone'], ui: () => <div className="tonepick">
+      {[['', 'All notes'], ['hot', 'Green · positive'], ['cold', 'Red · negative']].map(([v, l]) => (
+        <label className={'cb' + (v ? ' ' + v : '')} key={v || 'all'}><input type="radio" name="htone" checked={f.tone === v} onChange={() => change({ tone: v })} />{v && <i className="nd" />}{l}</label>))}
+      <span className="muted small">Goes by the latest note on each unit</span></div> },
   };
   const isOn = (keys) => keys.some((k) => (Array.isArray(f[k]) ? f[k].length > 0 : !!f[k]));
   const clearKeys = (keys) => change(Object.fromEntries(keys.map((k) => [k, EMPTY[k]])));
@@ -953,7 +961,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
 
         <section className="listcol">
           <nav className="tabs">
-            {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '') + (k === 'callbacks' && c[k] ? ' due' : '')}
+            {TABS.map(([k, l]) => <button key={k} className={'tab' + (tab === k ? ' on' : '') + ((k === 'callbacks' || k === 'reports') && c[k] ? ' due' : '')}
               title={k === 'callbacks' ? 'Owners whose last call this week got no answer. Work through them on Friday.' : undefined}
               onClick={() => goTab(k)}>{l}<span className="c n">{fmt(c[k])}</span></button>)}
           </nav>
@@ -1077,7 +1085,8 @@ const COLUMNS = [
   { k: 'outcome', label: 'Last outcome', cell: (r) => r.last_outcome ?? dash },
   { k: 'note', label: 'Notes', cell: (r) => (r.notes?.length
     ? <div className="nstack">{r.notes.map((n, i) => (
-        <div key={i} className="nitem"><span className="nmeta">{fdt(n.t)} · {String(n.by || '').split(' ')[0]}</span><NoteTag text={n.text} wrap /></div>))}</div>
+        <div key={i} className="nitem"><span className="nmeta">{fdt(n.t)} · {String(n.by || '').split(' ')[0]}</span><NoteTag text={n.text} wrap /></div>))}
+      {r.notes_total > r.notes.length && <span className="nmore">+ {r.notes_total - r.notes.length} earlier · open the unit to see all</span>}</div>
     : dash) },
 ];
 
@@ -2025,7 +2034,7 @@ function Activity() {
 
 // ── Phone screen (/phone) ───────────────────────────────────────────────────
 // A person's own messages (My messages) replace the standard ones: 'noanswer' for no answer / unreachable, 'spoke' for everything else
-const isNoAnswer = (f) => f.outcome === 'No answer' || /^called, (no reply|unreachable)/i.test(String(f.note || ''));
+const isNoAnswer = (f) => f.outcome === 'No answer' || /^(called, (no reply|unreachable)|phone off)/i.test(String(f.note || ''));
 function fillTemplate(t, v) {
   return t.split('{first}').join(v.first).split('{me}').join(v.me).split('{property}').join(v.property).split('{area}').join(v.area)
     .replace(/Hi ,/g, 'Hi,').replace(/Hi\s+\n/g, 'Hi,\n');
@@ -2047,8 +2056,8 @@ function whatsappText(f, me) {
 const standardMessage = (key) => WHATSAPP_BY_NOTE[key] || WHATSAPP[key] || WHATSAPP.default;
 // The messages someone can make their own, in the order the editor shows them
 const MESSAGE_GROUPS = [
-  ['Cold', ['Called, no reply', 'Called, unreachable', 'No answer']],
-  ['Hot', ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Wants to sell', 'Wants to rent', 'Wants to buy', 'Call back']],
+  ['Cold', ['Called, no reply', 'Called, unreachable', 'Phone off', 'No answer']],
+  ['Hot', ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy', 'Call back']],
   ['Anything else', ['default']],
 ];
 const msgLabel = (k) => (k === 'default' ? 'Any other outcome' : k === 'No answer' || k === 'Call back' ? `${k} (outcome)` : k);
@@ -2104,7 +2113,7 @@ function MessagesEditor({ user, onClose }) {
                       <div className="msg-prev"><span className="lbl">Preview</span><div>{fillTemplate(v[k] || standardMessage(k), ex)}</div></div>
                       <div className="msg-acts">
                         {mine && <button className="link" onClick={() => setV({ ...v, [k]: '' })}>Put back the standard message</button>}
-                        {mine && cold.includes(k) && <button className="link" onClick={() => setV({ ...v, ...Object.fromEntries(cold.map((c) => [c, v[k]])) })}>Use this for all three no-answer messages</button>}
+                        {mine && cold.includes(k) && <button className="link" onClick={() => setV({ ...v, ...Object.fromEntries(cold.map((c) => [c, v[k]])) })}>Use this for all the no-answer messages</button>}
                       </div>
                     </div>}
                   </div>);
