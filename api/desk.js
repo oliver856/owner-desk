@@ -56,6 +56,10 @@ function ensureNotes() {
   })().catch((e) => { notesReady = null; throw e; });
   return notesReady;
 }
+// Hot and cold, the same way the dashboards count them
+const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
+const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|phone off|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+
 const actions = {
   // Who am I, today's limits, and the building list for the filters
   async me(req, res, s) {
@@ -85,13 +89,12 @@ const actions = {
     const unit = period === 'today' ? 'day' : period;
     const [b] = await sql`select date_trunc(${unit}, now() at time zone 'Asia/Dubai') as local_start,
       date_trunc(${unit}, now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start,
-      (now() at time zone 'Asia/Dubai')::date as today`;
+      (select count(*)::int from generate_series(date_trunc(${unit}, now() at time zone 'Asia/Dubai')::date, (now() at time zone 'Asia/Dubai')::date, interval '1 day') g(d)
+        where extract(isodow from g.d) < 6) as workdays`;
     // Working days (Mon to Fri) so far in the period, for the target
-    const days = []; for (let d = new Date(b.local_start); d.toISOString().slice(0, 10) <= String(b.today).slice(0, 10); d.setDate(d.getDate() + 1)) days.push(new Date(d));
-    const workdays = Math.max(1, days.filter((d) => d.getDay() !== 0 && d.getDay() !== 6).length);
+    const workdays = Math.max(1, b.workdays);
     const goal = Number(await setting('daily_call_target', 50));
-    const HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
-    const COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|phone off|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+    const HOT = DASH_HOT, COLD = DASH_COLD;
     // Brokers and managers always; admins and directors only once they've made a call in the period
     const people = sql`st.active and (st.role in ('broker', 'manager')
         or exists (select 1 from desk.calls x where x.user_id = st.user_id and x.called_at >= ${b.start}))
@@ -118,6 +121,48 @@ const actions = {
     ]);
     res.json({ period, team, all, myTeam: s.team, goal, workdays, start: b.start, rows, series, teams,
       teamNames: all ? (await sql`select distinct coalesce(team, 'No team') as t from desk.staff where active and role in ('broker', 'manager') order by 1`).map((x) => x.t) : [] });
+  },
+
+  // My numbers: anyone's own calls, hot, cold and WhatsApps, and where they rank in the company.
+  // Only their own figures and the call count of the person directly above them. No other names are sent.
+  async myStats(req, res, s) {
+    const q = query(req);
+    const period = ['today', 'week', 'month'].includes(q.get('period')) ? q.get('period') : 'today';
+    const unit = period === 'today' ? 'day' : period;
+    const [b] = await sql`select date_trunc(${unit}, now() at time zone 'Asia/Dubai') as local_start,
+      date_trunc(${unit}, now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start,
+      (select count(*)::int from generate_series(date_trunc(${unit}, now() at time zone 'Asia/Dubai')::date, (now() at time zone 'Asia/Dubai')::date, interval '1 day') g(d)
+        where extract(isodow from g.d) < 6) as workdays`;
+    // Working days (Mon to Fri) so far in the period, for the target. Worked out in the database so the server's clock zone can't change it.
+    const workdays = Math.max(1, b.workdays);
+    const goal = Number(await setting('daily_call_target', 50));
+    const [board, [mine], series] = await Promise.all([
+      sql`select st.user_id, count(c.id)::int as calls, count(c.id) filter (where ${DASH_HOT})::int as hot
+          from desk.staff st left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${b.start}
+          where st.active and (st.role in ('broker', 'manager') or st.user_id = ${s.user_id}
+            or exists (select 1 from desk.calls x where x.user_id = st.user_id and x.called_at >= ${b.start}))
+          group by st.user_id`,
+      sql`select count(c.id)::int as calls,
+            count(c.id) filter (where ${DASH_HOT})::int as hot,
+            count(c.id) filter (where ${DASH_COLD})::int as cold,
+            count(c.id) filter (where c.note ~* 'whatsapp sent')::int as wa,
+            count(distinct c.owner_id)::int as owners,
+            max(c.called_at) as last_at
+          from desk.calls c where c.user_id = ${s.user_id} and c.called_at >= ${b.start}`,
+      sql`select ${period === 'today' ? sql`extract(hour from c.called_at at time zone 'Asia/Dubai')::int` : sql`to_char(c.called_at at time zone 'Asia/Dubai', 'YYYY-MM-DD')`} as k,
+            count(*)::int as n
+          from desk.calls c where c.user_id = ${s.user_id} and c.called_at >= ${b.start} group by 1 order by 1`,
+    ]);
+    // Rank by calls, then hot leads. People level on both share a place.
+    const better = (x) => x.calls > mine.calls || (x.calls === mine.calls && x.hot > mine.hot);
+    const ahead = board.filter((x) => x.user_id !== s.user_id && better(x));
+    const rank = ahead.length + 1;
+    const level = board.filter((x) => x.user_id !== s.user_id && x.calls === mine.calls && x.hot === mine.hot).length;
+    // The person directly above: the lowest score that still beats mine
+    const above = ahead.sort((x, y) => x.calls - y.calls || x.hot - y.hot)[0] || null;
+    const top = board.reduce((m, x) => Math.max(m, x.calls), 0);
+    res.json({ period, goal, workdays, start: b.start, me: { ...mine, name: s.full_name }, series,
+      rank, of: board.length, level, above: above ? { calls: above.calls, hot: above.hot } : null, top });
   },
 
   // Save (POST) or clear (DELETE) this broker's view
