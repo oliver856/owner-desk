@@ -210,6 +210,9 @@ td{padding:10px 10px 10px 0;border-bottom:1px solid var(--line);vertical-align:t
 tbody tr{cursor:pointer} tbody tr:hover td{background:var(--hover)}
 td.r,th.r{text-align:right} .unit{font-weight:600}
 .ph{color:var(--muted);user-select:none;-webkit-user-select:none;white-space:nowrap}
+.copyph{font:inherit;background:none;border:1px solid transparent;border-radius:6px;padding:2px 6px;margin:-3px -7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.copyph svg{opacity:0;transition:opacity .15s} .copyph:hover{border-color:var(--line);background:var(--hover);color:var(--ink)} .copyph:hover svg{opacity:.7}
+.copyph.ok{color:var(--hot)} .copyph.bad{color:var(--cold)} .same{font-size:12px}
 .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--faint)}
 .dot.t{background:var(--accent)} .dot.v{background:var(--warn)}
 .btn{border:1px solid var(--line);background:var(--bg);border-radius:4px;padding:4px 11px;color:var(--ink)}
@@ -636,6 +639,8 @@ function Desk() {
   }, []);
 
   const refreshMe = useCallback(() => api('/api/desk?action=me').then(setMe).catch((e) => setToast(e.message)), []);
+  // A number was copied: update the counters in the header
+  useEffect(() => { const f = () => refreshMe(); window.addEventListener('desk:caps', f); return () => window.removeEventListener('desk:caps', f); }, [refreshMe]);
   const savePrefs = useCallback(async (prefs) => {
     try { await api('/api/desk?action=savePrefs', { method: 'POST', body: { prefs } }); setMe((m) => ({ ...m, prefs })); setToast('View saved. The Owners page will open like this every time.'); }
     catch (e) { setToast(e.message); }
@@ -706,6 +711,7 @@ function Desk() {
           <div className="right">
             {me && <span>Profiles <span className="n">{me.caps.profiles}/{me.caps.profileCap}</span></span>}
             {me && <span>Calls <span className="n">{me.caps.calls}/{me.caps.callCap}</span></span>}
+            {me && me.caps.copyCap != null && <span title="Numbers copied today">Numbers <span className="n">{me.caps.copies}/{me.caps.copyCap}</span></span>}
             <ThemeToggle />
             {me && <button className="link" onClick={() => setMsgFor('me')}>My messages</button>}
             {me && <span>{me.staff.name}</span>}
@@ -1107,7 +1113,8 @@ const COLUMNS = [
   { k: 'owner', label: 'Owner', cell: (r) => (ownersOf(r).length
     ? <div className="stack">{ownersOf(r).map((o) => <div key={o.id}><span className="clip strong" title={titleCase(o.name)}>{titleCase(o.name)}</span></div>)}</div> : dash) },
   { k: 'mobile', label: 'Mobile', cell: (r) => (ownersOf(r).length
-    ? <div className="stack">{ownersOf(r).map((o) => <div key={o.id}><span className="ph">{o.masked ?? <span className="faint">none</span>}</span></div>)}</div> : <span className="faint">none</span>) },
+    ? <div className="stack">{ownersOf(r).map((o) => <div key={o.id}>{o.dup ? <span className="faint same">same number</span>
+      : o.masked && o.has_phone !== false && !o.dnc ? <CopyNumber unitId={r.id} owner={o} /> : <span className="ph">{o.masked ?? <span className="faint">none</span>}</span>}</div>)}</div> : <span className="faint">none</span>) },
   { k: 'owned', label: 'Units owned', right: true, cell: (r) => r.owner_units },
   { k: 'mortgaged', label: 'Mortgaged', cell: (r) => (r.mortgaged ? 'Yes' : dash) },
   { k: 'lastcall', label: 'Last called', cell: (r) => (r.last_called ? fd(r.last_called) : <span className="faint">Never</span>) },
@@ -1364,6 +1371,43 @@ function HoldChip({ h, long }) {
   return <span className={'hold' + (live ? ' live' : '')} title={tip}>{live ? <span className="pulse" /> : null}{long ? (live ? `${h.by} is calling now` : `${h.by} · ${h.why} · free in ${holdLeft(h.until)}`) : `${first} · ${live ? 'now' : holdLeft(h.until)}`}</span>;
 }
 
+// Click a hidden number to copy it (e.g. to paste into WhatsApp). The number never shows on screen.
+// The server checks it's allowed, logs it and counts it against a daily limit.
+function CopyNumber({ unitId, owner }) {
+  const [st, setSt] = useState(null); // null | 'busy' | 'ok' | error text
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const show = (v) => { setSt(v); clearTimeout(timer.current); timer.current = setTimeout(() => setSt(null), v === 'ok' ? 2500 : 4000); };
+  const copy = async (e) => {
+    e.stopPropagation();
+    if (st === 'busy') return;
+    setSt('busy');
+    const get = api('/api/desk?action=copyNumber', { method: 'POST', body: { unitId, ownerId: owner.id } });
+    try {
+      // Safari only allows clipboard writes started straight from the click, so hand it the pending number
+      if (window.ClipboardItem && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new window.ClipboardItem({ 'text/plain': get.then((j) => new Blob([j.phone], { type: 'text/plain' })) })]);
+      } else {
+        await navigator.clipboard.writeText((await get).phone);
+      }
+      await get;
+      show('ok');
+      window.dispatchEvent(new Event('desk:caps'));
+    } catch (err) {
+      let msg = 'Couldn\'t copy';
+      try { await get; } catch (x) { msg = x.message; }
+      show(msg);
+    }
+  };
+  return (
+    <button type="button" className={'ph copyph' + (st === 'ok' ? ' ok' : st && st !== 'busy' ? ' bad' : '')} onClick={copy}
+      title={st && st !== 'ok' && st !== 'busy' ? st : 'Click to copy the number. It stays hidden here.'}>
+      {st === 'ok' ? 'Copied' : st && st !== 'busy' ? 'Not copied' : owner.masked}
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+    </button>
+  );
+}
+
 // All owners of a unit, in one row (falls back to the main owner if the list didn't include them)
 function ownersOf(r) {
   if (Array.isArray(r.owners) && r.owners.length) return r.owners;
@@ -1378,7 +1422,7 @@ const OwnerRow = React.memo(function OwnerRow({ r, cols, onOpen, onCall, canOver
     <tr onClick={() => onOpen(r.id)} className={unitHold ? 'held-row' : ''}>
       {cols.map((c) => <td key={c.k} className={c.right ? 'r n' : ''}>{c.cell(r)}</td>)}
       <td className="callcol"><div className="stack">{owners.map((o) => (
-        <div key={o.id}>{o.has_phone && !o.dnc && (unitHold
+        <div key={o.id}>{o.has_phone && !o.dnc && !o.dup && (unitHold
           ? <span className="heldcell"><HoldChip h={unitHold} />{canOverride && <button className="btn ghost" title="Managers can call anyway" onClick={call(o, true)}>Call</button>}</span>
           : <button className="btn" onClick={call(o, false)}>Call</button>)}</div>))}</div></td>
     </tr>
@@ -1433,11 +1477,11 @@ function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
                 <div className="owner" key={o.id}>
                   <div>{o.name}
                     <span className="sub">{o.role === 'mortgagee' ? 'Mortgage bank' : o.is_company ? 'Company' : 'Individual'}
-                      {o.role === 'owner' && <> · <span className="ph">{o.masked ?? 'no mobile'}</span></>}{o.dnc ? ' · asked not to be called' : ''}</span>
+                      {o.role === 'owner' && <> · {o.dup ? <span className="faint">same number as above</span> : o.masked && !o.dnc ? <CopyNumber unitId={u.id} owner={o} /> : <span className="ph">{o.masked ?? 'no mobile'}</span>}</>}{o.dnc ? ' · asked not to be called' : ''}</span>
                     {o.role === 'owner' && o.units > 1 && <span className="sub">Also owns {d.others.filter((x) => x.owner_id === o.id).map((x) => (
                       <button key={x.id} className="link" style={{ marginRight: 8 }} onClick={() => onOpen(x.id)}>{x.unit_type === 'Villa' ? x.subcommunity : x.building} {x.unit_no}</button>))}</span>}
                   </div>
-                  <div>{o.role === 'owner' && o.has_phone && !o.dnc && (o.hold
+                  <div>{o.role === 'owner' && o.has_phone && !o.dnc && !o.dup && (o.hold
                     ? <span className="heldcell"><HoldChip h={o.hold} long />{canOverride && <button className="btn ghost" onClick={() => setCalling({ ...o, force: true })}>Call anyway</button>}</span>
                     : <button className="btn" onClick={() => setCalling(o)}>Call</button>)}</div>
                 </div>
@@ -1697,7 +1741,8 @@ function Lookup({ onOpen }) {
 
 const ACTIVITY_LABEL = {
   searched: 'Searched', opened_unit: 'Opened a unit', call_sent: 'Sent a call to phone', call_dialled: 'Tapped Call on phone',
-  outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', limit_hit: 'Hit a daily limit',
+  outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', number_copied: 'Copied a number', copy_number_blocked: 'Tried to copy a number someone else is working',
+  whatsapp_unavailable: 'Number not on WhatsApp', limit_hit: 'Hit a daily limit',
   call_blocked_hours: 'Tried to call outside 9am–6pm', dial_refused: 'Tapped an expired call', phone_alerts_on: 'Turned on phone alerts',
   note_added: 'Added a note', call_blocked_hold: 'Tried to call an owner someone else is working', call_hold_override: 'Called an owner someone else was working', lookup_property: 'Looked up a unit', lookup_owner: 'Looked up an owner', lookup_failed: 'Lookup failed', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
 };
