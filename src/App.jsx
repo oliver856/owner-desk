@@ -710,7 +710,7 @@ function Desk() {
             : <button className="co-start" onClick={() => setStartOpen(true)}>Start call out</button>)}
           <div className="right">
             {me && <span>Profiles <span className="n">{me.caps.profiles}/{me.caps.profileCap}</span></span>}
-            {me && <span>Calls <span className="n">{me.caps.calls}/{me.caps.callCap}</span></span>}
+            {me && <span>Calls <span className="n">{me.caps.calls}</span></span>}
             {me && me.caps.copyCap != null && <span title="Numbers copied today">Numbers <span className="n">{me.caps.copies}/{me.caps.copyCap}</span></span>}
             <ThemeToggle />
             {me && <button className="link" onClick={() => setMsgFor('me')}>My messages</button>}
