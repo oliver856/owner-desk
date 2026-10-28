@@ -202,7 +202,7 @@ th:hover .fbtn,.fbtn.open,.fbtn.on{opacity:1} .fbtn:hover,.fbtn.open{background:
 .fbtn.on{color:var(--accent)!important}
 .hf{position:fixed;z-index:40;width:260px;background:var(--bg);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);font-size:13px;letter-spacing:0;font-weight:400;text-align:left}
 .hf-h{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
-.unums{display:grid;gap:6px;margin-top:10px} .sect .unums,.section .unums{margin-top:0} .unums .lbl{font-size:12px;color:var(--muted);margin-top:2px} .unums input{width:100%;min-width:0}
+.unums{display:grid;gap:6px;margin-top:10px} .sect .unums,.section .unums{margin-top:0} .unums .lbl{font-size:12px;color:var(--muted);margin-top:2px} .unums input{width:100%;min-width:0} .unums .ulx label{display:grid;gap:4px;min-width:0}
 .hf .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px} .hf .pair input{width:100%;min-width:0}
 .hf-b{padding:10px 12px;display:grid;gap:2px;max-height:340px;overflow:auto} .hf-b select,.hf-b input[type=search]{width:100%}
 td{padding:10px 10px 10px 0;border-bottom:1px solid var(--line);vertical-align:top}
@@ -334,6 +334,17 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .kbar{height:8px;border-radius:999px;background:var(--hover);overflow:hidden;margin-top:4px}
 .kbar i{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .5s} .kbar i.hit{background:var(--hot)}
 .kbar.sm{display:inline-block;width:70%;height:6px;vertical-align:middle;margin:0 8px 0 0}
+.dash-ctl .btn{padding:7px 14px;border-radius:999px}
+.mypos{display:flex;gap:28px;align-items:center;margin-bottom:12px;padding:20px 24px;background:linear-gradient(110deg,color-mix(in srgb,var(--accent) 10%,var(--bg)),var(--bg) 75%)}
+.mp-rank{display:flex;flex-direction:column;gap:2px;min-width:150px} .mp-rank span{font-size:12px;color:var(--muted)}
+.mp-rank b{font-size:52px;line-height:1.05;font-weight:750;letter-spacing:-.03em;color:var(--accent)} .mp-rank em{font-style:normal;font-size:13px;color:var(--muted)}
+.mypos.podium .mp-rank b{color:#b7861b}
+.mp-next{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px} .mp-next p{margin:0;font-size:15px}
+.mp-ladder{display:flex;gap:10px;flex-wrap:wrap}
+.mp-step{border:1px solid var(--line);border-radius:10px;padding:8px 14px;display:flex;align-items:baseline;gap:8px;background:var(--bg)}
+.mp-step span{font-size:12px;color:var(--muted)} .mp-step b{font-size:20px} .mp-step em{font-style:normal;font-size:12px;color:var(--faint)}
+.mp-step.you{border-color:var(--accent)} .mp-step.you b{color:var(--accent)}
+@media (max-width:700px){.mypos{flex-direction:column;align-items:flex-start;gap:12px}}
 .dash-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin-bottom:12px} @media (max-width:1000px){.dash-grid{grid-template-columns:1fr}}
 .dash-grid>.card:only-child{grid-column:1/-1} .dash-grid>*{min-width:0} .dash .card{overflow-x:auto}
 .card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--bg)}
@@ -582,7 +593,7 @@ function ThemeToggle() {
 }
 
 // ── Laptop: owner list, unit panel, activity ────────────────────────────────
-const EMPTY = { q: '', area: [], sc: [], bld: [], st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', umin: '', umax: '', useries: '', rmin: '', rmax: '', pmin: '', pmax: '',
+const EMPTY = { q: '', area: [], sc: [], bld: [], st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', umin: '', umax: '', useries: '', uletter: '', rmin: '', rmax: '', pmin: '', pmax: '',
   first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false,
   ncall: false, called: false, oc: [], free: true, tone: '' };
 
@@ -680,7 +691,7 @@ function Desk() {
           <nav className="nav">
             <button className={view === 'owners' ? 'on' : ''} onClick={() => setView('owners')}>Owners</button>
             <button className={view === 'lookup' ? 'on' : ''} onClick={() => setView('lookup')}>Lookup</button>
-            {me && me.staff.role !== 'broker' && <button className={view === 'dash' ? 'on' : ''} onClick={() => setView('dash')}>Dashboard</button>}
+            {me && <button className={view === 'dash' ? 'on' : ''} onClick={() => setView('dash')}>Dashboard</button>}
             <button className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>Activity</button>
             {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
             <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
@@ -698,7 +709,7 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? (me ? <Owners banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <Dashboard /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
+      {view === 'owners' ? (me ? <Owners banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
       {phase === 'done' && co?.meIn && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
@@ -883,13 +894,18 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   const unitNums = (side) => <div className="unums">
     {!side && <span className="lbl">Unit number</span>}
     <div className="pair">{num('umin', 'From')}{num('umax', 'To')}</div>
-    <span className="lbl">Series</span>
-    <input type="text" inputMode="numeric" maxLength={4} placeholder="e.g. 02 for 102, 202, 302" value={f.useries}
-      onChange={(e) => change({ useries: e.target.value.replace(/\D/g, '') }, true)} />
+    <div className="pair ulx">
+      <label><span className="lbl">Letter</span>
+        <input type="text" maxLength={3} placeholder="e.g. J" value={f.uletter} aria-label="Letter before the unit number"
+          onChange={(e) => change({ uletter: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') }, true)} /></label>
+      <label><span className="lbl">Series</span>
+        <input type="text" inputMode="numeric" maxLength={4} placeholder="e.g. 02" value={f.useries} aria-label="Unit series, e.g. 02 for 102, 202, 302"
+          onChange={(e) => change({ useries: e.target.value.replace(/\D/g, '') }, true)} /></label>
+    </div>
   </div>;
   const search = () => <input type="search" autoFocus placeholder="Search owner, building or unit" value={f.q} onChange={(e) => change({ q: e.target.value }, true)} />;
   const HEAD_FILTERS = {
-    unit: { on: ['q', 'umin', 'umax', 'useries'], ui: () => <>{search()}{unitNums()}</> },
+    unit: { on: ['q', 'umin', 'umax', 'useries', 'uletter'], ui: () => <>{search()}{unitNums()}</> },
     place: { on: ['bld'], ui: () => pick('bld', buildings) },
     sc: { on: ['sc'], ui: () => pick('sc', subcommunities) },
     area: { on: ['area'], ui: () => pick('area', areas) },
@@ -949,7 +965,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
             </div></Section>
           <Section title="Type" on={f.type.length}>{box('type', 'Apartment')}{box('type', 'Villa')}</Section>
           <Section title="Beds" on={f.beds.length}><div className="cols">{BEDS.map((b) => box('beds', b, bedsLabel(b)))}</div></Section>
-          <Section title="Unit number" on={f.umin || f.umax || f.useries}>{unitNums(true)}</Section>
+          <Section title="Unit number" on={f.umin || f.umax || f.useries || f.uletter}>{unitNums(true)}</Section>
           <Section title="Size, sq ft" on={f.smin || f.smax}><div className="pair">{num('smin', 'Min')}{num('smax', 'Max')}</div></Section>
           <Section title="Rent, AED a year" on={f.rmin || f.rmax}><div className="pair">{num('rmin', 'Min')}{num('rmax', 'Max')}</div></Section>
           <Section title="Tenancy" on={f.first || f.ren2 || f.up || f.down}>{flag('first', 'First year (no renewals)')}{flag('ren2', 'Renewed 2+ times')}{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</Section>
@@ -1923,7 +1939,93 @@ function PersonForm({ p, areas, teams, myRole, isMe, onClose, onSaved }) {
   );
 }
 
-function Dashboard() {
+// Chart bars: by hour today, by day for this week / this month
+function makeBars(period, startAt, series) {
+  if (period === 'today') return Array.from({ length: 11 }, (_, i) => { const h = 8 + i; return { k: `${h}:00`, n: series.find((x) => Number(x.k) === h)?.n || 0 }; });
+  const out = []; const start = new Date(String(startAt)); const end = new Date();
+  for (let x = new Date(start); x <= end; x.setDate(x.getDate() + 1)) {
+    const k = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(x);
+    const lab = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', weekday: period === 'week' ? 'short' : undefined, day: 'numeric' }).format(x);
+    if (!out.some((o) => o.key === k)) out.push({ key: k, k: lab, n: series.find((s) => s.k === k)?.n || 0 });
+  }
+  return out;
+}
+const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month']];
+const periodLabel = (p) => ({ today: 'today', week: 'this week', month: 'this month' }[p]);
+
+// Brokers only see their own numbers. Managers and directors see their team, and can switch to their own.
+function DashPage({ role }) {
+  const [mine, setMine] = useState(role === 'broker');
+  return mine ? <MyDashboard onTeam={role === 'broker' ? null : () => setMine(false)} /> : <Dashboard onMine={() => setMine(true)} />;
+}
+
+// My numbers: your own calls, hot, cold and WhatsApps, and your place in the company.
+// The person above you is shown by their call count only, never their name.
+function MyDashboard({ onTeam }) {
+  const [period, setPeriod] = useState('today');
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const load = useCallback(() => {
+    api(`/api/desk?action=myStats&period=${period}`).then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message));
+  }, [period]);
+  useEffect(() => { load(); const t = setInterval(() => document.visibilityState === 'visible' && load(), 60000); return () => clearInterval(t); }, [load]);
+  if (err) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p></main>;
+  if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
+  const m = d.me;
+  const label = periodLabel(d.period);
+  const per = d.goal * d.workdays;
+  const bars = makeBars(d.period, d.start, d.series);
+  const maxBar = Math.max(1, ...bars.map((b) => b.n));
+  const gap = d.above ? d.above.calls - m.calls : 0;
+  let line;
+  if (!m.calls) line = d.top ? `Make your first call to get on the board. The top caller ${label} has ${pl(d.top, 'call')}.` : `Nobody has called yet ${label}. First call puts you top.`;
+  else if (!d.above) line = d.level ? `Top of the company ${label}, level with ${pl(d.level, 'other person')}. One more call and it's yours.` : `Top of the company ${label}. Nobody has made more calls.`;
+  else if (gap > 0) line = `The person above you has ${pl(d.above.calls, 'call')}. You're ${gap} behind, so ${gap + 1} more puts you ahead.`;
+  else line = `The person above you also has ${pl(d.above.calls, 'call')} but more hot leads (${d.above.hot}). One more call puts you ahead.`;
+  return (
+    <main className="gut dash">
+      <div className="dash-head">
+        <div><h1>My numbers</h1>
+          <p className="muted">Your calls {label} · target {d.goal} a day{d.period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}</p></div>
+        <div className="dash-ctl">
+          {onTeam && <button className="btn" onClick={onTeam}>Team view</button>}
+          <div className="seg">{PERIODS.map(([k, l]) => <button key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
+        </div>
+      </div>
+
+      <section className={'card mypos' + (m.calls && d.rank <= 3 ? ' podium' : '')}>
+        <div className="mp-rank"><span>Your place {label}</span>
+          <b className="n">{m.calls ? ordinal(d.rank) : '–'}</b>
+          <em>{m.calls ? `of ${d.of} in the company${d.level ? ` · level with ${d.level}` : ''}` : `${d.of} people in the company`}</em></div>
+        <div className="mp-next">
+          {d.above && m.calls > 0 && <div className="mp-ladder">
+            <div className="mp-step up"><span>Above you</span><b className="n">{d.above.calls}</b><em>calls · {d.above.hot} hot</em></div>
+            <div className="mp-step you"><span>You</span><b className="n">{m.calls}</b><em>calls · {m.hot} hot</em></div>
+          </div>}
+          <p>{line}</p>
+        </div>
+      </section>
+
+      <div className="kpis">
+        <div className="kpi big"><span>Calls</span><b className="n">{fmt(m.calls)}</b>
+          <div className="kbar"><i className={m.calls >= per ? 'hit' : ''} style={{ width: `${Math.min(100, (m.calls / per) * 100)}%` }} /></div>
+          <em>{Math.round((m.calls / per) * 100)}% of your {fmt(per)} target</em></div>
+        <div className="kpi hot"><span>Hot</span><b className="n">{fmt(m.hot)}</b><em>{m.calls ? Math.round((m.hot / m.calls) * 100) : 0}% of your calls</em></div>
+        <div className="kpi cold"><span>Cold</span><b className="n">{fmt(m.cold)}</b><em>no answer, unreachable</em></div>
+        <div className="kpi"><span>WhatsApps sent</span><b className="n">{fmt(m.wa)}</b><em>after calls</em></div>
+        <div className="kpi"><span>Owners reached</span><b className="n">{fmt(m.owners)}</b><em>{m.last_at ? `last call ${fdt(m.last_at)}` : `no calls ${label}`}</em></div>
+      </div>
+
+      <section className="card">
+        <h4>{d.period === 'today' ? 'Your calls by hour' : 'Your calls by day'}</h4>
+        <div className="bars">{bars.map((b, i) => (
+          <div key={i} className="bar-c" title={`${b.k}: ${b.n}`}><div className="bar-v" style={{ height: `${(b.n / maxBar) * 100}%` }}>{b.n ? <span>{b.n}</span> : null}</div><em>{b.k}</em></div>))}</div>
+      </section>
+    </main>
+  );
+}
+
+function Dashboard({ onMine }) {
   const [period, setPeriod] = useState('today');
   const [team, setTeam] = useState('');
   const [d, setD] = useState(null);
@@ -1942,18 +2044,7 @@ function Dashboard() {
   const active = d.rows.filter((r) => r.calls > 0).length;
   const teamTarget = per * Math.max(1, d.rows.length);
   const label = { today: 'today', week: 'this week', month: 'this month' }[period];
-  // Chart: by hour today, by day for week/month
-  let bars;
-  if (period === 'today') { bars = Array.from({ length: 11 }, (_, i) => { const h = 8 + i; return { k: `${h}:00`, n: d.series.find((x) => Number(x.k) === h)?.n || 0 }; }); }
-  else {
-    const out = []; const start = new Date(String(d.start)); const end = new Date();
-    for (let x = new Date(start); x <= end; x.setDate(x.getDate() + 1)) {
-      const k = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(x);
-      const lab = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', weekday: period === 'week' ? 'short' : undefined, day: 'numeric' }).format(x);
-      if (!out.some((o) => o.key === k)) out.push({ key: k, k: lab, n: d.series.find((s) => s.k === k)?.n || 0 });
-    }
-    bars = out;
-  }
+  const bars = makeBars(period, d.start, d.series);
   const maxBar = Math.max(1, ...bars.map((b) => b.n));
   const medal = ['🥇', '🥈', '🥉'];
   return (
@@ -1962,6 +2053,7 @@ function Dashboard() {
         <div><h1>{d.all ? (d.team ? d.team : 'Director overview') : `${d.myTeam || 'Your team'}`}</h1>
           <p className="muted">{d.all ? 'Calls across every team' : 'Your team\'s calls'} {label} · target {d.goal} a day per person{period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}</p></div>
         <div className="dash-ctl">
+          {onMine && <button className="btn" onClick={onMine}>My numbers</button>}
           {d.all && <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="">All teams</option>{d.teamNames.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
           <div className="seg">{[['today', 'Today'], ['week', 'This week'], ['month', 'This month']].map(([k, l]) => <button key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
         </div>
