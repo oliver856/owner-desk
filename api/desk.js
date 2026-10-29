@@ -20,9 +20,15 @@ const places = new Map(); // building list per area set, kept for 1 minute
 
 // Adds the 'director' role (sees every team, like an admin, but can't change settings)
 let rolesReady = null;
-const ensureRoles = () => (rolesReady ??= schemaOk().then((ok) => ok || sql`alter table desk.staff drop constraint if exists staff_role_check`
-  .then(() => sql`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`))
-  .catch((e) => { rolesReady = null; throw e; }));
+// Only touches the staff table if the director role is genuinely missing, and never waits more than 3 seconds for it,
+// so the Dashboard can't hang behind other requests.
+const ensureRoles = () => (rolesReady ??= sql`select exists (select 1 from pg_constraint where conname = 'staff_role_check'
+    and pg_get_constraintdef(oid) like '%director%') as ok`.then(([r]) => r.ok || sql.begin(async (tx) => {
+      await tx`set local lock_timeout = '3s'`;
+      await tx`alter table desk.staff drop constraint if exists staff_role_check`;
+      await tx`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`;
+    }))
+  .catch((e) => { rolesReady = null; console.error(e); }));
 
 // Each broker's saved view (filters, tab, sort, columns, filter panel). Created by the server on first use.
 let prefsReady = null;
@@ -253,7 +259,9 @@ const actions = {
           from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)}`,
     ]);
     const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more', 'only'].includes(k));
-    if (!only && (filtered || page > 1)) audit(s.user_id, 'searched', { detail: Object.fromEntries(q), ip }).catch(() => {});
+    // Awaited on purpose: anything still running after the reply is sent gets frozen mid-query by Vercel and
+    // leaves a database connection stuck, which then hangs other pages served by the same instance.
+    if (!only && (filtered || page > 1)) await audit(s.user_id, 'searched', { detail: Object.fromEntries(q), ip }).catch(() => {});
     res.json({ rows, counts, page, pageSize: PAGE });
   },
 
