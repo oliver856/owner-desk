@@ -36,15 +36,49 @@ function composeNote(chip, extra) {
   return e ? `${chip}. ${e}` : chip;
 }
 const notePlaceholder = (chip, fallback) => (chip === 'Other' ? 'Write the note' : chip ? 'Add your own words (optional)' : fallback);
+// Each person can drag the quick notes into their own order (saved to their account, so laptop and phone match)
+let quickOrderP = null;
+const loadQuickOrder = () => (quickOrderP ??= api('/api/desk?action=quickOrder').then((j) => j.order || {}).catch(() => { quickOrderP = null; return {}; }));
+const orderedNotes = (group, order) => {
+  const list = QUICK_NOTES[group];
+  const mine = (order?.[group] || []).filter((q) => list.includes(q));
+  return [...mine, ...list.filter((q) => !mine.includes(q))];   // new notes we add later go at the end
+};
 function QuickNotes({ value, onPick }) {
+  const [order, setOrder] = useState(null);
+  const [drag, setDrag] = useState(null);   // { group, q }
+  const [over, setOver] = useState(null);
+  useEffect(() => { let on = true; loadQuickOrder().then((o) => on && setOrder(o)); return () => { on = false; }; }, []);
+  const move = (group, from, to) => {
+    if (from === to) return;
+    const list = orderedNotes(group, order);
+    const ti = list.indexOf(to);
+    list.splice(list.indexOf(from), 1);
+    list.splice(ti, 0, from);   // dragging down lands after the note you drop on, dragging up lands before it
+    const next = { ...(order || {}), [group]: list };
+    setOrder(next);
+    quickOrderP = Promise.resolve(next);
+    api('/api/desk?action=quickOrder', { method: 'POST', body: { order: next } }).catch(() => {});
+  };
+  const reset = () => { setOrder({}); quickOrderP = Promise.resolve({}); api('/api/desk?action=quickOrder', { method: 'POST', body: { order: {} } }).catch(() => {}); };
+  const custom = order && Object.keys(order).some((g) => (order[g] || []).length);
   return (
     <div className="qnotes">
-      {Object.entries(QUICK_NOTES).map(([group, list]) => (
-        <div key={group} className={'qcol ' + group.toLowerCase()}>
-          <span className="qh">{group}</span>
-          {list.map((q) => <button type="button" key={q} className={'chip' + (value === q ? ' on' : '')} onClick={() => onPick(value === q ? '' : q)}>{q}</button>)}
+      {Object.keys(QUICK_NOTES).map((group) => (
+        <div key={group} className={'qcol ' + group.toLowerCase()} onDragOver={(e) => { if (drag?.group === group) e.preventDefault(); }}>
+          <span className="qh" title="Drag the notes to put them in your own order">{group}</span>
+          {orderedNotes(group, order).map((q) => (
+            <button type="button" key={q} draggable
+              className={'chip' + (value === q ? ' on' : '') + (drag?.q === q ? ' dragging' : '') + (over === q && drag && drag.q !== q ? ' over' : '')}
+              onDragStart={(e) => { setDrag({ group, q }); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', q); }}
+              onDragEnter={() => drag?.group === group && setOver(q)}
+              onDragOver={(e) => { if (drag?.group === group) e.preventDefault(); }}
+              onDrop={(e) => { e.preventDefault(); if (drag?.group === group) move(group, drag.q, q); setDrag(null); setOver(null); }}
+              onDragEnd={() => { setDrag(null); setOver(null); }}
+              onClick={() => onPick(value === q ? '' : q)}>{q}</button>))}
         </div>
       ))}
+      {custom && <button type="button" className="link qreset" onClick={reset}>Reset note order</button>}
     </div>
   );
 }
@@ -161,6 +195,8 @@ th:hover .rz::after,.col-resizing .rz::after{background:var(--line)} .rz:hover::
 body.col-resizing{cursor:col-resize;user-select:none}
 .qnotes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 .qcol{display:flex;flex-direction:column;align-items:flex-start;gap:5px;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.qcol .chip[draggable]{cursor:grab} .qcol .chip.dragging{opacity:.4} .qcol .chip.over{box-shadow:0 -2px 0 0 var(--accent)}
+.qreset{grid-column:1/-1;justify-self:end;font-size:12px}
 .qcol .qh{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .qcol.cold{border-color:color-mix(in srgb,var(--cold) 35%,var(--line))} .qcol.hot{border-color:color-mix(in srgb,var(--hot) 35%,var(--line))}
 .qcol.cold .qh{color:var(--cold)} .qcol.hot .qh{color:var(--hot)}
