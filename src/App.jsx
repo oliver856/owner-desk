@@ -499,7 +499,7 @@ async function getSupa() {
   supa = createClient(cfg.url, cfg.anonKey, { auth: { persistSession: true, autoRefreshToken: true } });
   return supa;
 }
-async function api(path, opts = {}) {
+async function api(path, opts = {}, retried = false) {
   const sb = await getSupa();
   const { data } = await sb.auth.getSession();
   const r = await fetch(path, {
@@ -509,6 +509,8 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const j = await r.json().catch(() => ({}));
+  // The server cut off a stuck request and opened fresh connections: try a read again once, straight away
+  if (r.status === 503 && j.retry && !retried && !opts.body && !opts.signal?.aborted) return api(path, opts, true);
   if (r.status === 401) { window.dispatchEvent(new Event('signed-out')); }
   if (!r.ok) throw Object.assign(new Error(j.error || 'Something went wrong. Try again.'), { status: r.status });
   return j;
