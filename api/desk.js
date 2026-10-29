@@ -18,6 +18,15 @@ const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 
 
 const places = new Map(); // building list per area set, kept for 1 minute
 
+// Each person's own order for the hot and cold quick notes
+const ensureStaffUi = ensureOnce((q) => q`select to_regclass('desk.staff_ui') is not null as ok`, async (tx) => {
+  await tx`create table if not exists desk.staff_ui (
+    user_id uuid primary key references desk.staff(user_id) on delete cascade,
+    quick_order jsonb not null default '{}', updated_at timestamptz not null default now())`;
+  await tx`alter table desk.staff_ui enable row level security`;
+  await tx`revoke all on desk.staff_ui from anon, authenticated`;
+});
+
 // Adds the 'director' role (sees every team, like an admin, but can't change settings)
 const ensureRoles = ensureOnce((q) => q`select exists (select 1 from pg_constraint where conname = 'staff_role_check'
     and pg_get_constraintdef(oid) like '%director%') as ok`, async (tx) => {
@@ -172,6 +181,21 @@ const actions = {
               on conflict (user_id) do update set target = excluded.target, updated_at = now()`;
     await audit(s.user_id, 'target_set', { detail: { target: n }, ip });
     res.json({ ok: true, goal: n, base });
+  },
+
+  // The order this person likes their hot and cold quick notes in: { Cold: [...], Hot: [...] }
+  async quickOrder(req, res, s) {
+    await ensureStaffUi();
+    if (req.method === 'POST') {
+      const b = body(req).order || {};
+      const clean = {};
+      for (const g of ['Cold', 'Hot']) if (Array.isArray(b[g])) clean[g] = b[g].map((x) => String(x).slice(0, 60)).slice(0, 30);
+      await sql`insert into desk.staff_ui (user_id, quick_order) values (${s.user_id}, ${sql.json(clean)})
+                on conflict (user_id) do update set quick_order = excluded.quick_order, updated_at = now()`;
+      return res.json({ ok: true, order: clean });
+    }
+    const [r] = await sql`select quick_order from desk.staff_ui where user_id = ${s.user_id}`;
+    res.json({ order: r?.quick_order || {} });
   },
 
   // Save (POST) or clear (DELETE) this broker's view
