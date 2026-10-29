@@ -66,6 +66,7 @@ const WHATSAPP_BY_NOTE = {
   'Called, unreachable': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
   'Called, line busy, call again later': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area} but the line was busy. When would be a good time to talk?',
   'Phone off': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
+  'Sold': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now, and congratulations on selling your {property}, {area}. If you\'re ever thinking about reinvesting or looking for your next property, I\'d be happy to help. Save my number and message me here any time.',
   'End user': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Glad to hear you\'re enjoying living there. If you ever want an up-to-date valuation or have questions about the market, save my number and message me here any time.',
   'Send report': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As promised, I\'ll send over a market report for your {property}, {area} today.',
   'Unit available, send WhatsApp': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. As discussed, could you send me a few details on your {property}, {area}: photos, when it\'s available and the price you have in mind? I\'ll take it from there.',
@@ -702,7 +703,8 @@ function Desk() {
   const resultsSeen = co?.callout ? (() => { try { return localStorage.getItem('callout-seen-' + co.callout.id) === '1'; } catch { return false; } })() : true;
   const closeResults = () => { try { localStorage.setItem('callout-seen-' + co.callout.id, '1'); } catch {} setSeenTick(seenTick + 1); };
   const boss = me && me.staff.role !== 'broker';
-  const calloutOn = phase === 'live' && co?.meIn;
+  // Managers, directors and admins always see a running call out (to watch it), even when it's for other teams
+  const calloutOn = phase === 'live' && (co?.meIn || boss);
 
   // Copy protection: blocks copying owner data and logs the attempt
   useEffect(() => {
@@ -749,7 +751,7 @@ function Desk() {
       {view === 'owners' ? (me ? <Owners keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
-      {phase === 'done' && co?.meIn && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
+      {phase === 'done' && (co?.meIn || boss) && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
       {msgFor && <MessagesEditor user={msgFor === 'me' ? null : msgFor} onClose={() => setMsgFor(null)} />}
       {startOpen && <StartCallout onClose={() => setStartOpen(false)} onStarted={() => { setStartOpen(false); loadCo(); }} />}
       {toast && <div className="toast">{toast}</div>}
@@ -2043,8 +2045,9 @@ function CalloutBar({ co, boss, onChange }) {
           {board.length > 6 && <span className="more">+{board.length - 6}</span>}</div>
         {ticker.length > 0 && <div className="co-tick">{ticker.map((t, i) => <span key={i}>{t}</span>)}</div>}
       </div>
-      <div className="co-me"><span className="co-dim">YOU</span>
-        <b>{me && (coScore(co, me) || myIdx > 0) ? ordinal(myIdx + 1) : '–'}</b>
+      <div className="co-me"><span className="co-dim">{me ? 'YOU' : 'WATCHING'}</span>
+        <b>{me && (coScore(co, me) || myIdx > 0) ? ordinal(myIdx + 1) : me ? '–' : `${board.length}`}</b>
+        {!me && <span className="co-dim">people in this call out</span>}
         <span className="co-dim">{me ? `${pl(me.calls, 'call')}${me.hot ? ` · ${me.hot} hot` : ''}` : ''}
           {ahead != null ? ` · ${ahead} behind ${board[myIdx - 1].name.split(' ')[0]}` : lead ? ` · ${lead} ahead` : ''}</span>
         {boss && <span className="co-ctl"><button onClick={() => control('calloutExtend')}>+10 min</button>
@@ -2393,7 +2396,7 @@ function whatsappText(f, me) {
 const standardMessage = (key) => WHATSAPP_BY_NOTE[key] || WHATSAPP[key] || WHATSAPP.default;
 // The messages someone can make their own, in the order the editor shows them
 const MESSAGE_GROUPS = [
-  ['Cold', ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'End user', 'No answer']],
+  ['Cold', ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'End user', 'Sold', 'No answer']],
   ['Hot', ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy', 'Call back']],
   ['Anything else', ['default']],
 ];
