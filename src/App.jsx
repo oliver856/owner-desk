@@ -2088,9 +2088,14 @@ function Team({ myRole, onMessages }) {
   const [err, setErr] = useState('');
   const [edit, setEdit] = useState(null); // { mode: 'new' | 'edit', ...person }
   const [q, setQ] = useState('');
-  const load = useCallback(() => api('/api/desk?action=team').then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message)), []);
+  const load = useCallback(() => {
+    setErr('');
+    // Never sit on "Loading…" forever: after 20 seconds say so and offer to try again
+    const slow = setTimeout(() => setErr('The Team page is taking too long to load.'), 20000);
+    return api('/api/desk?action=team').then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message)).finally(() => clearTimeout(slow));
+  }, []);
   useEffect(() => { load(); }, [load]);
-  if (err && !d) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p></main>;
+  if (err && !d) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p><button className="btn" onClick={load}>Try again</button></main>;
   if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
   const areaName = Object.fromEntries(d.areas.map((a) => [Number(a.id), a.name]));
   const teams = [...new Set(d.people.map((p) => p.team).filter(Boolean))].sort();
