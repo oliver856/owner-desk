@@ -688,7 +688,7 @@ function Desk() {
   useEffect(() => {
     loadCo();
     const fast = phase === 'countdown' || phase === 'live';
-    const t = setInterval(() => { if (document.visibilityState === 'visible') loadCo(); }, fast ? 4000 : 15000);
+    const t = setInterval(() => { if (document.visibilityState === 'visible') loadCo(); }, fast ? 8000 : 20000);
     return () => clearInterval(t);
   }, [loadCo, phase]);
   useEffect(() => {
