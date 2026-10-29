@@ -134,8 +134,33 @@ export async function caps(userId) {
   return { profileCap: r.profile_cap, callCap: r.call_cap, profiles: r.profiles, calls: r.calls, copyCap: r.copy_cap, copies: r.copies };
 }
 
+// Each person's own daily call target. Never below the company target (setting daily_call_target, 50 by default).
+let targetsReady = null;
+export function ensureTargets() {
+  targetsReady ??= (async () => {
+    const [r] = await sql`select to_regclass('desk.staff_targets') is not null as ok`;
+    if (r.ok) return;
+    await sql`create table if not exists desk.staff_targets (
+      user_id uuid primary key references desk.staff(user_id) on delete cascade,
+      target int not null,
+      updated_at timestamptz not null default now())`;
+    await sql`alter table desk.staff_targets enable row level security`;
+    await sql`revoke all on desk.staff_targets from anon, authenticated`;
+  })().catch((e) => { targetsReady = null; throw e; });
+  return targetsReady;
+}
+export const baseTarget = async () => Number(await setting('daily_call_target', 50)) || 50;
+// A person's goal: their own target, or the company one if theirs is lower or not set
+export async function goalFor(userId) {
+  await ensureTargets();
+  const base = await baseTarget();
+  const [t] = await sql`select target from desk.staff_targets where user_id = ${userId}`;
+  return { goal: Math.max(base, t?.target || 0), base };
+}
+
 // Today's call target: calls actually dialled (the blue button tapped), the goal, and where you sit on the team
 export async function callTarget(userId) {
+  const { goal, base } = await goalFor(userId);
   const [r] = await sql`
     with day as (select date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start),
     per as (select c.user_id, count(*)::int as n from desk.calls c, day where c.called_at >= day.start group by c.user_id)
@@ -157,7 +182,7 @@ export async function callTarget(userId) {
     having count(c.id) > 0 or st.user_id = ${userId}
     order by calls desc, last_at asc nulls last
     limit 12`;
-  return { goal: r.goal, made: r.made, team: r.team, callers: r.callers, rank: r.rank, hours: r.hours || { from: '09:00', to: '18:00' },
+  return { goal, base, made: r.made, team: r.team, callers: r.callers, rank: r.rank, hours: r.hours || { from: '09:00', to: '18:00' },
     board: board.map((b) => ({ me: b.user_id === userId, name: b.name, team: b.team, calls: b.calls })) };
 }
 
