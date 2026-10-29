@@ -3,15 +3,26 @@
 import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
 
-export const sql =
-  globalThis.__sql ??
-  (globalThis.__sql = postgres(process.env.DATABASE_URL, {
-    prepare: false, max: 3, onnotice: () => {}, max_lifetime: 60 * 5, max_lifetime: 60 * 5,
-    // traffic between the site and the database is always encrypted (only a local test copy skips it)
-    ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || '') ? false : 'require', idle_timeout: 20, connect_timeout: 15,
-    // dates stay as plain YYYY-MM-DD text so they never shift with time zones; big ids come back as numbers
-    types: { date: { to: 1082, from: [1082], serialize: (x) => x, parse: (x) => x }, bigint: { to: 20, from: [20], serialize: (x) => String(x), parse: (x) => Number(x) } },
-  }));
+const connect = () => postgres(process.env.DATABASE_URL, {
+  prepare: false, max: 3, onnotice: () => {}, max_lifetime: 60 * 5, idle_timeout: 20, connect_timeout: 10,
+  // traffic between the site and the database is always encrypted (only a local test copy skips it)
+  ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || '') ? false : 'require',
+  // dates stay as plain YYYY-MM-DD text so they never shift with time zones; big ids come back as numbers
+  types: { date: { to: 1082, from: [1082], serialize: (x) => x, parse: (x) => x }, bigint: { to: 20, from: [20], serialize: (x) => String(x), parse: (x) => Number(x) } },
+});
+globalThis.__sql ??= connect();
+// Vercel can pause a server copy halfway through talking to the database. Its connections then wait forever and every
+// request on that copy hangs. resetDb() throws those connections away and opens fresh ones. 'sql' always points at
+// the current set, so the rest of the code doesn't change.
+export function resetDb() {
+  const old = globalThis.__sql;
+  globalThis.__sql = connect();
+  old.end({ timeout: 0 }).catch(() => {});
+}
+export const sql = new Proxy(function () {}, {
+  apply: (_t, _this, args) => globalThis.__sql(...args),
+  get: (_t, prop) => { const v = globalThis.__sql[prop]; return typeof v === 'function' ? v.bind(globalThis.__sql) : v; },
+});
 
 const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const SUPA_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
@@ -101,9 +112,19 @@ export async function staffFor(req) {
 }
 
 // Wraps a route: office-IP check, sign-in check, no caching, friendly errors.
+// Watchdog: no request may take longer than this. If one does, its database connections are presumed stuck,
+// they're replaced, and the page gets a quick "try again" (the screen retries by itself) instead of hanging.
+const REQUEST_LIMIT_MS = 12000;
 export function route(fn, { office = true, auth = true } = {}) {
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
+    let timedOut = false;
+    const dog = setTimeout(() => {
+      timedOut = true;
+      console.error('Request took too long, resetting database connections:', req.url);
+      resetDb();
+      if (!res.headersSent) res.status(503).json({ error: 'The Owner Desk is busy. Trying again…', retry: true });
+    }, REQUEST_LIMIT_MS);
     try {
       const ip = clientIp(req);
       if (office && !officeAllowed(ip)) return res.status(403).json({ error: 'The Owner Desk only works from the Apex office network.' });
@@ -114,9 +135,9 @@ export function route(fn, { office = true, auth = true } = {}) {
       }
       await fn(req, res, staff, ip);
     } catch (e) {
-      console.error(e);
+      if (!timedOut) console.error(e);
       if (!res.headersSent) res.status(500).json({ error: 'Something went wrong. Try again.' });
-    }
+    } finally { clearTimeout(dog); }
   };
 }
 
