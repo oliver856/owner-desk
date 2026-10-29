@@ -193,6 +193,15 @@ body.col-resizing{cursor:col-resize;user-select:none}
 @media (max-width:520px){.qnotes{grid-template-columns:1fr}}
 .qnotes + textarea{margin-top:8px}
 .kline{margin:4px 0 0;font-size:13px} .kline.sent{color:var(--hot)} .kline.existing{color:var(--muted)} .kline.error,.kline.off{color:var(--cold)} .kline.small{display:block;font-size:11.5px;margin-top:2px}
+.box.rocket{width:min(560px,100%)} .rk-h{display:flex;justify-content:space-between;align-items:center} .rk-h h3{margin:0} .rk-h .x{border:none;background:none;font-size:22px;cursor:pointer;color:var(--muted)}
+.rk-f{display:flex;flex-direction:column;gap:5px;margin-top:12px;font-size:12px;color:var(--muted)} .rk-f span{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:13px}
+.rk-f input{width:72px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)} .rk-f textarea{min-height:110px;font:inherit;font-size:13.5px;color:var(--ink);padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.rocket .cb{margin-top:10px} .rocket .small{font-size:12px;display:block;margin-top:4px} .rocket .acts{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:16px}
+.rk-warn{padding:8px 10px;border-radius:8px;color:var(--cold);background:color-mix(in srgb,var(--cold) 10%,var(--bg));font-size:13px}
+.rk-prog{height:8px;border-radius:999px;background:var(--hover);overflow:hidden;margin:12px 0 8px} .rk-prog div{height:100%;background:#1f9d55;transition:width .5s}
+.rk-n{display:flex;gap:16px;font-size:13px;color:var(--muted)} .rk-n b{color:var(--ink);font-size:16px}
+.rk-list{margin-top:12px;border-top:1px solid var(--line)} .rk-i{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.rk-i.sent span:last-child{color:var(--hot)} .rk-i.failed span:last-child{color:var(--cold)} .rk-i span:last-child{color:var(--muted);white-space:nowrap}
 .mrep{display:flex;flex-direction:column;gap:2px} .mrep .faint{font-size:12px;padding-left:22px}
 .grid th{position:sticky;top:0;background:var(--bg);padding:9px 14px;border-bottom:1px solid var(--line);font-size:11.5px;letter-spacing:.02em}
 .grid td{padding:0 14px;height:44px;vertical-align:middle;white-space:nowrap;border-bottom:1px solid var(--line)}
@@ -735,7 +744,7 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? (me ? <Owners keepKey={'ownersNow:' + me.staff.email} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
+      {view === 'owners' ? (me ? <Owners keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
       {phase === 'done' && co?.meIn && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
@@ -746,7 +755,8 @@ function Desk() {
   );
 }
 
-function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs, banner, keepKey }) {
+function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs, banner, keepKey, rocket }) {
+  const [rocketOpen, setRocketOpen] = useState(false);
   // Start where this person left off (filters, tab and sort survive a refresh), otherwise from their saved view
   const start = useRef((() => {
     let last = null;
@@ -1026,9 +1036,11 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
               {savedSnap && !isSaved && <button className="link" onClick={backToSaved}>Back to my saved view</button>}
               <button className={'btn' + (isSaved ? ' saved' : '')} disabled={isSaved || savingView} onClick={saveView}
                 title="Opens the Owners page with these filters, tab, sort and columns every time">{isSaved ? '✓ View saved' : savingView ? 'Saving…' : 'Save view'}</button>
+              {rocket && <button className="btn" onClick={() => setRocketOpen(true)} title="Send one WhatsApp to the owners in this list, from your own WhatsApp">WhatsApp rocket</button>}
               <ColumnPicker cols={cols} setCols={setCols} />
             </span>
           </div>
+          {rocketOpen && <Rocket params={toParams(f, tab, sort, 1).toString()} total={total} onClose={() => setRocketOpen(false)} />}
           {err && <p className="err">{err}</p>}
           <div className={'tw' + (busy ? ' busy' : '')} ref={tw}>
             <table className="grid fixed" style={{ width: shown.reduce((a, c) => a + wOf(c.k), canOverride ? 180 : 130) }}>
@@ -1707,6 +1719,88 @@ function OutcomeForm({ requestId, onSaved, big }) {
   );
 }
 
+// ── WhatsApp rocket ─────────────────────────────────────────────────────────
+// One message to the owners in the current list, sent from your own WhatsApp Web by the Apex WhatsApp Rocket
+// Chrome extension, one owner every 30-90 seconds. The numbers go straight from the server to the extension, one at
+// a time: they never appear on this page.
+const ROCKET_MSG = 'Hi {first}, this is {me} from Apex Homes. I\'m reaching out regarding your {property}, {area}. Are you open to selling or renting it out? Happy to share what similar units have recently gone for.';
+const hasRocketExt = () => !!document.documentElement.dataset.apexRocket;
+function Rocket({ params, total, onClose }) {
+  const [st, setSt] = useState(undefined);         // latest run + progress
+  const [v, setV] = useState({ limit: String(Math.min(50, total || 50)), message: ROCKET_MSG, gapMin: '30', gapMax: '90', skipRecent: true });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [ext, setExt] = useState(hasRocketExt());
+  const [dismissed, setDismissed] = useState(0);
+  const load = useCallback(() => api('/api/rocket?action=status').then(setSt).catch((e) => { setErr(e.message); setSt(null); }), []);
+  useEffect(() => { load(); const t = setInterval(() => { setExt(hasRocketExt()); load(); }, 4000); return () => clearInterval(t); }, [load]);
+  const run = st?.run;
+  const live = run && (run.status === 'running' || run.status === 'paused');
+  async function start() {
+    setBusy(true); setErr('');
+    try {
+      const j = await api('/api/rocket?action=create', { method: 'POST', body: { params, limit: Number(v.limit), message: v.message,
+        gapMin: Number(v.gapMin), gapMax: Number(v.gapMax), skipRecent: v.skipRecent } });
+      const ok = await new Promise((resolve) => {
+        const t = setTimeout(() => { window.removeEventListener('message', on); resolve(false); }, 4000);
+        function on(e) { if (e.source === window && e.data?.source === 'apex-rocket' && e.data.type === 'STARTED') { clearTimeout(t); window.removeEventListener('message', on); resolve(e.data.ok); } }
+        window.addEventListener('message', on);
+        window.postMessage({ source: 'apex-desk', type: 'ROCKET_START', runId: j.runId, token: j.token, gapMin: j.gapMin, gapMax: j.gapMax }, location.origin);
+      });
+      if (!ok) setErr('The extension didn\'t pick it up. Check it\'s switched on in chrome://extensions, then press Resume.');
+      await load();
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  }
+  const act = async (a) => { setBusy(true); try { await api('/api/rocket?action=' + a, { method: 'POST', body: { runId: run.id } }); await load(); } catch (e) { setErr(e.message); } setBusy(false); };
+  const n = Number(v.limit), gmin = Number(v.gapMin), gmax = Number(v.gapMax);
+  const bad = !n || n < 1 || n > 100 || !v.message.trim() || gmin < 20 || gmax < gmin;
+  const mins = Math.round((Math.min(n || 0, total) * ((gmin + gmax) / 2 + 12)) / 60);
+  const statusLabel = { running: 'Sending', paused: 'Paused', stopped: 'Stopped', done: 'Finished' };
+  return (
+    <div className="modal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="box rocket" role="dialog" aria-label="WhatsApp rocket">
+        <div className="rk-h"><h3>WhatsApp rocket</h3><button className="x" aria-label="Close" onClick={onClose}>×</button></div>
+        {st === undefined ? <p className="muted">Loading…</p> : live || (run && run.id !== dismissed && Date.now() - new Date(run.createdAt).getTime() < 3600e3) ? (
+          <>
+            <p className="muted">{statusLabel[run.status] || run.status} · one owner every {run.gapMin}–{run.gapMax} seconds from your WhatsApp Web. Keep Chrome open; you can close this box.</p>
+            <div className="rk-prog"><div style={{ width: `${run.total ? ((run.sent + run.failed + run.skipped) / run.total) * 100 : 0}%` }} /></div>
+            <div className="rk-n"><span><b>{run.sent}</b> sent</span><span><b>{run.failed}</b> not sent</span><span><b>{run.left}</b> to go</span><span className="faint">of {run.total}</span></div>
+            {st.recent?.length > 0 && <div className="rk-list">{st.recent.map((r) => (
+              <div key={r.pos} className={'rk-i ' + r.status}><span>{titleCase(r.is_company ? r.owner_name : String(r.owner_name).split(' ')[0])} · {r.unit_type === 'Villa' ? titleCase(r.subcommunity) : titleCase(r.building)} {r.unit_no}</span>
+                <span>{r.status === 'sent' ? 'Sent' : r.status === 'sending' ? 'Sending…' : r.status === 'skipped' ? 'Skipped' : r.detail || 'Not sent'}</span></div>))}</div>}
+            <div className="acts">
+              {run.status === 'running' && <button className="btn" disabled={busy} onClick={() => act('pause')}>Pause</button>}
+              {run.status === 'paused' && <button className="btn primary" disabled={busy} onClick={() => act('resume')}>Resume</button>}
+              {live && <button className="btn" disabled={busy} onClick={() => act('stop')}>Stop</button>}
+              {!live && <button className="btn primary" onClick={() => setDismissed(run.id)}>New rocket</button>}
+            </div>
+            <p className="faint small">{st.today}/{st.cap} rocket messages sent today.</p>
+          </>
+        ) : (
+          <>
+            <p className="muted">Sends one WhatsApp to the owners in your current list, from your own WhatsApp Web, one every {gmin || 30}–{gmax || 90} seconds. Numbers never show here.</p>
+            {!ext && <p className="rk-warn">Install the Apex WhatsApp Rocket extension in Chrome first, then reload this page.</p>}
+            <label className="rk-f">Owners to message
+              <span><input type="number" min={1} max={100} value={v.limit} onChange={(e) => setV({ ...v, limit: e.target.value.replace(/\D/g, '') })} /> from the top of this list ({fmt(total)} units, max 100)</span></label>
+            <label className="cb"><input type="checkbox" checked={v.skipRecent} onChange={(e) => setV({ ...v, skipRecent: e.target.checked })} />Skip owners who had a WhatsApp in the last 30 days</label>
+            <label className="rk-f">Message
+              <textarea value={v.message} maxLength={1000} onChange={(e) => setV({ ...v, message: e.target.value })} /></label>
+            <span className="faint small">{'{first}'} owner&apos;s first name · {'{me}'} your first name · {'{property}'} e.g. villa DL-J120 in Costa Brava (1) · {'{area}'} e.g. Damac Lagoons</span>
+            <label className="rk-f">Seconds between messages
+              <span><input type="number" min={20} value={v.gapMin} onChange={(e) => setV({ ...v, gapMin: e.target.value.replace(/\D/g, '') })} /> to <input type="number" min={20} value={v.gapMax} onChange={(e) => setV({ ...v, gapMax: e.target.value.replace(/\D/g, '') })} /> random</span></label>
+            {err && <p className="err">{err}</p>}
+            <div className="acts"><span className="faint" style={{ marginRight: 'auto' }}>{n && total ? `About ${mins} min` : ''}</span>
+              <button className="btn" onClick={onClose}>Cancel</button>
+              <button className="btn primary" disabled={bad || busy || !ext} onClick={start}>{busy ? 'Starting…' : `Send to ${Math.min(n || 0, total)} owners`}</button></div>
+          </>
+        )}
+        {err && live && <p className="err">{err}</p>}
+      </div>
+    </div>
+  );
+}
+
 // ── Lookup tab ──────────────────────────────────────────────────────────────
 // Finds the registered unit and owner from a listing link or DEWA number. Kept apart from the Owners list:
 // results go into their own "Lookups" area and open in the normal unit panel (call, notes, WhatsApp).
@@ -1823,7 +1917,7 @@ function Lookup({ onOpen }) {
 const ACTIVITY_LABEL = {
   searched: 'Searched', opened_unit: 'Opened a unit', call_sent: 'Sent a call to phone', call_dialled: 'Tapped Call on phone',
   outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', number_copied: 'Copied a number', copy_number_blocked: 'Tried to copy a number someone else is working',
-  whatsapp_unavailable: 'Number not on WhatsApp', target_set: 'Set their daily call target', report_optin: 'Signed an owner up for monthly reports', kendal_push: 'Sent a lead to Kendal', report_optout: 'Took an owner off monthly reports', limit_hit: 'Hit a daily limit',
+  whatsapp_unavailable: 'Number not on WhatsApp', target_set: 'Set their daily call target', report_optin: 'Signed an owner up for monthly reports', kendal_push: 'Sent a lead to Kendal', rocket_started: 'Started a WhatsApp rocket', rocket_stopped: 'Stopped a WhatsApp rocket', rocket_sent: 'WhatsApp rocket sent', rocket_failed: 'WhatsApp rocket not sent', rocket_number: 'Rocket fetched a number', report_optout: 'Took an owner off monthly reports', limit_hit: 'Hit a daily limit',
   call_blocked_hours: 'Tried to call outside 9am–6pm', dial_refused: 'Tapped an expired call', phone_alerts_on: 'Turned on phone alerts',
   note_added: 'Added a note', call_blocked_hold: 'Tried to call an owner someone else is working', call_hold_override: 'Called an owner someone else was working', lookup_property: 'Looked up a unit', lookup_owner: 'Looked up an owner', lookup_failed: 'Lookup failed', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
 };
