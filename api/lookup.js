@@ -3,15 +3,13 @@
 // Owners found here go into a separate "Lookups" area, so the Owners list stays untouched.
 // The API key lives only in Vercel (DXB_HAWK_KEY). Full numbers never reach the laptop.
 import crypto from 'node:crypto';
-import { sql, schemaOk, route, query, body, audit, setting } from './_lib/core.js';
+import { sql, ensureOnce, route, query, body, audit, setting } from './_lib/core.js';
 
 const BASE = process.env.DXB_HAWK_URL || 'https://api.sosvoid.com';
 const KEY = () => process.env.DXB_HAWK_KEY || '';
 
-let ready = null;
-function ensure() {
-  ready ??= (async () => {
-    if (await schemaOk()) return;
+const ensure = ensureOnce((q) => q`select to_regclass('desk.lookups') is not null and to_regclass('desk.lookup_units') is not null
+    and exists (select 1 from desk.areas where name = 'Lookups') as ok`, async (sql) => {
     await sql`insert into desk.areas (name) values ('Lookups') on conflict (name) do nothing`;
     await sql`create table if not exists desk.lookups (
       id bigint generated always as identity primary key,
@@ -30,9 +28,7 @@ function ensure() {
     await sql`alter table desk.lookups enable row level security`;
     await sql`alter table desk.lookup_units enable row level security`;
     await sql`revoke all on desk.lookups, desk.lookup_units from anon, authenticated`;
-  })().catch((e) => { ready = null; throw e; });
-  return ready;
-}
+});
 
 async function hawk(path, payload, idem) {
   const r = await fetch(BASE + path, {
