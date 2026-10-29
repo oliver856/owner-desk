@@ -4,7 +4,7 @@ import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
-import { sql, schemaOk, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed } from './_lib/core.js';
+import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
@@ -19,51 +19,35 @@ const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 
 const places = new Map(); // building list per area set, kept for 1 minute
 
 // Adds the 'director' role (sees every team, like an admin, but can't change settings)
-let rolesReady = null;
-// Only touches the staff table if the director role is genuinely missing, and never waits more than 3 seconds for it,
-// so the Dashboard can't hang behind other requests.
-const ensureRoles = () => (rolesReady ??= sql`select exists (select 1 from pg_constraint where conname = 'staff_role_check'
-    and pg_get_constraintdef(oid) like '%director%') as ok`.then(([r]) => r.ok || sql.begin(async (tx) => {
-      await tx`set local lock_timeout = '3s'`;
-      await tx`alter table desk.staff drop constraint if exists staff_role_check`;
-      await tx`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`;
-    }))
-  .catch((e) => { rolesReady = null; console.error(e); }));
+const ensureRoles = ensureOnce((q) => q`select exists (select 1 from pg_constraint where conname = 'staff_role_check'
+    and pg_get_constraintdef(oid) like '%director%') as ok`, async (tx) => {
+  await tx`alter table desk.staff drop constraint if exists staff_role_check`;
+  await tx`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`;
+});
 
-// Each broker's saved view (filters, tab, sort, columns, filter panel). Created by the server on first use.
-let prefsReady = null;
-const ensurePrefs = () => (prefsReady ??= schemaOk().then((ok) => ok || sql`create table if not exists desk.staff_prefs (
+// One-off set-up steps. Each only runs if its own table/column is missing, and never waits on a busy table.
+const ensurePrefs = ensureOnce((q) => q`select to_regclass('desk.staff_prefs') is not null as ok`, async (tx) => {
+  await tx`create table if not exists desk.staff_prefs (
     user_id uuid primary key references desk.staff(user_id) on delete cascade,
-    prefs jsonb not null, updated_at timestamptz not null default now())`
-  .then(() => sql`alter table desk.staff_prefs enable row level security`)
-  .then(() => sql`revoke all on desk.staff_prefs from anon, authenticated`))
-  .catch((e) => { prefsReady = null; throw e; }));
-
-// The notes table is created by the server the first time it's needed, so no SQL has to be run by hand.
-let notesReady = null;
+    prefs jsonb not null, updated_at timestamptz not null default now())`;
+  await tx`alter table desk.staff_prefs enable row level security`;
+  await tx`revoke all on desk.staff_prefs from anon, authenticated`;
+});
 // Older unit codes and villa types (e.g. Springs/Meadows/Lakes) live in two optional columns
-let extrasReady;
-function ensureUnitExtras() {
-  extrasReady ??= schemaOk().then((ok) => ok || sql`alter table desk.units add column if not exists old_code text, add column if not exists layout text`)
-    .catch((e) => { extrasReady = null; throw e; });
-  return extrasReady;
-}
-
-function ensureNotes() {
-  notesReady ??= (async () => {
-    if (await schemaOk()) return;
-    await sql`create table if not exists desk.notes (
-      id bigint generated always as identity primary key,
-      unit_id bigint not null references desk.units(id),
-      user_id uuid not null references desk.staff(user_id),
-      body text not null check (length(body) between 1 and 2000),
-      created_at timestamptz not null default now())`;
-    await sql`create index if not exists notes_unit_idx on desk.notes (unit_id, created_at desc)`;
-    await sql`alter table desk.notes enable row level security`;
-    await sql`revoke all on desk.notes from anon, authenticated`;
-  })().catch((e) => { notesReady = null; throw e; });
-  return notesReady;
-}
+const ensureUnitExtras = ensureOnce((q) => q`select count(*) = 2 as ok from pg_attribute
+    where attrelid = 'desk.units'::regclass and attname in ('old_code', 'layout') and not attisdropped`,
+  (tx) => tx`alter table desk.units add column if not exists old_code text, add column if not exists layout text`);
+const ensureNotes = ensureOnce((q) => q`select to_regclass('desk.notes') is not null and to_regclass('desk.notes_unit_idx') is not null as ok`, async (tx) => {
+  await tx`create table if not exists desk.notes (
+    id bigint generated always as identity primary key,
+    unit_id bigint not null references desk.units(id),
+    user_id uuid not null references desk.staff(user_id),
+    body text not null check (length(body) between 1 and 2000),
+    created_at timestamptz not null default now())`;
+  await tx`create index if not exists notes_unit_idx on desk.notes (unit_id, created_at desc)`;
+  await tx`alter table desk.notes enable row level security`;
+  await tx`revoke all on desk.notes from anon, authenticated`;
+});
 // Hot and cold, the same way the dashboards count them
 const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
 const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|end user|other|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
