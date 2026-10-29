@@ -192,6 +192,7 @@ body.col-resizing{cursor:col-resize;user-select:none}
 .qnotes .chip{font-size:12px;text-align:left}
 @media (max-width:520px){.qnotes{grid-template-columns:1fr}}
 .qnotes + textarea{margin-top:8px}
+.kline{margin:4px 0 0;font-size:13px} .kline.sent{color:var(--hot)} .kline.existing{color:var(--muted)} .kline.error,.kline.off{color:var(--cold)} .kline.small{display:block;font-size:11.5px;margin-top:2px}
 .mrep{display:flex;flex-direction:column;gap:2px} .mrep .faint{font-size:12px;padding-left:22px}
 .grid th{position:sticky;top:0;background:var(--bg);padding:9px 14px;border-bottom:1px solid var(--line);font-size:11.5px;letter-spacing:.02em}
 .grid td{padding:0 14px;height:44px;vertical-align:middle;white-space:nowrap;border-bottom:1px solid var(--line)}
@@ -380,7 +381,9 @@ table.mini tr.click{cursor:pointer} table.mini tr.click:hover td{background:var(
   display:grid;grid-template-columns:minmax(220px,auto) 1fr auto;gap:8px 22px;align-items:center;
   background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 8%,var(--bg)),var(--bg) 60%)}
 @media (max-width:900px){.target{grid-template-columns:1fr}}
-.t-num{display:flex;align-items:baseline;gap:6px} .t-num b{font-size:28px;font-weight:700;letter-spacing:-.02em;color:var(--accent)} .t-num span{color:var(--muted)}
+.t-num{display:flex;align-items:baseline;gap:6px} .tset{font-size:12px;margin-left:6px}
+.tedit{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 2px;font-size:13px} .tedit label{display:flex;align-items:center;gap:8px;color:var(--muted)} .tedit input{width:76px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)} .tedit .faint{font-size:12px} .tedit .err{color:var(--cold)}
+ .t-num b{font-size:28px;font-weight:700;letter-spacing:-.02em;color:var(--accent)} .t-num span{color:var(--muted)}
 .t-line{font-size:12.5px;color:var(--ink);margin-top:1px}
 .t-track{position:relative;height:12px;border-radius:999px;background:var(--hover);border:1px solid var(--line)}
 .t-fill{position:absolute;inset:0 auto 0 0;border-radius:999px;background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 70%,#fff),var(--accent));transition:width .6s cubic-bezier(.2,.8,.2,1)}
@@ -976,7 +979,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
     <>
       <div className="owners-page">
       {busy && <div className="loadbar" />}
-      {banner || (target && <TargetBar t={target} />)}
+      {banner || (target && <TargetBar t={target} onTarget={onCaps} />)}
       <div className="head gut">
         <h1>Owners</h1>
         <p>{fmt(c.all)} units in your areas · {DATA_NOTE}</p>
@@ -1262,7 +1265,34 @@ function raceLine(board, me) {
   const chase = gap <= 2 ? `So close! ${gap} more and you pass ${first(above.name)}.` : `${gap} calls behind ${first(above.name)} for #${i}.`;
   return i === 1 ? chase : `${chase} ${first(leader.name)} leads with ${leader.calls}.`;
 }
-function TargetBar({ t }) {
+// Set your own daily call target: anything from the company target (50) up, never lower
+function TargetEditor({ goal, base, onSaved, onClose }) {
+  const [v, setV] = useState(String(goal));
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const n = Number(v);
+  const bad = !v || !Number.isFinite(n) || n < base;
+  const save = async () => {
+    setBusy(true); setErr('');
+    try { await api('/api/desk?action=setTarget', { method: 'POST', body: { target: n } }); onSaved(n); onClose(); }
+    catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  return (
+    <div className="tedit" onClick={(e) => e.stopPropagation()}>
+      <label>My daily target
+        <input type="number" inputMode="numeric" min={base} max={500} value={v} autoFocus
+          onChange={(e) => setV(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter' && !bad) save(); if (e.key === 'Escape') onClose(); }} /></label>
+      <button className="btn primary" disabled={bad || busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+      <button className="btn" onClick={onClose}>Cancel</button>
+      <span className={'faint' + (v && n < base ? ' err' : '')}>{v && n < base ? `Can't be lower than ${base}` : `Lowest is ${base}`}</span>
+      {err && <span className="err">{err}</span>}
+    </div>
+  );
+}
+
+function TargetBar({ t, onTarget }) {
+  const [editT, setEditT] = useState(false);
   const { goal, made } = t;
   const board = t.board || [];
   const meRow = board.find((b) => b.me) || { me: true, name: 'You', calls: made };
@@ -1295,7 +1325,9 @@ function TargetBar({ t }) {
     <div className="gut">
       <div className={'target race' + (done ? ' done' : '')}>
         <div className="t-main">
-          <div className="t-num"><b className="n">{made}</b><span>/ {goal} calls today</span></div>
+          <div className="t-num"><b className="n">{made}</b><span>/ {goal} calls today</span>
+            {onTarget && !editT && <button className="link tset" onClick={() => setEditT(true)}>Set my target</button>}</div>
+          {editT && <TargetEditor goal={goal} base={t.base || 50} onSaved={() => onTarget?.()} onClose={() => setEditT(false)} />}
           <div className="t-line">{flash || raceLine(board, meRow)}</div>
         </div>
         <div className="r-track" aria-label="Today's race">
@@ -1506,11 +1538,11 @@ function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
           <Notes unitId={u.id} notes={d.notes} onAdded={(n) => setD((x) => ({ ...x, notes: [n, ...x.notes] }))} />
           <div className="blk"><h4>Calls</h4>
             {d.calls.length === 0 ? <p className="muted">Not called yet</p> : d.calls.map((c, i) => (
-              <div key={i} className="owner"><span>{c.outcome ?? (c.note ? '' : 'No outcome logged')}{c.note && <span className="sub"><NoteTag text={c.note} /></span>}</span>
+              <div key={i} className="owner"><span>{c.outcome ?? (c.note ? '' : 'No outcome logged')}{c.note && <span className="sub"><NoteTag text={c.note} /></span>}{c.kendal && <span className={'kline small ' + c.kendal} title={c.kendal_detail}>{c.kendal === 'existing' ? 'Already in Kendal' : c.kendal === 'error' ? 'Kendal: not sent' : 'Sent to Kendal'}</span>}</span>
                 <span className="muted">{c.full_name}, {fdt(c.called_at)}</span></div>
             ))}
           </div>
-          <p className="fine">The full number never reaches this laptop. Call sends it to your phone and logs it under your name.</p>
+          <p className="fine">Numbers stay hidden here. Call sends the number to your phone and logs it under your name.</p>
         </>}
       </aside>
       {calling && u && <CallFlow unitId={u.id} owner={calling} force={!!calling.force} label={`${calling.name}, ${place} ${u.unit_no}`}
@@ -1573,9 +1605,16 @@ function Notes({ unitId, notes, onAdded }) {
   );
 }
 
+// What happened when the lead was sent to Kendal
+function KendalLine({ k }) {
+  if (!k) return null;
+  const txt = k.status === 'off' ? 'Not sent to Kendal: the Kendal link isn\'t switched on yet.' : k.detail;
+  return <p className={'kline ' + k.status}>{txt}</p>;
+}
+
 // Laptop side of a call: send to phone, wait for the tap, then log the outcome
 // After the outcome is saved on the laptop: offer the WhatsApp follow-up here too (it also shows on the phone)
-function DoneStep({ requestId, onClose }) {
+function DoneStep({ requestId, onClose, kendal }) {
   const [f, setF] = useState(undefined);
   const [me, setMe] = useState('');
   const [sent, setSent] = useState(false);
@@ -1585,6 +1624,7 @@ function DoneStep({ requestId, onClose }) {
   return <>
     <h3>Saved</h3>
     <p className="muted">The outcome is on the unit&apos;s call history.</p>
+    <KendalLine k={kendal} />
     {f && !sent && <FollowUp laptop f={f} me={me} onDone={(r) => setSent(r)} />}
     {sent && <p className="muted">{sent === 'sent' ? 'WhatsApp opened. Added "WhatsApp sent" to the note.' : sent === 'unavailable' ? 'Added "WhatsApp unavailable" to the note.' : 'Added "WhatsApp not sent" to the note.'}</p>}
     {sent === 'sent' && <NotOnWhatsApp requestId={requestId} />}
@@ -1596,6 +1636,7 @@ function CallFlow({ unitId, owner, label, onClose, force }) {
   const [stage, setStage] = useState('sending');
   const [msg, setMsg] = useState('');
   const [req, setReq] = useState(null);
+  const [kres, setKres] = useState(null);
 
   useEffect(() => {
     api('/api/desk?action=call', { method: 'POST', body: { unitId, ownerId: owner.id, force } })
@@ -1624,8 +1665,8 @@ function CallFlow({ unitId, owner, label, onClose, force }) {
           <p className="faint">It expires in {req.minutes} minutes.</p>
           <button className="btn" onClick={() => onClose(false)}>Cancel</button></>}
         {stage === 'expired' && <><h3>Call expired</h3><p className="muted">It wasn&apos;t tapped on your phone in time. Press Call again.</p><button className="btn" onClick={() => onClose(false)}>Close</button></>}
-        {stage === 'dialled' && <><h3>How did it go?</h3><p className="muted">{label}</p><OutcomeForm requestId={req.requestId} onSaved={() => setStage('done')} /></>}
-        {stage === 'done' && <DoneStep requestId={req.requestId} onClose={() => onClose(true)} />}
+        {stage === 'dialled' && <><h3>How did it go?</h3><p className="muted">{label}</p><OutcomeForm requestId={req.requestId} onSaved={(j) => { setKres(j?.kendal || null); setStage('done'); }} /></>}
+        {stage === 'done' && <DoneStep requestId={req.requestId} kendal={kres} onClose={() => onClose(true)} />}
       </div>
     </div>
   );
@@ -1644,7 +1685,7 @@ function OutcomeForm({ requestId, onSaved, big }) {
   const pickNote = (q) => { setChip(q); setKendal(HOT_OUTCOMES.includes(pick) || KENDAL_NOTES.includes(q)); };
   async function save() {
     setBusy(true); setErr('');
-    try { await api('/api/phone?action=outcome', { method: 'POST', body: { requestId, outcome: pick, note, kendal, report } }); onSaved(); }
+    try { const j = await api('/api/phone?action=outcome', { method: 'POST', body: { requestId, outcome: pick, note, kendal, report } }); onSaved(j); }
     catch (e) { setErr(e.message); }
     setBusy(false);
   }
@@ -1782,7 +1823,7 @@ function Lookup({ onOpen }) {
 const ACTIVITY_LABEL = {
   searched: 'Searched', opened_unit: 'Opened a unit', call_sent: 'Sent a call to phone', call_dialled: 'Tapped Call on phone',
   outcome: 'Logged an outcome', copy_blocked: 'Tried to copy owner data', number_copied: 'Copied a number', copy_number_blocked: 'Tried to copy a number someone else is working',
-  whatsapp_unavailable: 'Number not on WhatsApp', report_optin: 'Signed an owner up for monthly reports', report_optout: 'Took an owner off monthly reports', limit_hit: 'Hit a daily limit',
+  whatsapp_unavailable: 'Number not on WhatsApp', target_set: 'Set their daily call target', report_optin: 'Signed an owner up for monthly reports', kendal_push: 'Sent a lead to Kendal', report_optout: 'Took an owner off monthly reports', limit_hit: 'Hit a daily limit',
   call_blocked_hours: 'Tried to call outside 9am–6pm', dial_refused: 'Tapped an expired call', phone_alerts_on: 'Turned on phone alerts',
   note_added: 'Added a note', call_blocked_hold: 'Tried to call an owner someone else is working', call_hold_override: 'Called an owner someone else was working', lookup_property: 'Looked up a unit', lookup_owner: 'Looked up an owner', lookup_failed: 'Lookup failed', whatsapp_opened: 'Sent a WhatsApp follow-up', whatsapp_skipped: 'Skipped the WhatsApp follow-up',
 };
@@ -2062,6 +2103,7 @@ function DashPage({ role }) {
 // The person above you is shown by their call count only, never their name.
 function MyDashboard({ onTeam }) {
   const [period, setPeriod] = useState('today');
+  const [editT, setEditT] = useState(false);
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
   const load = useCallback(() => {
@@ -2085,7 +2127,9 @@ function MyDashboard({ onTeam }) {
     <main className="gut dash">
       <div className="dash-head">
         <div><h1>My numbers</h1>
-          <p className="muted">Your calls {label} · target {d.goal} a day{d.period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}</p></div>
+          <p className="muted">Your calls {label} · your target {d.goal} a day{d.period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}
+            {!editT && <> · <button className="link" onClick={() => setEditT(true)}>Change</button></>}</p>
+          {editT && <TargetEditor goal={d.goal} base={d.base || 50} onSaved={() => load()} onClose={() => setEditT(false)} />}</div>
         <div className="dash-ctl">
           {onTeam && <button className="btn" onClick={onTeam}>Team view</button>}
           <div className="seg">{PERIODS.map(([k, l]) => <button key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
@@ -2136,12 +2180,13 @@ function Dashboard({ onMine }) {
   if (err) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p></main>;
   if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
   const per = d.goal * d.workdays;
+  const perOf = (r) => (r.goal || d.goal) * d.workdays;   // each person's own target, never below the company one
   const total = d.rows.reduce((a, r) => a + r.calls, 0);
   const hot = d.rows.reduce((a, r) => a + r.hot, 0);
   const cold = d.rows.reduce((a, r) => a + r.cold, 0);
   const wa = d.rows.reduce((a, r) => a + r.wa, 0);
   const active = d.rows.filter((r) => r.calls > 0).length;
-  const teamTarget = per * Math.max(1, d.rows.length);
+  const teamTarget = Math.max(per, d.rows.reduce((a, r) => a + perOf(r), 0));
   const label = { today: 'today', week: 'this week', month: 'this month' }[period];
   const bars = makeBars(period, d.start, d.series);
   const maxBar = Math.max(1, ...bars.map((b) => b.n));
@@ -2150,7 +2195,7 @@ function Dashboard({ onMine }) {
     <main className="gut dash">
       <div className="dash-head">
         <div><h1>{d.all ? (d.team ? d.team : 'Director overview') : `${d.myTeam || 'Your team'}`}</h1>
-          <p className="muted">{d.all ? 'Calls across every team' : 'Your team\'s calls'} {label} · target {d.goal} a day per person{period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}</p></div>
+          <p className="muted">{d.all ? 'Calls across every team' : 'Your team\'s calls'} {label} · target {d.goal} a day per person (or their own, if higher){period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}</p></div>
         <div className="dash-ctl">
           {onMine && <button className="btn" onClick={onMine}>My numbers</button>}
           {d.all && <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="">All teams</option>{d.teamNames.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
@@ -2191,7 +2236,7 @@ function Dashboard({ onMine }) {
               <td><b>{r.name}</b>{r.role === 'manager' && <span className="faint"> · manager</span>}</td>
               {d.all && !d.team && <td className="muted">{r.team}</td>}
               <td className="r n"><b>{r.calls}</b></td>
-              <td><div className="kbar sm"><i style={{ width: `${Math.min(100, (r.calls / per) * 100)}%` }} className={r.calls >= per ? 'hit' : ''} /></div><span className="faint">{Math.round((r.calls / per) * 100)}%</span></td>
+              <td><div className="kbar sm"><i style={{ width: `${Math.min(100, (r.calls / perOf(r)) * 100)}%` }} className={r.calls >= perOf(r) ? 'hit' : ''} /></div><span className="faint" title={`Target ${perOf(r)}`}>{Math.round((r.calls / perOf(r)) * 100)}%{r.goal > d.goal ? ` of ${perOf(r)}` : ''}</span></td>
               <td className="r n hotc">{r.hot}</td><td className="r n coldc">{r.cold}</td><td className="r n">{r.wa}</td>
               <td className="muted">{r.last_at ? fdt(r.last_at) : 'No calls yet'}</td>
             </tr>))}</tbody></table>
@@ -2433,12 +2478,12 @@ function PhoneScreen() {
           <span className="muted">How did the call go?</span>
           <span className="who">{awaiting.owner_name}</span>
           <span>{phonePlace(awaiting)}</span>
-          <OutcomeForm big requestId={awaiting.id} onSaved={() => { setSaved(true); setSt((x) => ({ ...x, awaiting: null })); load().then(() => setSaved(false)); }} />
+          <OutcomeForm big requestId={awaiting.id} onSaved={(j) => { setSaved(j?.kendal || true); setSt((x) => ({ ...x, awaiting: null })); load().then(() => setTimeout(() => setSaved(false), j?.kendal ? 3000 : 0)); }} />
         </div>
       )}
       {!pending && !awaiting && !saved && followup && <FollowUp key={followup.id} f={followup} me={name} onDone={() => { setSt((x) => ({ ...x, followup: null })); load(); }} />}
       {!pending && !awaiting && !saved && !followup && st.lastWa && <NotOnWhatsApp key={st.lastWa.id} requestId={st.lastWa.id} name={st.lastWa.owner_name} />}
-      {saved && <div className="waiting">Saved</div>}
+      {saved && <div className="waiting">Saved{saved.status && <KendalLine k={saved} />}</div>}
       <PhoneAlerts onCall={load} />
       {!pending && !awaiting && !saved && !followup && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner and it appears here.</div>}
       {err && <p className="err">{err}</p>}
