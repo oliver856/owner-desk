@@ -84,7 +84,7 @@ const actions = {
     if (!outcome && !String(note || '').trim()) return res.status(400).json({ error: 'Pick an outcome or add a note.' });
     const ok = await saveOutcome(s, Number(requestId), outcome, note, !!kendal, ip, !!report);
     if (!ok) return res.status(404).json({ error: 'That call wasn\'t found. Was the blue button tapped on your phone?' });
-    res.json({ ok: true });
+    res.json({ ok: true, kendal: ok.kendal });
   },
 
   // WhatsApp follow-up after a call. The message is written on the phone screen; the server adds the number
