@@ -249,14 +249,9 @@ const actions = {
     res.json({ rows, counts, page, pageSize: PAGE });
   },
 
-  // One unit's full record. Counts toward the daily profile limit.
+  // One unit's full record. No daily limit; every open is still logged.
   async unit(req, res, s, ip) {
     const id = Number(query(req).get('id'));
-    const c = await caps(s.user_id);
-    if (c.profiles >= c.profileCap) {
-      await audit(s.user_id, 'limit_hit', { unitId: id, detail: { limit: 'profiles' }, ip });
-      return res.status(429).json({ error: `You've opened ${c.profileCap} owner profiles today. Ask your manager if you need more.` });
-    }
     await Promise.all([ensureNotes(), ensureHolds(), ensureUnitExtras()]);
     const inArea = sql`exists (select 1 from desk.mv_units m where m.id = ${id} and m.area_id = any(${s.areas}))`;
     const [[u], owners, calls, notes, [extra]] = await Promise.all([
@@ -313,11 +308,7 @@ const actions = {
     if (req.method !== 'POST') return res.status(405).end();
     const unitId = Number(body(req).unitId), ownerId = Number(body(req).ownerId);
     if (!Number.isInteger(unitId) || !Number.isInteger(ownerId)) return res.status(400).json({ error: 'Bad request' });
-    const c = await caps(s.user_id);
-    if (c.copies >= c.copyCap) {
-      await audit(s.user_id, 'limit_hit', { unitId, detail: { limit: 'copies' }, ip });
-      return res.status(429).json({ error: `You've copied ${c.copyCap} numbers today, the daily limit.` });
-    }
+    const c = await caps(s.user_id);   // no daily limit; every copy is still logged
     const [x] = await sql`
       select ph.phone from desk.units u join desk.buildings b on b.id = u.building_id
       join desk.unit_owners uo on uo.unit_id = u.id and uo.owner_id = ${ownerId} and uo.role = 'owner'
@@ -334,7 +325,7 @@ const actions = {
       return res.status(409).json({ error: `${hold.by_name} is working this owner (${hold.why}).` });
     }
     await audit(s.user_id, 'number_copied', { unitId, detail: { owner_id: ownerId }, ip });
-    res.json({ phone: '+' + String(x.phone).replace(/\D/g, ''), copies: c.copies + 1, copyCap: c.copyCap });
+    res.json({ phone: '+' + String(x.phone).replace(/\D/g, ''), copies: c.copies + 1 });
   },
 
   async call(req, res, s, ip) {
