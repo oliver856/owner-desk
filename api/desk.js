@@ -4,7 +4,7 @@ import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
-import { sql, schemaOk, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor } from './_lib/core.js';
+import { sql, schemaOk, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
@@ -75,9 +75,9 @@ const actions = {
       places.set(key, p);
     }
     await ensurePrefs();
-    const [c, target, [pr]] = await Promise.all([caps(s.user_id), callTarget(s.user_id),
-      sql`select prefs from desk.staff_prefs where user_id = ${s.user_id}`]);
-    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: p.rows, prefs: pr?.prefs || null });
+    const [c, target, [pr], rocket] = await Promise.all([caps(s.user_id), callTarget(s.user_id),
+      sql`select prefs from desk.staff_prefs where user_id = ${s.user_id}`, rocketAllowed(s)]);
+    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: p.rows, prefs: pr?.prefs || null, rocket });
   },
 
   // Manager dashboard (their team) and director overview (every team)
