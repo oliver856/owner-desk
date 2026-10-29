@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 export const sql =
   globalThis.__sql ??
   (globalThis.__sql = postgres(process.env.DATABASE_URL, {
-    prepare: false, max: 3, onnotice: () => {},
+    prepare: false, max: 3, onnotice: () => {}, max_lifetime: 60 * 5, max_lifetime: 60 * 5,
     // traffic between the site and the database is always encrypted (only a local test copy skips it)
     ssl: /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || '') ? false : 'require', idle_timeout: 20, connect_timeout: 15,
     // dates stay as plain YYYY-MM-DD text so they never shift with time zones; big ids come back as numbers
@@ -26,6 +26,24 @@ const authClient = createClient(SUPA_URL, SUPA_ANON, {
 // on "Loading...". Now one cheap catalogue read per server instance confirms everything is already in place, and the
 // set-up statements only run if something is genuinely missing.
 let schemaOkP = null;
+// Safe set-up step. Checks one specific thing (a table, column or index) and only if it's genuinely missing runs the
+// set-up, inside a transaction that gives up after 2 seconds if the table is busy. It can never leave other requests
+// queuing behind a table change, never throws, and runs at most once per server instance.
+export function ensureOnce(check, apply) {
+  let p = null;
+  return () => (p ??= (async () => {
+    try {
+      const [r] = await check(sql);
+      if (r && r.ok) return;
+      await sql.begin(async (tx) => {
+        await tx`set local lock_timeout = '2s'`;
+        await tx`set local statement_timeout = '20s'`;
+        await apply(tx);
+      });
+    } catch (e) { console.error('Set-up step skipped:', e.message); }
+  })());
+}
+
 export function schemaOk() {
   schemaOkP ??= sql`select
       to_regclass('desk.staff_prefs') is not null and to_regclass('desk.notes') is not null
