@@ -46,7 +46,7 @@ const actions = {
       order by cr.used_at desc limit 1`;
     let awaiting = null, followup = null;
     if (last && !last.outcome_at) awaiting = last;
-    else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome) && !/^(sold|agent)\b/i.test(last.note || '')) followup = last;
+    else if (last && last.recent && !last.followed_up && !last.dnc && last.masked && !NO_WHATSAPP.includes(last.outcome) && !/^agent\b/i.test(last.note || '')) followup = last;
     const templates = followup ? await getTemplates(s.user_id).catch(() => ({})) : {};
     // The last WhatsApp marked as sent in the past 30 minutes, so it can be corrected if the number isn't on WhatsApp
     const [lastWa] = await sql`
