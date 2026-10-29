@@ -149,6 +149,13 @@ export function ensureTargets() {
   })().catch((e) => { targetsReady = null; throw e; });
   return targetsReady;
 }
+// WhatsApp rocket (testing): admins only, or the emails listed in the setting 'rocket_users' once that's set
+export async function rocketAllowed(s) {
+  if (!s) return false;
+  const list = await setting('rocket_users', null);
+  if (Array.isArray(list)) return list.map((e) => String(e).toLowerCase()).includes(String(s.email).toLowerCase());
+  return s.role === 'admin';
+}
 export const baseTarget = async () => Number(await setting('daily_call_target', 50)) || 50;
 // A person's goal: their own target, or the company one if theirs is lower or not set
 export async function goalFor(userId) {
