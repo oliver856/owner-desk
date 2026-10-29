@@ -4,11 +4,12 @@ import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
-import { sql, schemaOk, route, query, body, audit, caps, setting, callTarget } from './_lib/core.js';
+import { sql, schemaOk, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
 import { ensureReports, setReportOptin } from './_lib/reports.js';
+import { ensureKendal } from './_lib/kendal.js';
 
 const PAGE = 100;
 const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 'size_sqft', 'lease_status', 'end_date', 'annual_rent',
@@ -94,7 +95,8 @@ const actions = {
         where extract(isodow from g.d) < 6) as workdays`;
     // Working days (Mon to Fri) so far in the period, for the target
     const workdays = Math.max(1, b.workdays);
-    const goal = Number(await setting('daily_call_target', 50));
+    await ensureTargets();
+    const goal = await baseTarget();
     const HOT = DASH_HOT, COLD = DASH_COLD;
     // Brokers and managers always; admins and directors only once they've made a call in the period
     const people = sql`st.active and (st.role in ('broker', 'manager')
@@ -102,6 +104,7 @@ const actions = {
       and (${team === ''} or coalesce(st.team, 'No team') = ${team})`;
     const [rows, series, teams] = await Promise.all([
       sql`select st.full_name as name, coalesce(st.team, 'No team') as team, st.role,
+            greatest(${goal}, coalesce((select t.target from desk.staff_targets t where t.user_id = st.user_id), 0))::int as goal,
             count(c.id)::int as calls,
             count(c.id) filter (where ${HOT})::int as hot,
             count(c.id) filter (where ${COLD})::int as cold,
@@ -136,7 +139,7 @@ const actions = {
         where extract(isodow from g.d) < 6) as workdays`;
     // Working days (Mon to Fri) so far in the period, for the target. Worked out in the database so the server's clock zone can't change it.
     const workdays = Math.max(1, b.workdays);
-    const goal = Number(await setting('daily_call_target', 50));
+    const { goal, base } = await goalFor(s.user_id);
     const [board, [mine], series] = await Promise.all([
       sql`select st.user_id, count(c.id)::int as calls, count(c.id) filter (where ${DASH_HOT})::int as hot
           from desk.staff st left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${b.start}
@@ -162,8 +165,23 @@ const actions = {
     // The person directly above: the lowest score that still beats mine
     const above = ahead.sort((x, y) => x.calls - y.calls || x.hot - y.hot)[0] || null;
     const top = board.reduce((m, x) => Math.max(m, x.calls), 0);
-    res.json({ period, goal, workdays, start: b.start, me: { ...mine, name: s.full_name }, series,
+    res.json({ period, goal, base, workdays, start: b.start, me: { ...mine, name: s.full_name }, series,
       rank, of: board.length, level, above: above ? { calls: above.calls, hot: above.hot } : null, top });
+  },
+
+  // Set your own daily call target. It can go above the company target, never below it.
+  async setTarget(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    await ensureTargets();
+    const base = await baseTarget();
+    const n = Math.round(Number(body(req).target));
+    if (!Number.isFinite(n)) return res.status(400).json({ error: 'Enter a number.' });
+    if (n < base) return res.status(400).json({ error: `Your target can't be lower than ${base}.` });
+    if (n > 500) return res.status(400).json({ error: 'That target is too high. The most is 500.' });
+    await sql`insert into desk.staff_targets (user_id, target) values (${s.user_id}, ${n})
+              on conflict (user_id) do update set target = excluded.target, updated_at = now()`;
+    await audit(s.user_id, 'target_set', { detail: { target: n }, ip });
+    res.json({ ok: true, goal: n, base });
   },
 
   // Save (POST) or clear (DELETE) this broker's view
@@ -261,8 +279,10 @@ const actions = {
           from desk.unit_owners uo join desk.owners o on o.id = uo.owner_id
           left join desk.owner_phones ph on ph.owner_id = o.id
           where uo.unit_id = ${id} and ${inArea} order by uo.role desc, o.is_company, o.id`,
-      sql`select c.called_at, c.outcome, c.note, st.full_name from desk.calls c join desk.staff st on st.user_id = c.user_id
-          where c.unit_id = ${id} and ${inArea} order by c.called_at desc limit 500`,
+      ensureKendal().then(() => sql`select c.called_at, c.outcome, c.note, st.full_name, k.status as kendal, k.detail as kendal_detail
+          from desk.calls c join desk.staff st on st.user_id = c.user_id
+          left join desk.kendal_pushes k on k.call_id = c.id
+          where c.unit_id = ${id} and ${inArea} order by c.called_at desc limit 500`),
       sql`select n.id, n.body, n.created_at, st.full_name, (n.user_id = ${s.user_id}) as mine
           from desk.notes n join desk.staff st on st.user_id = n.user_id
           where n.unit_id = ${id} and ${inArea} order by n.created_at desc limit 500`,
