@@ -1,15 +1,14 @@
 // Phone actions: /api/phone?action=...
 // These work from anywhere, but a phone only ever sees a call that the same broker
 // started on a laptop inside the office, and only until it expires.
-import { sql, schemaOk, route, query, body, audit } from './_lib/core.js';
+import { sql, ensureOnce, route, query, body, audit } from './_lib/core.js';
 import { vapidKeys, pushToUser } from './_lib/push.js';
 import { OUTCOMES, saveOutcome } from './_lib/outcome.js';
 import { getTemplates } from './_lib/templates.js';
 
 // One extra column on calls records when the WhatsApp follow-up was sent or skipped. Added by the server itself.
-let followReady = null;
-const ensureFollow = () => (followReady ??= schemaOk().then((ok) => ok || sql`alter table desk.calls add column if not exists followup_at timestamptz`)
-  .catch((e) => { followReady = null; throw e; }));
+const ensureFollow = ensureOnce((q) => q`select exists (select 1 from pg_attribute where attrelid = 'desk.calls'::regclass
+    and attname = 'followup_at' and not attisdropped) as ok`, (tx) => tx`alter table desk.calls add column if not exists followup_at timestamptz`);
 const NO_WHATSAPP = ['Wrong number', 'Do not call'];
 // What happened on the WhatsApp step is added to the call's note, e.g. "Called, no reply. WhatsApp sent"
 const WA_RESULT = { sent: 'WhatsApp sent', unavailable: 'WhatsApp unavailable', not_sent: 'WhatsApp not sent' };
