@@ -55,6 +55,14 @@ export function ensureOnce(check, apply) {
   })());
 }
 
+// WhatsApp wants the number with no 0 after the country code. Some lists store e.g. UK numbers as 4407... or Saudi as 96605...;
+// the phone app forgives that, WhatsApp Web says "not on WhatsApp". Strip that one 0 for the common country codes.
+export function waNumber(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  const m = /^(44|33|49|39|31|32|41|43|45|46|47|61|64|91|92|20|27|90|966|965|974|973|968|962|961|971)0(\d{6,})$/.exec(d);
+  return m ? m[1] + m[2] : d;
+}
+
 export function schemaOk() {
   schemaOkP ??= sql`select
       to_regclass('desk.staff_prefs') is not null and to_regclass('desk.notes') is not null
