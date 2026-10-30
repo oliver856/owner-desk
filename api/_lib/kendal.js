@@ -66,6 +66,8 @@ export async function pushCallToKendal(callId) {
 
   const parts = title(c.owner_name).split(/\s+/).filter(Boolean);
   const place = c.unit_type === 'Villa' ? `${title(c.subcommunity)} ${c.unit_no}` : `${title(c.building)} ${c.unit_no}`;
+  // Kendal's "Project Of Interest": the unit's address, e.g. "Costa Brava 2 DL-K481" or "Carson A A819"
+  const address = `${title(c.unit_type === 'Villa' ? c.subcommunity : c.building).replace(/[()]/g, '').replace(/\s+/g, ' ').trim()} ${c.unit_no}`;
   const contactDetails = {
     firstName: c.is_company ? title(c.owner_name) : parts[0] || 'Owner',
     phone: '+' + String(c.phone).replace(/\D/g, ''),
@@ -73,6 +75,7 @@ export async function pushCallToKendal(callId) {
     additionalInfo: `Owner Desk call: ${place}, ${c.area}. ${c.outcome ? c.outcome + '. ' : ''}${c.note || ''}`.trim().slice(0, 900),
   };
   if (!c.is_company && parts.length > 1) contactDetails.lastName = parts.slice(1).join(' ');
+  contactDetails.projectsOfInterest = [address];
   const intent = intentFor(c.outcome, c.note);
   if (intent) contactDetails.intent = [intent];
   const payload = { companyId: process.env.KENDAL_COMPANY_ID, userId: process.env.KENDAL_USER_ID, contactDetails, agentEmailToAssign: c.agent_email };
@@ -82,8 +85,10 @@ export async function pushCallToKendal(callId) {
     let r = await post(payload);
     // If Kendal doesn't accept our source or intent wording, send again without them
     if (r.code === 400 || r.code === 422 || r.code === 500) {
-      delete contactDetails.intent; delete contactDetails.source;
-      const again = await post(payload);
+      delete contactDetails.intent;
+      let again = await post(payload);
+      // Last resort: without the project field too, so the lead still gets into Kendal
+      if (again.code !== 200 && again.code !== 201) { delete contactDetails.projectsOfInterest; again = await post(payload); }
       if (again.code === 200 || again.code === 201) r = again;
     }
     if (r.code === 201) { status = 'sent'; detail = `New lead in Kendal, assigned to ${c.agent_name}`; }
