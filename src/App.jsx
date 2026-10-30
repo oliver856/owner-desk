@@ -2536,7 +2536,7 @@ function FollowUp({ f, me, onDone, laptop }) {
       <span className="muted">Follow up on WhatsApp · {f.outcome || String(f.note || '').split('.')[0]}</span>
       <span className="who">{titleCase(f.owner_name)}</span>
       <span>{phonePlace({ ...f, subcommunity: titleCase(f.subcommunity), building: titleCase(f.building) })}</span>
-      {f.wa_missing && <p className="wa-warn">This number wasn&apos;t on WhatsApp last time.</p>}
+      {f.wa_last && f.wa_last.missing && <p className="wa-warn">{f.wa_last.by.split(' ')[0]} marked this number &quot;not on WhatsApp&quot; on {fd(f.wa_last.at)}. Worth trying anyway.</p>}
       <textarea className="wamsg" value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} />
       {err && <p className="err">{err}</p>}
       <button className="bigcall wa" disabled={busy || !text.trim()} onClick={() => send('sent')}>Open WhatsApp · mark as sent</button>
