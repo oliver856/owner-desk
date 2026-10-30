@@ -6,7 +6,7 @@ const today = () => sql`(now() at time zone 'Asia/Dubai')::date`;
 
 // Same lists as the green and red quick notes on screen (QUICK_NOTES in App.jsx)
 const NOTE_HOT = 'unit available, send whatsapp|in discussion|replied|follow up|send report|wants to sell|wants to rent|wants to buy|wants valuation|listing opportunity|call back';
-const NOTE_COLD = 'called, no reply|called, unreachable|called, line busy|phone off|other|end user|sold|agent|cold|no answer|not interested|wrong number|do not call';
+const NOTE_COLD = 'called, no reply|called, unreachable|called, line busy|phone off|other|end user|rented|sold|agent|cold|no answer|not interested|wrong number|do not call';
 
 export const TABS = ['all', 'exp90', 'up', 'port', 'mort', 'never', 'callbacks', 'reports', 'monthly'];
 
