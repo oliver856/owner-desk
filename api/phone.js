@@ -1,7 +1,7 @@
 // Phone actions: /api/phone?action=...
 // These work from anywhere, but a phone only ever sees a call that the same broker
 // started on a laptop inside the office, and only until it expires.
-import { sql, ensureOnce, route, query, body, audit } from './_lib/core.js';
+import { sql, ensureOnce, route, query, body, audit, waNumber } from './_lib/core.js';
 import { vapidKeys, pushToUser } from './_lib/push.js';
 import { OUTCOMES, saveOutcome } from './_lib/outcome.js';
 import { getTemplates } from './_lib/templates.js';
@@ -34,7 +34,10 @@ const actions = {
              b.subcommunity, b.name as building, a.name as area, (c.followup_at is not null) as followed_up,
              (cr.used_at > now() - interval '1 hour') as recent,
              exists (select 1 from desk.do_not_call d where d.owner_id = cr.owner_id) as dnc,
-             exists (select 1 from desk.calls w where w.owner_id = cr.owner_id and w.note ~* 'whatsapp unavailable') as wa_missing
+             -- Only a warning if the owner's most recent WhatsApp attempt (from anyone) was marked "not on WhatsApp"
+             (select json_build_object('by', st.full_name, 'at', w.followup_at, 'missing', w.note ~* 'whatsapp unavailable[[:space:]]*$') from desk.calls w join desk.staff st on st.user_id = w.user_id
+              where w.owner_id = cr.owner_id and w.request_id <> cr.id and w.note ~* 'whatsapp (sent|unavailable)'
+              order by w.followup_at desc nulls last limit 1) as wa_last
       from desk.call_requests cr
       join desk.calls c on c.request_id = cr.id
       join desk.owners o on o.id = cr.owner_id
@@ -112,9 +115,11 @@ const actions = {
     if (skip) return res.json({ ok: true });
     const [ph] = await sql`select phone from desk.owner_phones where owner_id = ${c.owner_id}`;
     const t = encodeURIComponent(text);
+    const num = waNumber(ph.phone);
     // url: phones (opens the WhatsApp app). web / app: the laptop goes straight to the chat, skipping the wa.me page.
-    res.json({ url: `https://wa.me/${ph.phone}?text=${t}`, web: `https://web.whatsapp.com/send?phone=${ph.phone}&text=${t}`,
-      app: `whatsapp://send?phone=${ph.phone}&text=${t}` });
+    // The web link is exactly what wa.me itself forwards to, which WhatsApp Web handles more reliably than the short form.
+    res.json({ url: `https://wa.me/${num}?text=${t}`, web: `https://web.whatsapp.com/send/?phone=${num}&text=${t}&type=phone_number&app_absent=0`,
+      app: `whatsapp://send?phone=${num}&text=${t}` });
   },
 
   // The number wasn't on WhatsApp after all: change "WhatsApp sent" on that call to "WhatsApp unavailable".
