@@ -3,6 +3,7 @@
 // Change the look or layout here. The secure server code is in the /api folder
 // and doesn't need touching for UI changes.
 // ─────────────────────────────────────────────────────────────────────────────
+import APEX_LOGO from './apex-logo.svg?raw';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -318,6 +319,60 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .co-start{font:inherit;font-weight:600;background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:6px 14px;margin-left:14px;cursor:pointer}
 .co-pill{display:inline-flex;align-items:center;gap:6px;margin-left:14px;font-weight:600;color:var(--accent)} .co-pill i{width:8px;height:8px;border-radius:50%;background:#ff6b5f;animation:copulse 1.2s infinite}
 @keyframes copulse{50%{opacity:.3}}
+.co-testmode{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px;color:var(--muted);cursor:pointer} .co-testnote{display:block;font-style:normal;margin-top:4px;color:var(--ink)} .co-testmode b{color:var(--ink);margin-right:6px} .co-testmode.on{border-style:solid;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--bg))}
+.co-tv{margin-left:10px;font-weight:600;color:var(--accent);text-decoration:none;font-size:14px} .co-tv:hover{text-decoration:underline}
+.tv{--logo-bg:#fff;--ink:#0a0a0a;--grey:#8a8a8a;--rule:#e4e4e4;position:fixed;inset:0;background:#fff;color:var(--ink);display:flex;flex-direction:column;padding:3vh 3.4vw 2.6vh;gap:2.2vh;overflow:hidden;font-size:1.6vh;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+.tv.nomouse{cursor:none} .tv .n{font-variant-numeric:tabular-nums}
+.tv-top{display:flex;justify-content:space-between;align-items:center;gap:2vw;flex-shrink:0;padding-bottom:2vh;border-bottom:1px solid var(--rule)} .tv-logo{display:block;height:8vh;color:#000} .tv-logo svg{height:100%;width:auto;display:block}
+.tv-clock{font-size:2.6vh;font-weight:300;letter-spacing:.12em}
+.tv-test{font-size:1.5vh;font-weight:700;letter-spacing:.24em;color:var(--ink);border:1.5px solid var(--ink);padding:.9vh 1.4vw}
+.tv-kick{font-size:1.6vh;font-weight:700;letter-spacing:.32em;color:var(--ink);display:inline-flex;align-items:center;gap:1.2vh} .tv-kick i{width:1.1vh;height:1.1vh;border-radius:50%;background:#e0362c;animation:copulse 1.4s infinite}
+.tv-sub{font-size:2.2vh;color:#333;font-weight:400} .tv-sub.dim{color:var(--grey)}
+.tv-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3vh;text-align:center}
+.tv-count{font-size:30vh;line-height:.9;font-weight:800;letter-spacing:-.04em}
+.tv-win{font-size:8vh;margin:0;font-weight:700;letter-spacing:-.035em}
+.tv-live{flex:1;display:grid;grid-template-columns:34fr 66fr;gap:4vw;min-height:0} .tv-live>section{min-height:0}
+.tv-left{display:flex;flex-direction:column;gap:1.4vh;justify-content:space-between;overflow:hidden}
+.tv-timer{font-size:15vh;line-height:.9;font-weight:800;letter-spacing:-.05em} .tv-timer.last{color:#e0362c;animation:copulse 1s infinite}
+.tv-track{height:.35vh;background:var(--rule);overflow:hidden} .tv-track i{display:block;height:100%;background:var(--ink);transition:width 1s linear} .tv-track.gold i{background:var(--ink)}
+.tv-calls{display:flex;flex-direction:column;gap:1vh;padding-top:2vh;border-top:1px solid var(--rule)}
+.tv-calls span,.tv-stats span{font-size:1.5vh;font-weight:700;letter-spacing:.3em;color:var(--ink)} .tv-calls b{font-size:10vh;line-height:1;font-weight:800;letter-spacing:-.045em} .tv-calls em{font-style:normal;font-size:1.9vh;color:#555}
+.tv-stats{display:grid;grid-template-columns:repeat(2,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-top:.6vh} .tv-stats div{padding:1.5vh 0;display:flex;flex-direction:column;gap:.8vh} .tv-stats div+div{padding-left:2vw;border-left:1px solid var(--rule)}
+.tv-stats b{font-size:6vh;font-weight:800;line-height:1;letter-spacing:-.04em} .tv-stats small{font-size:3vh;color:var(--grey);font-weight:500}
+.tv-band{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:2.4vw;padding:2.6vh 2.6vw;background:#0a0a0a;color:#fff;flex-shrink:0;position:relative;overflow:hidden}
+.tv-band::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.09) 50%,transparent 65%);transform:translateX(-100%);animation:tvsweep 5s ease-in-out infinite;pointer-events:none}
+.tv-band .tv-cup{width:8vh;height:8vh;color:#fff;animation:tvfloat 3s ease-in-out infinite}
+.tv-band-main{display:flex;flex-direction:column;gap:1vh;min-width:0} .tv-band span{font-size:1.5vh;font-weight:700;letter-spacing:.32em;color:#9c9c9c}
+.tv-band-main b{font-size:7vh;font-weight:800;line-height:1;letter-spacing:-.035em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tv-shine{background:linear-gradient(100deg,#fff 0%,#fff 42%,#8d8d8d 50%,#fff 58%,#fff 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:tvshine 4s linear infinite}
+.tv-band-lead{display:flex;flex-direction:column;align-items:flex-end;gap:.6vh;padding-left:2.6vw;border-left:1px solid #2e2e2e;text-align:right}
+.tv-band-lead b{font-size:5vh;font-weight:800;letter-spacing:-.03em;line-height:1;animation:tvpop .7s cubic-bezier(.2,1.6,.4,1)} .tv-band-lead em{font-style:normal;font-size:2vh;color:#bdbdbd;font-weight:500}
+.tv-band.big{padding:3.6vh 3.4vw;grid-template-columns:auto auto} .tv-band.big .tv-band-main b{font-size:9vh} .tv-band.big .tv-cup{width:11vh;height:11vh}
+@keyframes tvsweep{0%,55%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes tvshine{0%{background-position:100% 0}100%{background-position:-150% 0}}
+@keyframes tvfloat{50%{transform:translateY(-.6vh) rotate(-4deg)}}
+@keyframes tvpop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
+.tv-tk{font-size:1.4vh;font-weight:700;letter-spacing:.3em;color:#fff;background:#0a0a0a;padding:.5vh .8vw;align-self:center}
+.tv-board{display:flex;flex-direction:column;gap:1.2vh;min-height:0}
+.tv-board ol{list-style:none;margin:0;padding:0;display:grid;grid-template-rows:repeat(10,minmax(0,1fr));flex:1;min-height:0}
+.tv-board li{display:grid;grid-template-columns:6vh 1fr auto;align-items:center;gap:1.6vw;padding:0 .4vw;border-bottom:1px solid var(--rule);min-height:0;overflow:hidden}
+.tv-board li em{font-style:normal;font-size:2.6vh;font-weight:500;color:var(--grey);text-align:left}
+.tv-board li.p1 em,.tv-board li.p2 em,.tv-board li.p3 em{color:var(--ink);font-weight:700}
+.tv-who{display:flex;flex-direction:column;gap:.8vh;min-width:0} .tv-line{display:flex;align-items:baseline;gap:1.2vw;min-width:0;white-space:nowrap} .tv-who b{font-size:3.1vh;font-weight:500;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis} .tv-who span{font-size:1.7vh;color:var(--grey);flex-shrink:0}
+.tv-board li.p1 .tv-who b{font-weight:700}
+.tv-bar{height:.35vh;background:#f0f0f0;overflow:hidden} .tv-bar i{display:block;height:100%;background:#bdbdbd;transition:width .8s}
+.tv-board li.p1 .tv-bar i,.tv-board li.p2 .tv-bar i,.tv-board li.p3 .tv-bar i{background:var(--ink)}
+.tv-score{font-size:4.4vh;font-weight:800;min-width:9vh;text-align:right;letter-spacing:-.04em} .tv-board li:not(.p1):not(.p2):not(.p3) .tv-score{color:#3a3a3a}
+.tv-ticker{display:flex;align-items:center;gap:3vw;font-size:2vh;color:#333;padding-top:1.6vh;border-top:1px solid var(--rule);white-space:nowrap;overflow:hidden} .tv-ticker b{color:var(--ink);font-weight:700;letter-spacing:.02em}
+.tv-podium{display:flex;align-items:flex-end;gap:2vw;margin:2vh 0}
+.tv-podium>div{width:22vh;display:flex;flex-direction:column;align-items:center;gap:.8vh} .tv-podium b{font-size:3.6vh;font-weight:700;letter-spacing:-.02em} .tv-podium span{font-size:2vh;color:#555}
+.tv-podium>div>div{width:100%;background:#f1f1f1;display:flex;align-items:flex-start;justify-content:center;padding-top:1.6vh;font-size:5vh;font-weight:800;color:var(--ink)}
+.tv-podium .s1>div{height:26vh;background:var(--ink);color:#fff} .tv-podium .s2>div{height:19vh} .tv-podium .s3>div{height:14vh}
+.tv-today{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(5,auto);grid-auto-flow:column;gap:0 4vw;min-width:62vw;border-top:1.5px solid var(--ink)}
+.tv-today li{display:grid;grid-template-columns:5vh 1fr auto;align-items:center;gap:1vw;font-size:2.8vh;padding:1.4vh .4vw;border-bottom:1px solid var(--rule);text-align:left}
+.tv-today em{font-style:normal;color:var(--grey);font-weight:300} .tv-today b{font-weight:500} .tv-today span{font-weight:800;font-size:3.2vh}
+.tv-full{position:fixed;right:2vw;bottom:2vh;font:inherit;font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border:1px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer}
+
 .box.co-setup{width:min(560px,calc(100vw - 32px));display:flex;flex-direction:column;gap:16px} .co-setup h3{margin:0 0 4px} .co-setup p{margin:0}
 .co-f{display:flex;flex-direction:column;gap:7px} .co-f .lbl,.co-next .lbl{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
 .co-f input{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
@@ -561,6 +616,7 @@ async function api(path, opts = {}, retried = false) {
 export default function App() {
   const [session, setSession] = useState(undefined);
   const isPhone = window.location.pathname.startsWith('/phone');
+  const isTv = window.location.pathname.startsWith('/tv');
 
   // Picks up new releases by itself: every minute it checks whether the site has been redeployed, and reloads
   // as soon as nothing is open (no call, panel or pop-up), so no one is left on an old version.
@@ -597,7 +653,7 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
-      {session === undefined ? null : !session ? <Login /> : isPhone ? <PhoneScreen /> : <Desk />}
+      {session === undefined ? null : !session ? <Login /> : isPhone ? <PhoneScreen /> : isTv ? <TvScreen /> : <Desk />}
     </>
   );
 }
@@ -774,9 +830,9 @@ function Desk() {
             {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
             <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
           </nav>
-          {boss && (phase === 'live' || phase === 'countdown'
-            ? <span className="co-pill"><i />Call out running</span>
-            : <button className="co-start" onClick={() => setStartOpen(true)}>Start call out</button>)}
+          {boss && (phase === 'live' || phase === 'countdown') && <span className="co-pill"><i />{co?.callout?.test ? 'Test running' : 'Call out running'}</span>}
+          {boss && <button className="co-start" onClick={() => setStartOpen(true)}>{(phase === 'live' || phase === 'countdown') && !co?.callout?.test ? 'Test mode' : 'Start call out'}</button>}
+          {boss && <a className="co-tv" href="/tv" target="apex-tv" title="Open the big screen for the office TV">TV screen</a>}
           <div className="right">
             {me && <span title="Owner profiles opened today">Profiles <span className="n">{me.caps.profiles}</span></span>}
             {me && <span>Calls <span className="n">{me.caps.calls}</span></span>}
@@ -793,7 +849,7 @@ function Desk() {
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
       {phase === 'done' && (co?.meIn || boss) && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
       {msgFor && <MessagesEditor user={msgFor === 'me' ? null : msgFor} onClose={() => setMsgFor(null)} />}
-      {startOpen && <StartCallout onClose={() => setStartOpen(false)} onStarted={() => { setStartOpen(false); loadCo(); }} />}
+      {startOpen && <StartCallout realRunning={(phase === 'live' || phase === 'countdown') && !co?.callout?.test} onClose={() => setStartOpen(false)} onStarted={() => { setStartOpen(false); loadCo(); }} />}
       {toast && <div className="toast">{toast}</div>}
     </>
   );
@@ -1986,9 +2042,9 @@ const coUnit = (mode) => (mode === 'hot' ? 'hot' : mode === 'points' ? 'pts' : '
 const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10 < 4 ? n % 10 : 0] || 'th');
 
-function StartCallout({ onClose, onStarted }) {
+function StartCallout({ onClose, onStarted, realRunning }) {
   const [info, setInfo] = useState(null);
-  const [v, setV] = useState({ minutes: 45, custom: '', teams: [], target: 15, prize: '', mode: 'calls' });
+  const [v, setV] = useState({ minutes: 45, custom: '', teams: [], target: 15, prize: 'Lunch on Mahan', mode: 'calls', test: !!realRunning });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { api('/api/desk?action=calloutTeams').then(setInfo).catch((e) => setErr(e.message)); }, []);
@@ -2006,8 +2062,8 @@ function StartCallout({ onClose, onStarted }) {
   return (
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="box co-setup" role="dialog" aria-label="Start a call out">
-        <div><h3>Start a call out</h3>
-          <p className="muted">Everyone in it switches into call out mode after a 10 second countdown. Only calls dialled during the timer count.</p></div>
+        <div><h3>{realRunning ? 'Test mode' : 'Start a call out'}</h3>
+          <p className="muted">{v.test ? 'A practice run on your screen and the TV only. Nobody else sees it or is switched into it.' : 'Everyone in it switches into call out mode after a 10 second countdown. Only calls dialled during the timer count.'}</p></div>
         <div className="co-f"><span className="lbl">How long</span>
           <div className="co-chips">{[15, 30, 45, 60].map((m) => <button key={m} className={v.minutes === m ? 'on' : ''} onClick={() => setV({ ...v, minutes: m })}>{m} min</button>)}
             <button className={v.minutes === 'custom' ? 'on' : ''} onClick={() => setV({ ...v, minutes: 'custom' })}>Custom</button>
@@ -2020,15 +2076,18 @@ function StartCallout({ onClose, onStarted }) {
             </div>}</div>
         <div className="co-two">
           <label className="co-f"><span className="lbl">Target per person</span><input type="number" min="0" value={v.target} onChange={(e) => setV({ ...v, target: e.target.value })} /></label>
-          <label className="co-f"><span className="lbl">Prize (optional)</span><input maxLength={80} placeholder="e.g. Lunch on Ollie" value={v.prize} onChange={(e) => setV({ ...v, prize: e.target.value })} /></label>
+          <label className="co-f"><span className="lbl">Prize (optional)</span><input maxLength={80} placeholder="e.g. Lunch on Mahan" value={v.prize} onChange={(e) => setV({ ...v, prize: e.target.value })} /></label>
         </div>
         <div className="co-f"><span className="lbl">What wins</span>
           <div className="co-chips round">{[['calls', 'Most calls'], ['hot', 'Most hot leads'], ['points', 'Points (call 1, hot 5)']].map(([k, l]) =>
             <button key={k} className={v.mode === k ? 'on' : ''} onClick={() => setV({ ...v, mode: k })}>{l}</button>)}</div></div>
+        <label className={`co-testmode${v.test ? ' on' : ''}`}><input type="checkbox" checked={v.test} disabled={realRunning} onChange={(e) => setV({ ...v, test: e.target.checked })} />
+          <span><b>Test mode</b> Only you see it, with made-up numbers, so you can check the screens and the TV. Nobody else is switched into it, and a real call out that's running carries on as normal.
+            {realRunning && <em className="co-testnote">A real call out is running, so only a test can be started until it ends.</em>}</span></label>
         {err && <p className="err" style={{ margin: 0 }}>{err}</p>}
         <div className="co-foot"><span className="muted">{people ? `${pl(people, 'person').replace('persons', 'people')} · team target ${(Number(v.target) || 0) * people} calls` : ''}</span>
           <div style={{ display: 'flex', gap: 8 }}><button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn primary" disabled={busy || !info} onClick={start}>{busy ? 'Starting…' : `Start ${mins || ''} min call out`}</button></div></div>
+            <button className="btn primary" disabled={busy || !info} onClick={start}>{busy ? 'Starting…' : `Start ${mins || ''} min ${v.test ? 'test' : 'call out'}`}</button></div></div>
       </div>
     </div>
   );
@@ -2074,7 +2133,7 @@ function CalloutBar({ co, boss, onChange }) {
   const control = (a) => api(`/api/desk?action=${a}`, { method: 'POST' }).then(onChange).catch(() => {});
   return (
     <div className="gut"><section className="co-bar">
-      <div className="co-clock"><span className="co-kicker"><i />CALL OUT LIVE</span>
+      <div className="co-clock"><span className="co-kicker"><i />{c.test ? 'TEST CALL OUT · ONLY YOU' : 'CALL OUT LIVE'}</span>
         <b className="n">{mmss(end - now)}</b>
         <span className="co-dim">left · ends {new Date(end).toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' })}{c.prize ? ` · ${c.prize}` : ''}</span></div>
       <div className="co-mid">
@@ -2122,6 +2181,137 @@ function CalloutResults({ co, onClose }) {
         <div><span>PEOPLE CALLING</span><b>{board.filter((b) => b.calls > 0).length} of {board.length}</b></div>
       </div>
       <button className="co-done" onClick={onClose}>Back to my owners</button>
+    </div>
+  );
+}
+
+// The prize band across the top: what they're playing for, and who's taking it right now
+function TvPrizeBand({ c, leader, score, big }) {
+  const unit = c.mode === 'hot' ? 'hot' : c.mode === 'points' ? 'pts' : (score === 1 ? 'call' : 'calls');
+  return (
+    <div className={`tv-band${big ? ' big' : ''}`}>
+      <Trophy />
+      <div className="tv-band-main"><span>PLAYING FOR · {CO_MODE[c.mode].toUpperCase()}</span><b className="tv-shine">{c.prize || CO_MODE[c.mode]}</b></div>
+      {leader !== undefined && <div className="tv-band-lead"><span>IN THE LEAD</span>
+        {leader ? <><b key={leader}>{leader}</b><em className="n">{score} {unit}</em></> : <b>Up for grabs</b>}</div>}
+    </div>
+  );
+}
+const Trophy = () => (
+  <svg className="tv-cup" viewBox="0 0 64 64" aria-hidden="true"><path fill="currentColor" d="M18 6h28v6h10v6c0 8-6 14-13.5 14.8A15 15 0 0 1 35 40v8h9v6H20v-6h9v-8a15 15 0 0 1-7.5-7.2C14 32 8 26 8 18v-6h10V6Zm-4 12c0 4 2.5 7.5 6 8.7V18h-6Zm30 0v8.7c3.5-1.2 6-4.7 6-8.7h-6Z"/></svg>
+);
+
+// ── TV screen (/tv): for the office TV. Big timer, total calls and the leaderboard while a call out runs;
+// the countdown before it starts, the results after it ends, and today's board in between. Nothing to click.
+function TvScreen() {
+  const [co, setCo] = useState(null);
+  const [today, setToday] = useState(null);
+  const [, setTick] = useState(0);
+  const [full, setFull] = useState(!!document.fullscreenElement);
+  const [idleMouse, setIdleMouse] = useState(false);
+  const load = useCallback(() => api('/api/desk?action=callout')
+    .then((j) => setCo({ ...j, offset: j.callout ? new Date(j.callout.serverNow).getTime() - Date.now() : 0 })).catch(() => {}), []);
+  const phase = calloutPhase(co);
+  useEffect(() => { load(); const t = setInterval(load, phase === 'live' || phase === 'countdown' ? 4000 : 15000); return () => clearInterval(t); }, [load, phase]);
+  useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
+  // Between call outs: today's numbers (managers and directors only; brokers just see the waiting screen)
+  useEffect(() => {
+    if (phase === 'live' || phase === 'countdown') return;
+    const get = () => api('/api/desk?action=dashboard&period=today').then(setToday).catch(() => setToday(null));
+    get(); const t = setInterval(get, 60000); return () => clearInterval(t);
+  }, [phase]);
+  // Keep the TV awake, and hide the mouse when it isn't moving
+  useEffect(() => {
+    let lock;
+    const ask = () => navigator.wakeLock?.request('screen').then((l) => { lock = l; }).catch(() => {});
+    ask(); const vis = () => document.visibilityState === 'visible' && ask();
+    document.addEventListener('visibilitychange', vis);
+    return () => { document.removeEventListener('visibilitychange', vis); lock?.release?.(); };
+  }, []);
+  useEffect(() => {
+    let t; const move = () => { setIdleMouse(false); clearTimeout(t); t = setTimeout(() => setIdleMouse(true), 3000); };
+    const fs = () => setFull(!!document.fullscreenElement);
+    move(); window.addEventListener('mousemove', move); document.addEventListener('fullscreenchange', fs);
+    return () => { clearTimeout(t); window.removeEventListener('mousemove', move); document.removeEventListener('fullscreenchange', fs); };
+  }, []);
+  const goFull = () => document.documentElement.requestFullscreen?.().catch(() => {});
+  const clock = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' });
+
+  const c = co?.callout;
+  const board = co?.board || [];
+  const now = coNow(co);
+  let body;
+  if (phase === 'countdown') {
+    const left = Math.ceil((new Date(c.startsAt).getTime() - now) / 1000);
+    body = (<div className="tv-center">
+      <span className="tv-kick">CALL OUT STARTS IN</span>
+      <b className="tv-count n">{left > 59 ? mmss(left * 1000) : Math.max(1, left)}</b>
+      <TvPrizeBand c={c} big />
+      <span className="tv-sub">{c.minutes} minutes · {CO_MODE[c.mode]} · {board.length} people · phones ready</span>
+    </div>);
+  } else if (phase === 'live') {
+    const end = new Date(c.endsAt).getTime();
+    const total = board.reduce((a, b) => a + b.calls, 0);
+    const hot = board.reduce((a, b) => a + b.hot, 0);
+    const teamTarget = (c.target || 0) * board.length;
+    const leftMs = end - now;
+    const top = board.slice(0, 10);
+    const lead = board[0] && coScore(co, board[0]) > 0 ? board[0] : null;
+    body = (<>
+      <TvPrizeBand c={c} leader={lead ? lead.name.split(' ')[0] : null} score={lead ? coScore(co, lead) : 0} />
+      <div className="tv-live">
+        <section className="tv-left">
+          <span className="tv-kick"><i />CALL OUT LIVE · ENDS {new Date(end).toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' })}</span>
+          <b className={`tv-timer n${leftMs < 60000 ? ' last' : ''}`}>{mmss(leftMs)}</b>
+          <div className="tv-calls"><span>CALLS</span><b className="n">{fmt(total)}</b>
+            {teamTarget > 0 && <><div className="tv-track"><i style={{ width: `${Math.min(100, (total / teamTarget) * 100)}%` }} /></div>
+              <em>{Math.round((total / teamTarget) * 100)}% of the {fmt(teamTarget)} target</em></>}</div>
+          <div className="tv-stats">
+            <div><span>HOT LEADS</span><b className="n">{hot}</b></div>
+            <div><span>CALLING</span><b className="n">{board.filter((b) => b.calls > 0).length}<small>/{board.length}</small></b></div>
+          </div>
+        </section>
+        <section className="tv-board">
+          <ol>{top.map((b, i) => (
+            <li key={b.name} className={i < 3 ? 'p' + (i + 1) : ''}>
+              <em>{i + 1}</em>
+              <div className="tv-who"><div className="tv-line"><b>{b.name}</b><span>{b.team}{b.hot ? ` · ${b.hot} hot` : ''}</span></div></div>
+              <b className="tv-score n">{coScore(co, b)}</b>
+            </li>))}</ol>
+        </section>
+      </div>
+      {(co.recent || []).length > 0 && <div className="tv-ticker"><span className="tv-tk">HOT</span>{co.recent.map((r, i) => <span key={i}><b>{r.name.split(' ')[0]}</b> {r.what}</span>)}</div>}
+    </>);
+  } else if (phase === 'done') {
+    const ranked = board.filter((b) => coScore(co, b) > 0);
+    const total = board.reduce((a, b) => a + b.calls, 0);
+    const hot = board.reduce((a, b) => a + b.hot, 0);
+    const podium = [ranked[1], ranked[0], ranked[2]];
+    body = (<div className="tv-center">
+      <span className="tv-kick">CALL OUT FINISHED · {c.minutes} MIN</span>
+      <h1 className="tv-win">{ranked[0] ? `${ranked[0].name.split(' ')[0]} wins${c.prize ? ` ${c.prize.charAt(0).toLowerCase() + c.prize.slice(1)}.` : '.'}` : 'Call out finished.'}</h1>
+      <div className="tv-podium">{podium.map((b, i) => b ? (
+        <div key={i} className={'s' + [2, 1, 3][i]}><b>{b.name.split(' ')[0]}</b><span>{coScore(co, b)} {c.mode === 'hot' ? 'hot' : c.mode === 'points' ? 'pts' : 'calls'}</span><div>{[2, 1, 3][i]}</div></div>
+      ) : <div key={i} className={'s' + [2, 1, 3][i] + ' gap'} />)}</div>
+      <span className="tv-sub">{fmt(total)} calls · {hot} hot leads · {ranked.length} of {board.length} people calling</span>
+    </div>);
+  } else {
+    const rows = (today?.rows || []).filter((r) => r.calls > 0).sort((a, b) => b.calls - a.calls).slice(0, 10);
+    const total = (today?.rows || []).reduce((a, r) => a + r.calls, 0);
+    body = (<div className="tv-center">
+      <span className="tv-kick">NO CALL OUT RUNNING</span>
+      <h1 className="tv-win">{today ? `${fmt(total)} calls today.` : 'Waiting for the next call out.'}</h1>
+      {rows.length > 0 && <ol className="tv-today">{rows.map((r, i) => <li key={r.name + i}><em>{i + 1}</em><b>{r.name}</b><span className="n">{r.calls}</span></li>)}</ol>}
+      <span className="tv-sub dim">This screen switches over by itself when a call out starts.</span>
+    </div>);
+  }
+  return (
+    <div className={`tv${idleMouse ? ' nomouse' : ''}`}>
+      <header className="tv-top"><span className="tv-logo" aria-label="Apex Homes DXB" dangerouslySetInnerHTML={{ __html: APEX_LOGO }} />
+        {c?.test && <span className="tv-test">TEST · ONLY YOU CAN SEE THIS · NUMBERS ARE MADE UP</span>}
+        <span className="tv-clock n">{clock}</span></header>
+      {co === null ? <div className="tv-center"><span className="tv-sub dim">Loading…</span></div> : body}
+      {!full && !idleMouse && <button className="tv-full" onClick={goFull}>Full screen</button>}
     </div>
   );
 }
