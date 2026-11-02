@@ -1,7 +1,7 @@
 // Office-only actions: /api/desk?action=...
 // Every action checks the office IP and the signed-in broker before touching data.
 import { getTemplates, saveTemplates } from './_lib/templates.js';
-import { ensureCallouts, currentCallout, runningCalloutId, IS_TEST } from './_lib/callout.js';
+import { ensureCallouts, currentCallout, runningCalloutId, isTest, testsOn } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
 import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed } from './_lib/core.js';
@@ -497,18 +497,16 @@ const actions = {
     const mode = ['calls', 'hot', 'points'].includes(b.mode) ? b.mode : 'calls';
     // Test mode: only you see it, numbers are made up, and it never touches a real call out
     const test = b.test === true;
+    if (test && !testsOn()) return res.status(503).json({ error: 'Test mode isn\'t ready yet. Try again in a minute.' });
     const [co] = await sql.begin(async (tx) => {
-      if (test) await tx`update desk.callouts co set ended_at = now() where ended_at is null and ends_at > now() and ${IS_TEST} and started_by = ${s.user_id}`;
-      else await tx`update desk.callouts co set ended_at = now() where ended_at is null and ends_at > now() and not ${IS_TEST}`;
-      return test
-        ? tx`insert into desk.callouts (started_by, starts_at, ends_at, minutes, teams, target, prize, mode, test)
-             values (${s.user_id}, now() + interval '10 seconds', now() + interval '10 seconds' + make_interval(mins => ${minutes}),
-                     ${minutes}, ${teams.length ? teams : null}, ${target}, ${prize}, ${mode}, true) returning id`
-        : tx`insert into desk.callouts (started_by, starts_at, ends_at, minutes, teams, target, prize, mode)
+      if (test) await tx`update desk.callouts co set ended_at = now() where ended_at is null and ends_at > now() and ${isTest()} and started_by = ${s.user_id}`;
+      else await tx`update desk.callouts co set ended_at = now() where ended_at is null and ends_at > now() and not ${isTest()}`;
+      const [row] = await tx`insert into desk.callouts (started_by, starts_at, ends_at, minutes, teams, target, prize, mode)
              values (${s.user_id}, now() + interval '10 seconds', now() + interval '10 seconds' + make_interval(mins => ${minutes}),
                      ${minutes}, ${teams.length ? teams : null}, ${target}, ${prize}, ${mode}) returning id`;
-    }).catch((e) => { if (test) return [null]; throw e; });
-    if (!co) return res.status(503).json({ error: 'Test mode isn\'t ready yet. Try again in a minute.' });
+      if (test) await tx`insert into desk.callout_tests (callout_id) values (${row.id})`;
+      return [row];
+    });
     await audit(s.user_id, 'callout_started', { detail: { id: co.id, minutes, teams, target, mode, test }, ip });
     res.json({ ok: true, id: co.id });
   },
