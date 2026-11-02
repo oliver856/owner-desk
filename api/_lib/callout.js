@@ -1,6 +1,6 @@
 // Call out mode: a timed, competitive calling session a manager starts for everyone (or chosen teams).
 // Only calls dialled between starts_at and the end count. The table is created once, without touching other tables.
-import { sql, ensureOnce } from './core.js';
+import { sql } from './core.js';
 
 let ready = null;
 export function ensureCallouts() {
@@ -21,23 +21,40 @@ export function ensureCallouts() {
       created_at timestamptz not null default now())`;
     await sql`alter table desk.callouts enable row level security`;
     await sql`revoke all on desk.callouts from anon, authenticated`;
-  })().then(() => ensureTestCol()).catch((e) => { ready = null; throw e; });
-  return ready;
+  })().catch((e) => { ready = null; throw e; });
+  return ready.then(() => ensureTests());
 }
 
 // Test call outs: only the person who started one sees it, with made-up numbers. Nobody else is affected.
-const ensureTestCol = ensureOnce(
-  (q) => q`select exists (select 1 from information_schema.columns where table_schema = 'desk' and table_name = 'callouts' and column_name = 'test') as ok`,
-  (tx) => tx`alter table desk.callouts add column if not exists test boolean not null default false`);
-// Reads the test flag even if the column couldn't be added yet
-export const IS_TEST = sql`coalesce((to_jsonb(co) ->> 'test')::boolean, false)`;
+// The test flag lives in its own small table, so setting it up never has to lock the call outs table.
+// If that table isn't there yet, everything still works as normal; test mode just stays switched off.
+let testsReady = false;
+async function ensureTests() {
+  if (testsReady) return true;
+  try {
+    const [r] = await sql`select to_regclass('desk.callout_tests') is not null as ok`;
+    if (!r.ok) {
+      await sql.begin(async (tx) => {
+        await tx`set local lock_timeout = '2s'`;
+        await tx`create table if not exists desk.callout_tests (callout_id bigint primary key, created_at timestamptz not null default now())`;
+        await tx`alter table desk.callout_tests enable row level security`;
+        await tx`revoke all on desk.callout_tests from anon, authenticated`;
+      });
+    }
+    testsReady = true;
+  } catch (e) { console.error('Test call outs not ready:', e.message); }
+  return testsReady;
+}
+export const testsOn = () => testsReady;
+// "Is this call out a test?" (false for everything until the tests table exists)
+export const isTest = () => (testsReady ? sql`exists (select 1 from desk.callout_tests t where t.callout_id = co.id)` : sql`false`);
 
 // The call out this person's buttons act on: their own running test first, otherwise the real one
 export async function runningCalloutId(me) {
   await ensureCallouts();
   const [r] = await sql`select co.id from desk.callouts co
-    where co.ended_at is null and co.ends_at > now() and (not ${IS_TEST} or co.started_by = ${me.user_id})
-    order by ${IS_TEST} desc, co.id desc limit 1`;
+    where co.ended_at is null and co.ends_at > now() and (not ${isTest()} or co.started_by = ${me.user_id})
+    order by ${isTest()} desc, co.id desc limit 1`;
   return r?.id || null;
 }
 
@@ -59,14 +76,14 @@ const HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportun
 export async function currentCallout(me) {
   await ensureCallouts();
   const [co] = await sql`
-    select co.*, ${IS_TEST} as is_test, st.full_name as started_by_name, now() as server_now,
+    select co.*, ${isTest()} as is_test, st.full_name as started_by_name, now() as server_now,
            least(now(), coalesce(co.ended_at, co.ends_at)) as count_to,
            (co.ended_at is null and co.ends_at > now()) as running
     from desk.callouts co join desk.staff st on st.user_id = co.started_by
     where ((co.ended_at is null and co.ends_at > now()) or coalesce(co.ended_at, co.ends_at) > now() - interval '15 minutes')
-      and (not ${IS_TEST} or co.started_by = ${me.user_id})
-    order by (co.ended_at is null and co.ends_at > now()) desc, ${IS_TEST} desc, co.id desc limit 1`;
-  if (!co) return { callout: null };
+      and (not ${isTest()} or co.started_by = ${me.user_id})
+    order by (co.ended_at is null and co.ends_at > now()) desc, ${isTest()} desc, co.id desc limit 1`;
+  if (!co) return { callout: null, features: { test: testsOn() } };
   const inTeams = co.teams && co.teams.length ? sql`coalesce(st.team, 'No team') = any(${co.teams})` : sql`true`;
   let board = await sql`
     select st.user_id, st.full_name as name, coalesce(st.team, 'No team') as team,
@@ -90,6 +107,7 @@ export async function currentCallout(me) {
     order by c.called_at desc limit 5`;
   const meIn = board.some((b) => b.user_id === me.user_id);
   return {
+    features: { test: testsOn() },
     callout: {
       id: co.id, startsAt: co.starts_at, endsAt: co.ended_at || co.ends_at, running: co.running, minutes: co.minutes,
       teams: co.teams, target: co.target, prize: co.prize, mode: co.mode, test: !!co.is_test, startedBy: co.started_by_name, serverNow: co.server_now,
