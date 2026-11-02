@@ -388,7 +388,8 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .box.person .cl-list{max-height:220px} .box.person .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 .dash-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
 .dash-head h1{font-size:22px;margin:0;font-weight:650} .dash-head p{margin:4px 0 0}
-.dash-ctl{display:flex;gap:10px;align-items:center} .dash-ctl select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.pp{display:flex;flex-direction:column;align-items:flex-end;gap:6px} .pp-dates{display:flex;gap:6px;align-items:center} .pp-dates input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+.dash-ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end} .dash-ctl select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .kpis{display:grid;grid-template-columns:1.6fr repeat(4,1fr);gap:12px;margin-bottom:12px}
 @media (max-width:1000px){.kpis{grid-template-columns:1fr 1fr}}
 .kpi{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;background:var(--bg)}
@@ -2221,18 +2222,40 @@ function PersonForm({ p, areas, teams, myRole, isMe, onClose, onSaved }) {
 }
 
 // Chart bars: by hour today, by day for this week / this month
-function makeBars(period, startAt, series) {
-  if (period === 'today') return Array.from({ length: 11 }, (_, i) => { const h = 8 + i; return { k: `${h}:00`, n: series.find((x) => Number(x.k) === h)?.n || 0 }; });
-  const out = []; const start = new Date(String(startAt)); const end = new Date();
+// Chart bars: by hour for a single day, otherwise by day across the chosen dates
+function makeBars(d) {
+  if (d.byHour) return Array.from({ length: 11 }, (_, i) => { const h = 8 + i; return { k: `${h}:00`, n: d.series.find((x) => Number(x.k) === h)?.n || 0 }; });
+  const out = []; const start = new Date(String(d.start)); const end = new Date(Math.min(Date.now(), new Date(String(d.end)).getTime() - 1));
+  const days = Math.round((end - start) / 86400000) + 1;
   for (let x = new Date(start); x <= end; x.setDate(x.getDate() + 1)) {
     const k = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(x);
-    const lab = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', weekday: period === 'week' ? 'short' : undefined, day: 'numeric' }).format(x);
-    if (!out.some((o) => o.key === k)) out.push({ key: k, k: lab, n: series.find((s) => s.k === k)?.n || 0 });
+    const lab = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', weekday: days <= 7 ? 'short' : undefined, day: 'numeric', month: days > 31 ? 'short' : undefined }).format(x);
+    if (!out.some((o) => o.key === k)) out.push({ key: k, k: lab, n: d.series.find((s) => s.k === k)?.n || 0 });
   }
   return out;
 }
-const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month']];
-const periodLabel = (p) => ({ today: 'today', week: 'this week', month: 'this month' }[p]);
+const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['lastmonth', 'Last month'], ['custom', 'Dates']];
+const dubaiDay = (offsetDays = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(new Date(Date.now() + offsetDays * 86400000));
+const prettyDay = (ymd) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(ymd + 'T00:00:00Z'));
+// "today", "this week" ... or "1 Oct – 31 Oct" for last month and chosen dates
+const periodLabel = (d) => (d.period === 'lastmonth' || d.period === 'custom'
+  ? (d.from === d.to ? `on ${prettyDay(d.from)}` : `${prettyDay(d.from)} – ${prettyDay(d.to)}`)
+  : { today: 'today', week: 'this week', month: 'this month' }[d.period]);
+const periodQuery = (p) => `period=${p.period}${p.period === 'custom' ? `&from=${p.from}&to=${p.to}` : ''}`;
+// Today / This week / This month / Last month / Dates (pick any from and to)
+function PeriodPicker({ value, onChange }) {
+  return (
+    <div className="pp">
+      <div className="seg">{PERIODS.map(([k, l]) => <button key={k} className={value.period === k ? 'on' : ''}
+        onClick={() => onChange({ ...value, period: k, from: value.from || dubaiDay(-30), to: value.to || dubaiDay() })}>{l}</button>)}</div>
+      {value.period === 'custom' && <div className="pp-dates">
+        <input type="date" aria-label="From" value={value.from} max={value.to || undefined} onChange={(e) => e.target.value && onChange({ ...value, from: e.target.value })} />
+        <span className="muted">to</span>
+        <input type="date" aria-label="To" value={value.to} min={value.from || undefined} max={dubaiDay()} onChange={(e) => e.target.value && onChange({ ...value, to: e.target.value })} />
+      </div>}
+    </div>
+  );
+}
 
 // Brokers only see their own numbers. Managers and directors see their team, and can switch to their own.
 function DashPage({ role }) {
@@ -2243,20 +2266,20 @@ function DashPage({ role }) {
 // My numbers: your own calls, hot, cold and WhatsApps, and your place in the company.
 // The person above you is shown by their call count only, never their name.
 function MyDashboard({ onTeam }) {
-  const [period, setPeriod] = useState('today');
+  const [pick, setPick] = useState({ period: 'today', from: '', to: '' });
   const [editT, setEditT] = useState(false);
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
   const load = useCallback(() => {
-    api(`/api/desk?action=myStats&period=${period}`).then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message));
-  }, [period]);
+    api(`/api/desk?action=myStats&${periodQuery(pick)}`).then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message));
+  }, [pick]);
   useEffect(() => { load(); const t = setInterval(() => document.visibilityState === 'visible' && load(), 60000); return () => clearInterval(t); }, [load]);
   if (err) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p></main>;
   if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
   const m = d.me;
-  const label = periodLabel(d.period);
+  const label = periodLabel(d);
   const per = d.goal * d.workdays;
-  const bars = makeBars(d.period, d.start, d.series);
+  const bars = makeBars(d);
   const maxBar = Math.max(1, ...bars.map((b) => b.n));
   const gap = d.above ? d.above.calls - m.calls : 0;
   let line;
@@ -2268,12 +2291,12 @@ function MyDashboard({ onTeam }) {
     <main className="gut dash">
       <div className="dash-head">
         <div><h1>My numbers</h1>
-          <p className="muted">Your calls {label} · your target {d.goal} a day{d.period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}
+          <p className="muted">Your calls {label} · your target {d.goal} a day{!d.byHour ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''}` : ''}
             {!editT && <> · <button className="link" onClick={() => setEditT(true)}>Change</button></>}</p>
           {editT && <TargetEditor goal={d.goal} base={d.base || 50} onSaved={() => load()} onClose={() => setEditT(false)} />}</div>
         <div className="dash-ctl">
           {onTeam && <button className="btn" onClick={onTeam}>Team view</button>}
-          <div className="seg">{PERIODS.map(([k, l]) => <button key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
+          <PeriodPicker value={pick} onChange={setPick} />
         </div>
       </div>
 
@@ -2301,7 +2324,7 @@ function MyDashboard({ onTeam }) {
       </div>
 
       <section className="card">
-        <h4>{d.period === 'today' ? 'Your calls by hour' : 'Your calls by day'}</h4>
+        <h4>{d.byHour ? 'Your calls by hour' : 'Your calls by day'}</h4>
         <div className="bars">{bars.map((b, i) => (
           <div key={i} className="bar-c" title={`${b.k}: ${b.n}`}><div className="bar-v" style={{ height: `${(b.n / maxBar) * 100}%` }}>{b.n ? <span>{b.n}</span> : null}</div><em>{b.k}</em></div>))}</div>
       </section>
@@ -2310,13 +2333,13 @@ function MyDashboard({ onTeam }) {
 }
 
 function Dashboard({ onMine }) {
-  const [period, setPeriod] = useState('today');
+  const [pick, setPick] = useState({ period: 'today', from: '', to: '' });
   const [team, setTeam] = useState('');
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
   const load = useCallback(() => {
-    api(`/api/desk?action=dashboard&period=${period}&team=${encodeURIComponent(team)}`).then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message));
-  }, [period, team]);
+    api(`/api/desk?action=dashboard&${periodQuery(pick)}&team=${encodeURIComponent(team)}`).then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message));
+  }, [pick, team]);
   useEffect(() => { load(); const t = setInterval(() => document.visibilityState === 'visible' && load(), 60000); return () => clearInterval(t); }, [load]);
   if (err) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p></main>;
   if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
@@ -2328,19 +2351,19 @@ function Dashboard({ onMine }) {
   const wa = d.rows.reduce((a, r) => a + r.wa, 0);
   const active = d.rows.filter((r) => r.calls > 0).length;
   const teamTarget = Math.max(per, d.rows.reduce((a, r) => a + perOf(r), 0));
-  const label = { today: 'today', week: 'this week', month: 'this month' }[period];
-  const bars = makeBars(period, d.start, d.series);
+  const label = periodLabel(d);
+  const bars = makeBars(d);
   const maxBar = Math.max(1, ...bars.map((b) => b.n));
   const medal = ['🥇', '🥈', '🥉'];
   return (
     <main className="gut dash">
       <div className="dash-head">
         <div><h1>{d.all ? (d.team ? d.team : 'Director overview') : `${d.myTeam || 'Your team'}`}</h1>
-          <p className="muted">{d.all ? 'Calls across every team' : 'Your team\'s calls'} {label} · target {d.goal} a day per person (or their own, if higher){period !== 'today' ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''} so far` : ''}</p></div>
+          <p className="muted">{d.all ? 'Calls across every team' : 'Your team\'s calls'} {label} · target {d.goal} a day per person (or their own, if higher){!d.byHour ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''}` : ''}</p></div>
         <div className="dash-ctl">
           {onMine && <button className="btn" onClick={onMine}>My numbers</button>}
           {d.all && <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="">All teams</option>{d.teamNames.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
-          <div className="seg">{[['today', 'Today'], ['week', 'This week'], ['month', 'This month']].map(([k, l]) => <button key={k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>{l}</button>)}</div>
+          <PeriodPicker value={pick} onChange={setPick} />
         </div>
       </div>
 
@@ -2356,7 +2379,7 @@ function Dashboard({ onMine }) {
 
       <div className="dash-grid">
         <section className="card">
-          <h4>{period === 'today' ? 'Calls by hour' : 'Calls by day'}</h4>
+          <h4>{d.byHour ? 'Calls by hour' : 'Calls by day'}</h4>
           <div className="bars">{bars.map((b, i) => (
             <div key={i} className="bar-c" title={`${b.k}: ${b.n}`}><div className="bar-v" style={{ height: `${(b.n / maxBar) * 100}%` }}>{b.n ? <span>{b.n}</span> : null}</div><em>{b.k}</em></div>))}</div>
         </section>
