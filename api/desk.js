@@ -61,6 +61,34 @@ const ensureNotes = ensureOnce((q) => q`select to_regclass('desk.notes') is not 
 const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
 const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|end user|rented|other|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
 
+// The time window for the dashboards (Dubai time): today, this week, this month, last month, or any from/to dates.
+// end is exclusive. workdays = Mon-Fri in the window up to today, for the call target.
+async function periodRange(q) {
+  const p = ['today', 'week', 'month', 'lastmonth', 'custom'].includes(q.get('period')) ? q.get('period') : 'today';
+  const okDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && !isNaN(Date.parse(v));
+  let from = q.get('from'), to = q.get('to');
+  if (p === 'custom' && !(okDate(from) && okDate(to))) { from = null; to = null; }
+  if (from && to && from > to) [from, to] = [to, from];
+  const [b] = await sql`with t as (select (now() at time zone 'Asia/Dubai')::date as today),
+    w as (select case ${p}
+        when 'today' then t.today
+        when 'week' then date_trunc('week', t.today)::date
+        when 'month' then date_trunc('month', t.today)::date
+        when 'lastmonth' then (date_trunc('month', t.today) - interval '1 month')::date
+        else coalesce(${from}::date, t.today) end as d0,
+      case ${p}
+        when 'today' then t.today + 1
+        when 'week' then (date_trunc('week', t.today) + interval '7 days')::date
+        when 'month' then (date_trunc('month', t.today) + interval '1 month')::date
+        when 'lastmonth' then date_trunc('month', t.today)::date
+        else coalesce(${to}::date, t.today) + 1 end as d1, t.today from t)
+    select d0, d1, d1 - 1 as dto, (d0::timestamp at time zone 'Asia/Dubai') as start, (d1::timestamp at time zone 'Asia/Dubai') as "end",
+      (select count(*)::int from generate_series(d0, least(d1 - 1, today), interval '1 day') g(d) where extract(isodow from g.d) < 6) as workdays
+    from w`;
+  const days = Math.round((new Date(b.d1) - new Date(b.d0)) / 86400000);
+  return { period: p, start: b.start, end: b.end, from: String(b.d0).slice(0, 10), to: String(b.dto).slice(0, 10), workdays: Math.max(1, b.workdays), byHour: days <= 1 };
+}
+
 const actions = {
   // Who am I, today's limits, and the building list for the filters
   async me(req, res, s) {
@@ -84,22 +112,18 @@ const actions = {
     if (s.role === 'broker') return res.status(403).json({ error: 'Only managers and directors can see the dashboard.' });
     await ensureRoles();
     const q = query(req);
-    const period = ['today', 'week', 'month'].includes(q.get('period')) ? q.get('period') : 'today';
+    const r = await periodRange(q);
+    const period = r.period;
     const all = s.role === 'admin' || s.role === 'director';
     const team = all ? (q.get('team') || '') : (s.team || '');
-    const unit = period === 'today' ? 'day' : period;
-    const [b] = await sql`select date_trunc(${unit}, now() at time zone 'Asia/Dubai') as local_start,
-      date_trunc(${unit}, now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start,
-      (select count(*)::int from generate_series(date_trunc(${unit}, now() at time zone 'Asia/Dubai')::date, (now() at time zone 'Asia/Dubai')::date, interval '1 day') g(d)
-        where extract(isodow from g.d) < 6) as workdays`;
-    // Working days (Mon to Fri) so far in the period, for the target
-    const workdays = Math.max(1, b.workdays);
+    const workdays = r.workdays;
+    const inRange = (c) => sql`${sql(c + '.called_at')} >= ${r.start} and ${sql(c + '.called_at')} < ${r.end}`;
     await ensureTargets();
     const goal = await baseTarget();
     const HOT = DASH_HOT, COLD = DASH_COLD;
     // Brokers and managers always; admins and directors only once they've made a call in the period
     const people = sql`st.active and (st.role in ('broker', 'manager')
-        or exists (select 1 from desk.calls x where x.user_id = st.user_id and x.called_at >= ${b.start}))
+        or exists (select 1 from desk.calls x where x.user_id = st.user_id and ${inRange('x')}))
       and (${team === ''} or coalesce(st.team, 'No team') = ${team})`;
     const [rows, series, teams] = await Promise.all([
       sql`select st.full_name as name, coalesce(st.team, 'No team') as team, st.role,
@@ -109,20 +133,20 @@ const actions = {
             count(c.id) filter (where ${COLD})::int as cold,
             count(c.id) filter (where c.note ~* 'whatsapp sent')::int as wa,
             max(c.called_at) as last_at
-          from desk.staff st left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${b.start}
+          from desk.staff st left join desk.calls c on c.user_id = st.user_id and ${inRange('c')}
           where ${people} group by st.user_id, st.full_name, st.team, st.role
           order by calls desc, name`,
-      sql`select ${period === 'today' ? sql`extract(hour from c.called_at at time zone 'Asia/Dubai')::int` : sql`to_char(c.called_at at time zone 'Asia/Dubai', 'YYYY-MM-DD')`} as k,
+      sql`select ${r.byHour ? sql`extract(hour from c.called_at at time zone 'Asia/Dubai')::int` : sql`to_char(c.called_at at time zone 'Asia/Dubai', 'YYYY-MM-DD')`} as k,
             count(*)::int as n
           from desk.calls c join desk.staff st on st.user_id = c.user_id
-          where c.called_at >= ${b.start} and ${people} group by 1 order by 1`,
+          where ${inRange('c')} and ${people} group by 1 order by 1`,
       all ? sql`select coalesce(st.team, 'No team') as team, count(distinct st.user_id)::int as people, count(c.id)::int as calls,
                   count(c.id) filter (where ${HOT})::int as hot
-                from desk.staff st left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${b.start}
-                where st.active and (st.role in ('broker', 'manager') or exists (select 1 from desk.calls x where x.user_id = st.user_id and x.called_at >= ${b.start}))
+                from desk.staff st left join desk.calls c on c.user_id = st.user_id and ${inRange('c')}
+                where st.active and (st.role in ('broker', 'manager') or exists (select 1 from desk.calls x where x.user_id = st.user_id and ${inRange('x')}))
                 group by 1 order by calls desc` : Promise.resolve([]),
     ]);
-    res.json({ period, team, all, myTeam: s.team, goal, workdays, start: b.start, rows, series, teams,
+    res.json({ period, from: r.from, to: r.to, byHour: r.byHour, end: r.end, team, all, myTeam: s.team, goal, workdays, start: r.start, rows, series, teams,
       teamNames: all ? (await sql`select distinct coalesce(team, 'No team') as t from desk.staff where active and role in ('broker', 'manager') order by 1`).map((x) => x.t) : [] });
   },
 
@@ -130,20 +154,16 @@ const actions = {
   // Only their own figures and the call count of the person directly above them. No other names are sent.
   async myStats(req, res, s) {
     const q = query(req);
-    const period = ['today', 'week', 'month'].includes(q.get('period')) ? q.get('period') : 'today';
-    const unit = period === 'today' ? 'day' : period;
-    const [b] = await sql`select date_trunc(${unit}, now() at time zone 'Asia/Dubai') as local_start,
-      date_trunc(${unit}, now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start,
-      (select count(*)::int from generate_series(date_trunc(${unit}, now() at time zone 'Asia/Dubai')::date, (now() at time zone 'Asia/Dubai')::date, interval '1 day') g(d)
-        where extract(isodow from g.d) < 6) as workdays`;
-    // Working days (Mon to Fri) so far in the period, for the target. Worked out in the database so the server's clock zone can't change it.
-    const workdays = Math.max(1, b.workdays);
+    const r = await periodRange(q);
+    const period = r.period;
+    const workdays = r.workdays;
+    const inRange = (c) => sql`${sql(c + '.called_at')} >= ${r.start} and ${sql(c + '.called_at')} < ${r.end}`;
     const { goal, base } = await goalFor(s.user_id);
     const [board, [mine], series] = await Promise.all([
       sql`select st.user_id, count(c.id)::int as calls, count(c.id) filter (where ${DASH_HOT})::int as hot
-          from desk.staff st left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${b.start}
+          from desk.staff st left join desk.calls c on c.user_id = st.user_id and ${inRange('c')}
           where st.active and (st.role in ('broker', 'manager') or st.user_id = ${s.user_id}
-            or exists (select 1 from desk.calls x where x.user_id = st.user_id and x.called_at >= ${b.start}))
+            or exists (select 1 from desk.calls x where x.user_id = st.user_id and ${inRange('x')}))
           group by st.user_id`,
       sql`select count(c.id)::int as calls,
             count(c.id) filter (where ${DASH_HOT})::int as hot,
@@ -151,10 +171,10 @@ const actions = {
             count(c.id) filter (where c.note ~* 'whatsapp sent')::int as wa,
             count(distinct c.owner_id)::int as owners,
             max(c.called_at) as last_at
-          from desk.calls c where c.user_id = ${s.user_id} and c.called_at >= ${b.start}`,
-      sql`select ${period === 'today' ? sql`extract(hour from c.called_at at time zone 'Asia/Dubai')::int` : sql`to_char(c.called_at at time zone 'Asia/Dubai', 'YYYY-MM-DD')`} as k,
+          from desk.calls c where c.user_id = ${s.user_id} and ${inRange('c')}`,
+      sql`select ${r.byHour ? sql`extract(hour from c.called_at at time zone 'Asia/Dubai')::int` : sql`to_char(c.called_at at time zone 'Asia/Dubai', 'YYYY-MM-DD')`} as k,
             count(*)::int as n
-          from desk.calls c where c.user_id = ${s.user_id} and c.called_at >= ${b.start} group by 1 order by 1`,
+          from desk.calls c where c.user_id = ${s.user_id} and ${inRange('c')} group by 1 order by 1`,
     ]);
     // Rank by calls, then hot leads. People level on both share a place.
     const better = (x) => x.calls > mine.calls || (x.calls === mine.calls && x.hot > mine.hot);
@@ -164,7 +184,7 @@ const actions = {
     // The person directly above: the lowest score that still beats mine
     const above = ahead.sort((x, y) => x.calls - y.calls || x.hot - y.hot)[0] || null;
     const top = board.reduce((m, x) => Math.max(m, x.calls), 0);
-    res.json({ period, goal, base, workdays, start: b.start, me: { ...mine, name: s.full_name }, series,
+    res.json({ period, from: r.from, to: r.to, byHour: r.byHour, end: r.end, goal, base, workdays, start: r.start, me: { ...mine, name: s.full_name }, series,
       rank, of: board.length, level, above: above ? { calls: above.calls, hot: above.hot } : null, top });
   },
 
