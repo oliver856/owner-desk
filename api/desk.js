@@ -1,7 +1,7 @@
 // Office-only actions: /api/desk?action=...
 // Every action checks the office IP and the signed-in broker before touching data.
 import { getTemplates, saveTemplates } from './_lib/templates.js';
-import { ensureCallouts, currentCallout } from './_lib/callout.js';
+import { ensureCallouts, currentCallout, runningCalloutId, IS_TEST } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
 import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed } from './_lib/core.js';
@@ -495,14 +495,21 @@ const actions = {
     const target = Math.min(500, Math.max(0, Math.round(Number(b.target) || 0)));
     const prize = String(b.prize || '').trim().slice(0, 80) || null;
     const mode = ['calls', 'hot', 'points'].includes(b.mode) ? b.mode : 'calls';
+    // Test mode: only you see it, numbers are made up, and it never touches a real call out
+    const test = b.test === true;
     const [co] = await sql.begin(async (tx) => {
-      await tx`update desk.callouts set ended_at = now() where ended_at is null and ends_at > now()`;
-      return tx`insert into desk.callouts (started_by, starts_at, ends_at, minutes, teams, target, prize, mode)
-                values (${s.user_id}, now() + interval '10 seconds', now() + interval '10 seconds' + make_interval(mins => ${minutes}),
-                        ${minutes}, ${teams.length ? teams : null}, ${target}, ${prize}, ${mode})
-                returning id`;
-    });
-    await audit(s.user_id, 'callout_started', { detail: { id: co.id, minutes, teams, target, mode }, ip });
+      if (test) await tx`update desk.callouts co set ended_at = now() where ended_at is null and ends_at > now() and ${IS_TEST} and started_by = ${s.user_id}`;
+      else await tx`update desk.callouts co set ended_at = now() where ended_at is null and ends_at > now() and not ${IS_TEST}`;
+      return test
+        ? tx`insert into desk.callouts (started_by, starts_at, ends_at, minutes, teams, target, prize, mode, test)
+             values (${s.user_id}, now() + interval '10 seconds', now() + interval '10 seconds' + make_interval(mins => ${minutes}),
+                     ${minutes}, ${teams.length ? teams : null}, ${target}, ${prize}, ${mode}, true) returning id`
+        : tx`insert into desk.callouts (started_by, starts_at, ends_at, minutes, teams, target, prize, mode)
+             values (${s.user_id}, now() + interval '10 seconds', now() + interval '10 seconds' + make_interval(mins => ${minutes}),
+                     ${minutes}, ${teams.length ? teams : null}, ${target}, ${prize}, ${mode}) returning id`;
+    }).catch((e) => { if (test) return [null]; throw e; });
+    if (!co) return res.status(503).json({ error: 'Test mode isn\'t ready yet. Try again in a minute.' });
+    await audit(s.user_id, 'callout_started', { detail: { id: co.id, minutes, teams, target, mode, test }, ip });
     res.json({ ok: true, id: co.id });
   },
 
@@ -510,7 +517,8 @@ const actions = {
     if (req.method !== 'POST') return res.status(405).end();
     if (s.role === 'broker') return res.status(403).json({ error: 'Only managers and directors can end a call out.' });
     await ensureCallouts();
-    const r = await sql`update desk.callouts set ended_at = now() where ended_at is null and ends_at > now() returning id`;
+    const id = await runningCalloutId(s);
+    const r = id ? await sql`update desk.callouts set ended_at = now() where id = ${id} returning id` : [];
     if (r.length) await audit(s.user_id, 'callout_ended', { detail: { id: r[0].id }, ip });
     res.json({ ok: true });
   },
@@ -519,7 +527,8 @@ const actions = {
     if (req.method !== 'POST') return res.status(405).end();
     if (s.role === 'broker') return res.status(403).json({ error: 'Only managers and directors can change a call out.' });
     await ensureCallouts();
-    await sql`update desk.callouts set ends_at = ends_at + interval '10 minutes', minutes = minutes + 10 where ended_at is null and ends_at > now()`;
+    const id = await runningCalloutId(s);
+    if (id) await sql`update desk.callouts set ends_at = ends_at + interval '10 minutes', minutes = minutes + 10 where id = ${id}`;
     res.json({ ok: true });
   },
 
