@@ -388,7 +388,7 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .box.person .cl-list{max-height:220px} .box.person .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 .dash-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
 .dash-head h1{font-size:22px;margin:0;font-weight:650} .dash-head p{margin:4px 0 0}
-.pp{display:flex;flex-direction:column;align-items:flex-end;gap:6px} .pp-dates{display:flex;gap:6px;align-items:center} .pp-dates input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+.pp{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end} .pp-dates{display:flex;gap:6px;align-items:center;white-space:nowrap} .pp-dates input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
 .dash-ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end} .dash-ctl select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .kpis{display:grid;grid-template-columns:1.6fr repeat(4,1fr);gap:12px;margin-bottom:12px}
 @media (max-width:1000px){.kpis{grid-template-columns:1fr 1fr}}
@@ -420,6 +420,7 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .bar-v{width:100%;max-width:38px;min-height:2px;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 60%,#fff));position:relative;transition:height .5s}
 .bar-v span{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted)}
 .bar-c em{font-style:normal;font-size:10.5px;color:var(--faint);white-space:nowrap}
+.bars.many{gap:3px} .bars.many .bar-c{overflow:visible} .bars.many .bar-v span{font-size:10px}
 table.mini{width:100%;min-width:0;border-collapse:collapse} table.mini th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--line)}
 table.mini td{padding:9px 8px;border-bottom:1px solid var(--line)} table.mini tr:last-child td{border-bottom:none} table.mini .r{text-align:right}
 table.mini tr.click{cursor:pointer} table.mini tr.click:hover td{background:var(--hover)}
@@ -2229,10 +2230,23 @@ function makeBars(d) {
   const days = Math.round((end - start) / 86400000) + 1;
   for (let x = new Date(start); x <= end; x.setDate(x.getDate() + 1)) {
     const k = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(x);
-    const lab = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', weekday: days <= 7 ? 'short' : undefined, day: 'numeric', month: days > 31 ? 'short' : undefined }).format(x);
+    const lab = new Intl.DateTimeFormat('en-GB', days <= 7 ? { timeZone: 'Asia/Dubai', weekday: 'short', day: 'numeric' } : { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short' }).format(x);
     if (!out.some((o) => o.key === k)) out.push({ key: k, k: lab, n: d.series.find((s) => s.k === k)?.n || 0 });
   }
+  // Long ranges: only label every few days so the dates don't run into each other
+  const step = out.length <= 12 ? 1 : Math.ceil(out.length / 10);
+  out.forEach((o, i) => { o.show = i % step === 0 || i === out.length - 1 && (out.length - 1) % step >= step / 2; });
   return out;
+}
+// The bar chart. Many days: thinner gaps, numbers only on the taller bars, dates every few days.
+function Bars({ bars, max }) {
+  const many = bars.length > 14;
+  return (
+    <div className={`bars${many ? ' many' : ''}`}>{bars.map((b, i) => (
+      <div key={i} className="bar-c" title={`${b.k}: ${b.n} call${b.n === 1 ? '' : 's'}`}>
+        <div className="bar-v" style={{ height: `${(b.n / max) * 100}%` }}>{b.n && (!many || b.n >= max * 0.15) ? <span>{b.n}</span> : null}</div>
+        <em>{b.show === false ? '\u00a0' : b.k}</em></div>))}</div>
+  );
 }
 const PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['lastmonth', 'Last month'], ['custom', 'Dates']];
 const dubaiDay = (offsetDays = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(new Date(Date.now() + offsetDays * 86400000));
@@ -2325,8 +2339,7 @@ function MyDashboard({ onTeam }) {
 
       <section className="card">
         <h4>{d.byHour ? 'Your calls by hour' : 'Your calls by day'}</h4>
-        <div className="bars">{bars.map((b, i) => (
-          <div key={i} className="bar-c" title={`${b.k}: ${b.n}`}><div className="bar-v" style={{ height: `${(b.n / maxBar) * 100}%` }}>{b.n ? <span>{b.n}</span> : null}</div><em>{b.k}</em></div>))}</div>
+        <Bars bars={bars} max={maxBar} />
       </section>
     </main>
   );
@@ -2380,8 +2393,7 @@ function Dashboard({ onMine }) {
       <div className="dash-grid">
         <section className="card">
           <h4>{d.byHour ? 'Calls by hour' : 'Calls by day'}</h4>
-          <div className="bars">{bars.map((b, i) => (
-            <div key={i} className="bar-c" title={`${b.k}: ${b.n}`}><div className="bar-v" style={{ height: `${(b.n / maxBar) * 100}%` }}>{b.n ? <span>{b.n}</span> : null}</div><em>{b.k}</em></div>))}</div>
+          <Bars bars={bars} max={maxBar} />
         </section>
         {d.all && !d.team && <section className="card">
           <h4>Teams</h4>
