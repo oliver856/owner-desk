@@ -387,8 +387,9 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .box.person .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px} .box.person .lbl{font-size:12px;color:var(--muted)}
 .box.person .cl-list{max-height:220px} .box.person .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
 .dash-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.dash:not(.teamp) .dash-head{flex-direction:column;align-items:flex-start;gap:14px} .dash:not(.teamp) .dash-head .dash-ctl{justify-content:flex-start;flex-wrap:nowrap} @media (max-width:900px){.dash:not(.teamp) .dash-head .dash-ctl{flex-wrap:wrap}}
 .dash-head h1{font-size:22px;margin:0;font-weight:650} .dash-head p{margin:4px 0 0}
-.pp{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end} .pp-dates{display:flex;gap:6px;align-items:center;white-space:nowrap} .pp-dates input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
+.pp{display:flex;align-items:center;gap:10px;flex-wrap:nowrap} .pp-dates{display:flex;gap:6px;align-items:center;white-space:nowrap} .pp-dates input{opacity:.75} .pp-dates.on input{opacity:1;border-color:var(--accent)} @media (max-width:900px){.pp{flex-wrap:wrap}} .pp-dates input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
 .dash-ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end} .dash-ctl select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .kpis{display:grid;grid-template-columns:1.6fr repeat(4,1fr);gap:12px;margin-bottom:12px}
 @media (max-width:1000px){.kpis{grid-template-columns:1fr 1fr}}
@@ -2257,16 +2258,24 @@ const periodLabel = (d) => (d.period === 'lastmonth' || d.period === 'custom'
   : { today: 'today', week: 'this week', month: 'this month' }[d.period]);
 const periodQuery = (p) => `period=${p.period}${p.period === 'custom' ? `&from=${p.from}&to=${p.to}` : ''}`;
 // Today / This week / This month / Last month / Dates (pick any from and to)
-function PeriodPicker({ value, onChange }) {
+function PeriodPicker({ value, onChange, shown }) {
+  // The date boxes are always there so nothing moves when you switch. They show the dates you're looking at;
+  // changing either one switches to Dates.
+  const today = dubaiDay();
+  const cap = (x) => (x && x > today ? today : x);
+  const from = value.period === 'custom' ? value.from : cap(shown?.from) || '';
+  const to = value.period === 'custom' ? value.to : cap(shown?.to) || '';
+  const pick = (k) => onChange(k === 'custom'
+    ? { period: 'custom', from: value.from || from || dubaiDay(-30), to: value.to || to || today }
+    : { ...value, period: k });
   return (
     <div className="pp">
-      <div className="seg">{PERIODS.map(([k, l]) => <button key={k} className={value.period === k ? 'on' : ''}
-        onClick={() => onChange({ ...value, period: k, from: value.from || dubaiDay(-30), to: value.to || dubaiDay() })}>{l}</button>)}</div>
-      {value.period === 'custom' && <div className="pp-dates">
-        <input type="date" aria-label="From" value={value.from} max={value.to || undefined} onChange={(e) => e.target.value && onChange({ ...value, from: e.target.value })} />
+      <div className="seg">{PERIODS.map(([k, l]) => <button key={k} className={value.period === k ? 'on' : ''} onClick={() => pick(k)}>{l}</button>)}</div>
+      <div className={`pp-dates${value.period === 'custom' ? ' on' : ''}`}>
+        <input type="date" aria-label="From" value={from} max={to || today} onChange={(e) => e.target.value && onChange({ period: 'custom', from: e.target.value, to: to || today })} />
         <span className="muted">to</span>
-        <input type="date" aria-label="To" value={value.to} min={value.from || undefined} max={dubaiDay()} onChange={(e) => e.target.value && onChange({ ...value, to: e.target.value })} />
-      </div>}
+        <input type="date" aria-label="To" value={to} min={from || undefined} max={today} onChange={(e) => e.target.value && onChange({ period: 'custom', from: from || e.target.value, to: e.target.value })} />
+      </div>
     </div>
   );
 }
@@ -2310,7 +2319,7 @@ function MyDashboard({ onTeam }) {
           {editT && <TargetEditor goal={d.goal} base={d.base || 50} onSaved={() => load()} onClose={() => setEditT(false)} />}</div>
         <div className="dash-ctl">
           {onTeam && <button className="btn" onClick={onTeam}>Team view</button>}
-          <PeriodPicker value={pick} onChange={setPick} />
+          <PeriodPicker value={pick} onChange={setPick} shown={d} />
         </div>
       </div>
 
@@ -2376,7 +2385,7 @@ function Dashboard({ onMine }) {
         <div className="dash-ctl">
           {onMine && <button className="btn" onClick={onMine}>My numbers</button>}
           {d.all && <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="">All teams</option>{d.teamNames.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
-          <PeriodPicker value={pick} onChange={setPick} />
+          <PeriodPicker value={pick} onChange={setPick} shown={d} />
         </div>
       </div>
 
