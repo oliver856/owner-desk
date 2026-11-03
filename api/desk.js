@@ -106,18 +106,31 @@ const actions = {
     const key = [...s.listAreas].sort((a, b) => a - b).join(',');
     let p = places.get(key);
     if (!p || p.at < Date.now() - 30 * 60e3) {
-      const rows = sql`select * from (select distinct a.name as area, m.subcommunity, m.building from desk.mv_units m
-                             join desk.areas a on a.id = m.area_id where m.area_id = any(${s.listAreas})) x
-                             order by area, upper(subcommunity), upper(building)`
-        .then((r) => r.map((x) => ({ area: x.area, sc: x.subcommunity, bld: x.building })))
+      // Read from the buildings list (a few thousand rows), not the whole owner list: fast even when the database is busy
+      const rows = sql`select a.name as area, b.subcommunity,
+                         case when exists (select 1 from desk.units u where u.building_id = b.id and u.unit_type <> 'Villa') then b.name end as building
+                       from desk.buildings b join desk.areas a on a.id = b.area_id
+                       where b.area_id = any(${s.listAreas}) and exists (select 1 from desk.units u where u.building_id = b.id)`
+        .then((r) => {
+          const seen = new Set(); const out = [];
+          for (const x of r) { const k = `${x.area}|${x.subcommunity}|${x.building}`; if (!seen.has(k)) { seen.add(k); out.push({ area: x.area, sc: x.subcommunity, bld: x.building }); } }
+          const up = (v) => String(v ?? '').toUpperCase();
+          return out.sort((a, b) => a.area.localeCompare(b.area) || up(a.sc).localeCompare(up(b.sc)) || up(a.bld).localeCompare(up(b.bld)));
+        })
         .catch((e) => { places.delete(key); throw e; });
       p = { at: Date.now(), rows };
       places.set(key, p);
     }
-    const placeRows = await p.rows;
-    await ensurePrefs();
-    const [c, target, [pr], rocket] = await Promise.all([caps(s.user_id), callTarget(s.user_id),
-      sql`select prefs from desk.staff_prefs where user_id = ${s.user_id}`, rocketAllowed(s)]);
+    // Nothing here may hold up the page: each part gets a few seconds, and anything slower is left out this time
+    // (the page asks again every minute). A busy database then means a missing number, not a stuck "Loading…".
+    const soon = (promise, ms, fallback) => Promise.race([Promise.resolve(promise).catch(() => fallback), new Promise((r) => setTimeout(() => r(fallback), ms))]);
+    const [placeRows, c, target, prRows, rocket] = await Promise.all([
+      soon(p.rows, 4000, []),
+      soon(caps(s.user_id), 3000, { profileCap: 0, callCap: 0, profiles: 0, calls: 0, copyCap: 0, copies: 0 }),
+      soon(callTarget(s.user_id), 3000, null),
+      soon(ensurePrefs().then(() => sql`select prefs from desk.staff_prefs where user_id = ${s.user_id}`), 3000, []),
+      soon(rocketAllowed(s), 2000, false)]);
+    const pr = prRows[0];
     res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: placeRows, prefs: pr?.prefs || null, rocket });
   },
 
@@ -311,8 +324,9 @@ const actions = {
   async unit(req, res, s, ip) {
     const id = Number(query(req).get('id'));
     await Promise.all([ensureNotes(), ensureHolds(), ensureUnitExtras()]);
-    const inArea = sql`exists (select 1 from desk.mv_units m where m.id = ${id} and m.area_id = any(${s.areas}))`;
-    const [[u], owners, calls, notes, [extra]] = await Promise.all([
+    // Checked against the units themselves (not the owner list), so a unit added a moment ago by Lookup opens straight away
+    const inArea = sql`exists (select 1 from desk.units uu join desk.buildings bb on bb.id = uu.building_id where uu.id = ${id} and bb.area_id = any(${s.areas}))`;
+    const [[u0], owners, calls, notes, [extra]] = await Promise.all([
       sql`select * from desk.v_unit_list where id = ${id} and area_id = any(${s.areas})`,
       sql`select o.id, o.name, o.is_company, uo.role, ph.masked, (ph.owner_id is not null) as has_phone,
                  (select count(*) from desk.unit_owners x where x.owner_id = o.id and x.role = 'owner')::int as units,
@@ -333,6 +347,15 @@ const actions = {
           where n.unit_id = ${id} and ${inArea} order by n.created_at desc limit 500`,
       sql`select old_code, layout from desk.units where id = ${id}`,
     ]);
+    // Not in the owner list yet (e.g. just found with Lookup): build the basics from the unit itself
+    const u = u0 || (await sql`
+      select u.id, b.area_id, b.subcommunity, case when u.unit_type = 'Villa' then null else b.name end as building, u.unit_no, u.unit_type,
+             u.beds, u.size_sqft, coalesce(ls.status, 'Not confirmed') as lease_status, null as start_date, null as end_date, null as annual_rent,
+             null as prev_rent, null as renewals, null as last_sale_price, null as matched_by, null as owner_id, null as owner_name,
+             false as is_company, null as owner_masked, false as has_phone, 1 as owner_units, 0 as owners_n, false as mortgaged,
+             null as last_called, null as last_outcome
+      from desk.units u join desk.buildings b on b.id = u.building_id left join desk.lease_status ls on ls.unit_id = u.id
+      where u.id = ${id} and b.area_id = any(${s.areas})`)[0];
     if (!u) return res.status(404).json({ error: 'That unit isn\'t in your areas.' });
     delete u.search_text;
     Object.assign(u, extra || {});
