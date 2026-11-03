@@ -109,14 +109,18 @@ export async function staffFor(req) {
            else coalesce((select array_agg(area_id) from desk.staff_areas sa where sa.user_id = s.user_id
                  and (sa.expires_at is null or sa.expires_at >= (now() at time zone 'Asia/Dubai')::date)), '{}')
       end as areas,
-      (select id from desk.areas where name = 'Lookups') as lookup_area
+      (select id from desk.areas where name = 'Lookups') as lookup_area,
+      (select id from desk.areas where name = 'Lead pool') as lead_area
     from desk.staff s where s.user_id = ${id} and s.active`;
   if (!s) return null;
   // Units found with the Lookup tab live in their own "Lookups" area. Everyone can open those units,
   // but they never appear in the Owners list (see listAreas).
   const lookupArea = s.lookup_area ? Number(s.lookup_area) : null;
-  const own = (s.areas || []).map(Number).filter((a) => a !== lookupArea);
-  return { ...s, lookupArea, listAreas: own, areas: lookupArea ? [...own, lookupArea] : own };
+  // The Lead pool is the same idea: each lead is a hidden "unit" there. Leads never appear in the Owners list;
+  // brokers only reach their own leads (checked where a number is copied or called).
+  const leadArea = s.lead_area ? Number(s.lead_area) : null;
+  const own = (s.areas || []).map(Number).filter((a) => a !== lookupArea && a !== leadArea);
+  return { ...s, lookupArea, leadArea, listAreas: own, areas: [...own, ...(lookupArea ? [lookupArea] : []), ...(leadArea ? [leadArea] : [])] };
 }
 
 // Wraps a route: office-IP check, sign-in check, no caching, friendly errors.
