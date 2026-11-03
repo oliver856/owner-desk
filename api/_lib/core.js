@@ -126,10 +126,17 @@ export async function staffFor(req) {
 // Wraps a route: office-IP check, sign-in check, no caching, friendly errors.
 // Watchdog: no request may take longer than this. If one does, its database connections are presumed stuck,
 // they're replaced, and the page gets a quick "try again" (the screen retries by itself) instead of hanging.
-const REQUEST_LIMIT_MS = 12000;
+const REQUEST_LIMIT_MS = 9000;
+// Vercel freezes a server copy between requests. Database connections left open across a freeze are often dead when it
+// wakes, and the next queries on them hang until the watchdog fires (the "random 12 second" stalls). So if this copy has
+// been idle for a few seconds and nothing else is running on it, it starts with fresh connections (about 0.1s) instead.
+const IDLE_RESET_MS = 4000;
+let inflight = 0;
 export function route(fn, { office = true, auth = true } = {}) {
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
+    if (inflight === 0 && globalThis.__dbLast && Date.now() - globalThis.__dbLast > IDLE_RESET_MS) resetDb();
+    inflight++;
     let timedOut = false;
     const dog = setTimeout(() => {
       timedOut = true;
@@ -149,7 +156,7 @@ export function route(fn, { office = true, auth = true } = {}) {
     } catch (e) {
       if (!timedOut) console.error(e);
       if (!res.headersSent) res.status(500).json({ error: 'Something went wrong. Try again.' });
-    } finally { clearTimeout(dog); }
+    } finally { clearTimeout(dog); inflight--; globalThis.__dbLast = Date.now(); }
   };
 }
 
@@ -238,9 +245,12 @@ export async function callTarget(userId) {
   const mine = rows.find((r) => r.user_id === userId)?.calls || 0;
   const callers = rows.filter((r) => r.calls > 0);
   // Today's race: everyone (not admins) who has made a call, plus you
-  const board = rows.filter((r) => r.calls > 0 || r.user_id === userId)
-    .sort((x, y) => y.calls - x.calls || (x.last_at ? new Date(x.last_at) : Infinity) - (y.last_at ? new Date(y.last_at) : Infinity))
-    .slice(0, 12);
+  const race = rows.filter((r) => r.calls > 0 || r.user_id === userId)
+    .sort((x, y) => y.calls - x.calls || (x.last_at ? new Date(x.last_at) : Infinity) - (y.last_at ? new Date(y.last_at) : Infinity));
+  // The top of the race, and always you plus the person just above you (the screen needs both; leaving you out
+  // when more than 12 people had called crashed the page to a blank screen)
+  const at = race.findIndex((r) => r.user_id === userId);
+  const board = at < 12 ? race.slice(0, 12) : [...race.slice(0, 10), race[at - 1], race[at]];
   return { goal, base, made: mine, team: callers.reduce((t, r) => t + r.calls, 0), callers: callers.length,
     rank: 1 + callers.filter((r) => r.calls > mine).length, hours: hours || { from: '09:00', to: '18:00' },
     board: board.map((b) => ({ me: b.user_id === userId, name: b.name, team: b.team, calls: b.calls })) };
