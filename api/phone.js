@@ -5,6 +5,7 @@ import { sql, ensureOnce, route, query, body, audit, waNumber } from './_lib/cor
 import { vapidKeys, pushToUser } from './_lib/push.js';
 import { OUTCOMES, saveOutcome } from './_lib/outcome.js';
 import { getTemplates } from './_lib/templates.js';
+import { ensureLeads } from './_lib/leads.js';
 
 // One extra column on calls records when the WhatsApp follow-up was sent or skipped. Added by the server itself.
 const ensureFollow = ensureOnce((q) => q`select exists (select 1 from pg_attribute where attrelid = 'desk.calls'::regclass
@@ -16,10 +17,12 @@ const WA_RESULT = { sent: 'WhatsApp sent', unavailable: 'WhatsApp unavailable', 
 const actions = {
   // The newest call waiting to be tapped, and the last tapped call with no outcome yet (masked numbers only)
   async pending(req, res, s) {
-    await ensureFollow();
+    await Promise.all([ensureFollow(), ensureLeads()]);
+    // Lead pool calls carry what the lead asked for, so the phone and the WhatsApp message talk about that
+    const leadJson = sql`(select json_build_object('name', l.name, 'location', l.location, 'beds', l.beds, 'budget', l.budget) from desk.leads l where l.unit_id = cr.unit_id)`;
     const [pending] = await sql`
       select cr.id, o.name as owner_name, ph.masked, u.unit_no, u.unit_type, b.subcommunity, b.name as building,
-             extract(epoch from (cr.expires_at - now()))::int as seconds_left
+             extract(epoch from (cr.expires_at - now()))::int as seconds_left, ${leadJson} as lead
       from desk.call_requests cr
       join desk.owners o on o.id = cr.owner_id
       join desk.owner_phones ph on ph.owner_id = cr.owner_id
@@ -31,7 +34,7 @@ const actions = {
     // WhatsApp follow-up. Older calls left without an outcome stay on the record but don't queue up here.
     const [last] = await sql`
       select cr.id, c.outcome, c.note, c.outcome_at, o.name as owner_name, o.is_company, ph.masked, u.unit_no, u.unit_type, u.beds,
-             b.subcommunity, b.name as building, a.name as area, (c.followup_at is not null) as followed_up,
+             b.subcommunity, b.name as building, a.name as area, (c.followup_at is not null) as followed_up, ${leadJson} as lead,
              (cr.used_at > now() - interval '1 hour') as recent,
              exists (select 1 from desk.do_not_call d where d.owner_id = cr.owner_id) as dnc,
              -- Only a warning if the owner's most recent WhatsApp attempt (from anyone) was marked "not on WhatsApp"
