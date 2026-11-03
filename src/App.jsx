@@ -14,12 +14,17 @@ const QUICK_NOTES = {
   Cold: ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'End user', 'Rented', 'Sold', 'Agent', 'Other'],
   Hot: ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy'],
 };
+// Lead pool calls (buyers and tenants who enquired) get their own quick notes
+const LEAD_NOTES = {
+  Cold: ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'Already found', 'Not looking anymore', 'Agent', 'Other'],
+  Hot: ['Still looking', 'Viewing booked', 'Send options', 'Follow up', 'Replied'],
+};
 // Hot or cold, from how a note starts. Shown as green (hot) or red (cold) wherever notes appear.
 function noteTone(text) {
   const t = String(text || '').toLowerCase();
   const hit = (list) => list.some((q) => t.startsWith(q.toLowerCase()));
-  if (hit(QUICK_NOTES.Hot) || hit(HOT_OUTCOMES) || t.startsWith('call back')) return 'hot';
-  if (hit(QUICK_NOTES.Cold) || t.startsWith('cold') || hit(['No answer', 'Not interested', 'Wrong number', 'Do not call'])) return 'cold';
+  if (hit(QUICK_NOTES.Hot) || hit(LEAD_NOTES.Hot) || hit(HOT_OUTCOMES) || t.startsWith('call back')) return 'hot';
+  if (hit(QUICK_NOTES.Cold) || hit(LEAD_NOTES.Cold) || t.startsWith('cold') || hit(['No answer', 'Not interested', 'Wrong number', 'Do not call'])) return 'cold';
   return '';
 }
 function NoteTag({ text, clip, wrap }) {
@@ -39,35 +44,40 @@ const notePlaceholder = (chip, fallback) => (chip === 'Other' ? 'Write the note'
 // Each person can drag the quick notes into their own order (saved to their account, so laptop and phone match)
 let quickOrderP = null;
 const loadQuickOrder = () => (quickOrderP ??= api('/api/desk?action=quickOrder').then((j) => j.order || {}).catch(() => { quickOrderP = null; return {}; }));
-const orderedNotes = (group, order) => {
-  const list = QUICK_NOTES[group];
-  const mine = (order?.[group] || []).filter((q) => list.includes(q));
+const orderedNotes = (group, order, lead) => {
+  const list = (lead ? LEAD_NOTES : QUICK_NOTES)[group];
+  const mine = (order?.[(lead ? 'Lead ' : '') + group] || []).filter((q) => list.includes(q));
   return [...mine, ...list.filter((q) => !mine.includes(q))];   // new notes we add later go at the end
 };
-function QuickNotes({ value, onPick }) {
+function QuickNotes({ value, onPick, lead }) {
+  const NOTES = lead ? LEAD_NOTES : QUICK_NOTES;
+  const keyOf = (group) => (lead ? 'Lead ' : '') + group;
   const [order, setOrder] = useState(null);
   const [drag, setDrag] = useState(null);   // { group, q }
   const [over, setOver] = useState(null);
   useEffect(() => { let on = true; loadQuickOrder().then((o) => on && setOrder(o)); return () => { on = false; }; }, []);
   const move = (group, from, to) => {
     if (from === to) return;
-    const list = orderedNotes(group, order);
+    const list = orderedNotes(group, order, lead);
     const ti = list.indexOf(to);
     list.splice(list.indexOf(from), 1);
     list.splice(ti, 0, from);   // dragging down lands after the note you drop on, dragging up lands before it
-    const next = { ...(order || {}), [group]: list };
+    const next = { ...(order || {}), [keyOf(group)]: list };
     setOrder(next);
     quickOrderP = Promise.resolve(next);
     api('/api/desk?action=quickOrder', { method: 'POST', body: { order: next } }).catch(() => {});
   };
-  const reset = () => { setOrder({}); quickOrderP = Promise.resolve({}); api('/api/desk?action=quickOrder', { method: 'POST', body: { order: {} } }).catch(() => {}); };
-  const custom = order && Object.keys(order).some((g) => (order[g] || []).length);
+  const reset = () => {
+    const next = Object.fromEntries(Object.entries(order || {}).filter(([g]) => g.startsWith('Lead ') !== !!lead));
+    setOrder(next); quickOrderP = Promise.resolve(next); api('/api/desk?action=quickOrder', { method: 'POST', body: { order: next } }).catch(() => {});
+  };
+  const custom = order && Object.keys(NOTES).some((g) => (order[keyOf(g)] || []).length);
   return (
     <div className="qnotes">
-      {Object.keys(QUICK_NOTES).map((group) => (
+      {Object.keys(NOTES).map((group) => (
         <div key={group} className={'qcol ' + group.toLowerCase()} onDragOver={(e) => { if (drag?.group === group) e.preventDefault(); }}>
           <span className="qh" title="Drag the notes to put them in your own order">{group}</span>
-          {orderedNotes(group, order).map((q) => (
+          {orderedNotes(group, order, lead).map((q) => (
             <button type="button" key={q} draggable
               className={'chip' + (value === q ? ' on' : '') + (drag?.q === q ? ' dragging' : '') + (over === q && drag && drag.q !== q ? ' over' : '')}
               onDragStart={(e) => { setDrag({ group, q }); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', q); }}
@@ -318,6 +328,15 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .co-start{font:inherit;font-weight:600;background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:6px 14px;margin-left:14px;cursor:pointer}
 .co-pill{display:inline-flex;align-items:center;gap:6px;margin-left:14px;font-weight:600;color:var(--accent)} .co-pill i{width:8px;height:8px;border-radius:50%;background:#ff6b5f;animation:copulse 1.2s infinite}
 @keyframes copulse{50%{opacity:.3}}
+.head-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap} .srcsw button{padding:5px 14px}
+.leadpool{display:flex;flex-direction:column;min-height:0}
+.lp-tools{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:10px 0 12px}
+.lp-tools input[type=search]{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);min-width:260px;font:inherit;font-size:14px}
+.lp-tools .ms{position:relative;display:flex;flex-direction:column;gap:3px;min-width:220px} .lp-tools .ms h3{font-size:11px;font-weight:400;color:var(--muted);margin:0;text-transform:none;letter-spacing:0}
+.lp-tools .ms .ms-btn{padding:8px 10px;font-size:14px;border-radius:8px} .lp-tools .ms>:last-child:not(.ms-btn){position:absolute;top:calc(100% + 4px);left:0;z-index:30;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;width:300px;max-height:340px;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.14)} .lp-sel{display:flex;flex-direction:column;gap:3px} .lp-sel .lbl{font-size:11px;color:var(--muted)}
+.lp-sel select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+.lp-tw{max-height:calc(100vh - var(--toph, 60px) - 230px)} .lp-tw .more .btn{margin:6px auto}
+
 .co-testmode{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px;color:var(--muted);cursor:pointer} .co-testnote{display:block;font-style:normal;margin-top:4px;color:var(--ink)} .co-testmode b{color:var(--ink);margin-right:6px} .co-testmode.on{border-style:solid;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--bg))}
 .co-tv{margin-left:10px;font-weight:600;color:var(--accent);text-decoration:none;font-size:14px} .co-tv:hover{text-decoration:underline}
 .tv{--logo-bg:#fff;--ink:#0a0a0a;--grey:#8a8a8a;--rule:#e4e4e4;position:fixed;inset:0;background:#fff;color:var(--ink);display:flex;flex-direction:column;padding:3vh 3.4vw 2.6vh;gap:2.2vh;overflow:hidden;font-size:1.6vh;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
@@ -747,6 +766,9 @@ function toParams(f, tab, sort, page) {
 
 function Desk() {
   const [view, setView] = useState('owners');
+  // Owners page: call from the owner data or from the lead pool (remembered in this browser)
+  const [src, setSrcState] = useState(() => { try { return localStorage.getItem('callSource') === 'leads' ? 'leads' : 'owners'; } catch { return 'owners'; } });
+  const setSrc = (v) => { setSrcState(v); try { localStorage.setItem('callSource', v); } catch {} };
   const [me, setMe] = useState(null);
   const [toast, setToast] = useState('');
   const [unitId, setUnitId] = useState(null);
@@ -843,7 +865,8 @@ function Desk() {
           </div>
         </div>
       </header>
-      {view === 'owners' ? (me ? <Owners keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
+      {view === 'owners' && me && src === 'leads' ? <LeadPool me={me} switcher={<SourceSwitch v={src} onChange={setSrc} />} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} onCaps={refreshMe} />
+        : view === 'owners' ? (me ? <Owners switcher={<SourceSwitch v={src} onChange={setSrc} />} keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
       {phase === 'done' && (co?.meIn || boss) && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
@@ -854,7 +877,7 @@ function Desk() {
   );
 }
 
-function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs, banner, keepKey, rocket }) {
+function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePrefs, banner, keepKey, rocket, switcher }) {
   const [rocketOpen, setRocketOpen] = useState(false);
   // Start where this person left off (filters, tab and sort survive a refresh), otherwise from their saved view
   const start = useRef((() => {
@@ -1090,7 +1113,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
       {busy && <div className="loadbar" />}
       {banner || (target && <TargetBar t={target} onTarget={onCaps} />)}
       <div className="head gut">
-        <h1>Owners</h1>
+        <div className="head-row"><h1>Owners</h1>{switcher}</div>
         <p>{fmt(c.all)} units in your areas · {DATA_NOTE}</p>
       </div>
       <main className={'layout gut' + (side ? '' : ' noside')}>
@@ -1190,6 +1213,137 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
       {calling && <CallFlow unitId={calling.r.id} owner={{ id: (calling.owner || {}).id ?? calling.r.owner_id, name: (calling.owner || {}).name ?? calling.r.owner_name }} force={!!calling.force}
         label={`${(calling.owner || {}).name ?? calling.r.owner_name}, ${placeOf(calling.r)} ${calling.r.unit_no}`}
         onClose={(saved) => { const id = calling.r.id; setCalling(null); onCaps(); if (saved) refreshRow(id); }} />}
+    </>
+  );
+}
+
+// Owners page switch: call from the owner data, or from the lead pool
+function SourceSwitch({ v, onChange }) {
+  return (
+    <div className="seg srcsw" role="tablist" aria-label="What to call">
+      <button className={v === 'owners' ? 'on' : ''} onClick={() => onChange('owners')}>Owners</button>
+      <button className={v === 'leads' ? 'on' : ''} onClick={() => onChange('leads')}>Lead pool</button>
+    </div>
+  );
+}
+
+// ── Lead pool ───────────────────────────────────────────────────────────────
+// Buyer and tenant enquiries, split evenly and at random so everyone has their own to call. Fixed columns.
+const LEAD_TABS_UI = [['todo', 'To call', 'Not called yet'], ['retry', 'Try again', 'No reply, unreachable, line busy or phone off last time'],
+  ['hot', 'Hot', 'Still looking, viewing booked, send options, follow up or call back'], ['called', 'Called', 'Called at least once'], ['all', 'All', '']];
+const LEAD_SORTS = [['', 'Shuffled'], ['budget_hi', 'Budget, high to low'], ['budget_lo', 'Budget, low to high'], ['recent', 'Last called']];
+function LeadPool({ me, switcher, banner, onCaps }) {
+  const boss = me.staff.role !== 'broker';
+  const keep = 'leadsNow:' + me.staff.email;
+  const start = useRef((() => { try { return JSON.parse(localStorage.getItem(keep) || '{}') || {}; } catch { return {}; } })()).current;
+  const [tab, setTab] = useState(LEAD_TABS_UI.some(([k]) => k === start.tab) ? start.tab : 'todo');
+  const [sort, setSort] = useState(LEAD_SORTS.some(([k]) => k === start.sort) ? start.sort : '');
+  const [loc, setLoc] = useState(Array.isArray(start.loc) ? start.loc : []);
+  const [who, setWho] = useState(boss && start.who ? start.who : 'me');
+  const [q, setQ] = useState('');
+  const [d, setD] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [page, setPage] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [calling, setCalling] = useState(null);
+  const [splitMsg, setSplitMsg] = useState('');
+  const ctl = useRef(null);
+  const qTimer = useRef(null);
+  const [qLive, setQLive] = useState('');
+  useEffect(() => { try { localStorage.setItem(keep, JSON.stringify({ tab, sort, loc, who })); } catch {} }, [keep, tab, sort, loc, who]);
+  const params = (p) => new URLSearchParams({ action: 'leads', tab, sort, loc: loc.join('|'), q: qLive, who, page: String(p) }).toString();
+  const load = useCallback((p = 1) => {
+    ctl.current?.abort();
+    const c = new AbortController(); ctl.current = c;
+    setBusy(true);
+    api('/api/desk?' + params(p), { signal: c.signal })
+      .then((j) => { setD(j); setRows((r) => (p === 1 ? j.rows : [...r, ...j.rows.filter((x) => !r.some((y) => y.id === x.id))])); setPage(p); setErr(''); })
+      .catch((e) => { if (e.name !== 'AbortError') setErr(e.message); })
+      .finally(() => { if (ctl.current === c) setBusy(false); });
+  }, [tab, sort, loc, qLive, who]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(1); }, [load]);
+  const typed = (v) => { setQ(v); clearTimeout(qTimer.current); qTimer.current = setTimeout(() => setQLive(v), 300); };
+  const c = d?.counts || {};
+  const total = c[tab] ?? 0;
+  async function split() {
+    if (!window.confirm('Share every lead nobody has called yet evenly and at random between everyone active? Leads someone has already called stay with them.')) return;
+    try { const j = await api('/api/desk?action=leadsSplit', { method: 'POST' }); setSplitMsg(`${fmt(j.leads)} uncalled leads shared between ${j.people} people.`); load(1); }
+    catch (e) { setSplitMsg(e.message); }
+  }
+  const mineCount = d?.people?.find((p) => p.user_id === d.me)?.leads;
+  return (
+    <>
+      <div className="owners-page">
+        {busy && <div className="loadbar" />}
+        {banner || (me.target && <TargetBar t={me.target} onTarget={onCaps} />)}
+        <div className="head gut">
+          <div className="head-row"><h1>Lead pool</h1>{switcher}</div>
+          <p>{who === 'me' ? `${fmt(c.all)} leads are yours. Nobody else has them.` : who === 'all' ? `${fmt(c.all)} leads across the team` : `${fmt(c.all)} leads`} · Buyer and tenant enquiries from August to October 2026, shuffled</p>
+        </div>
+        <main className="gut leadpool">
+          {d && !d.ready ? <p className="muted" style={{ padding: '30px 0' }}>The lead pool hasn&apos;t been loaded yet.</p> : <>
+          <nav className="tabs">
+            {LEAD_TABS_UI.map(([k, l, tip]) => <button key={k} title={tip || undefined} className={'tab' + (tab === k ? ' on' : '') + (k === 'retry' && c.retry ? ' due' : '')}
+              onClick={() => setTab(k)}>{l}<span className="c n">{fmt(c[k])}</span></button>)}
+          </nav>
+          <div className="lp-tools">
+            <input type="search" placeholder="Search name, location, beds or budget" value={q} onChange={(e) => typed(e.target.value)} />
+            <MultiSelect label="Location" options={(d?.locations || []).map((x) => x.name)} selected={loc} onChange={setLoc} />
+            <label className="lp-sel"><span className="lbl">Sort</span>
+              <select value={sort} onChange={(e) => setSort(e.target.value)}>{LEAD_SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+            {boss && <label className="lp-sel"><span className="lbl">Whose leads</span>
+              <select value={who} onChange={(e) => setWho(e.target.value)}>
+                <option value="me">Mine{mineCount != null ? ` (${mineCount})` : ''}</option>
+                <option value="all">Everyone</option>
+                {(d?.people || []).filter((p) => p.user_id !== d.me).map((p) => <option key={p.user_id} value={p.user_id}>{p.name} ({p.called}/{p.leads} called)</option>)}
+              </select></label>}
+            {d?.canSplit && <button className="btn" onClick={split} title="Share the uncalled leads evenly between everyone active, e.g. after someone joins or leaves">Re-split uncalled leads</button>}
+          </div>
+          {splitMsg && <p className="muted" style={{ margin: '0 0 8px' }}>{splitMsg}</p>}
+          {err && <p className="err">{err}</p>}
+          <div className={'tw lp-tw' + (busy ? ' busy' : '')}>
+            <table className="grid fixed lp-grid">
+              <thead><tr>
+                <th style={{ width: 200 }}>Name</th><th style={{ width: 230 }}>Looking for</th><th className="r" style={{ width: 170 }}>Budget (AED)</th>
+                <th style={{ width: 160 }}>Mobile</th><th style={{ width: 115 }}>Last called</th>
+                {who !== 'me' && <th style={{ width: 150 }}>Given to</th>}
+                <th style={{ width: 340 }}>Notes</th><th className="callcol" style={{ width: boss ? 180 : 110 }} aria-label="Call" />
+              </tr></thead>
+              <tbody>
+                {d && rows.length === 0 && <tr><td colSpan={who !== 'me' ? 8 : 7} className="empty">
+                  {tab === 'todo' && !q && !loc.length ? 'You\'ve called every lead you were given. Nice work.' : 'Nothing here. Try another tab or clear the search.'}</td></tr>}
+                {rows.map((r) => {
+                  const mineLead = !!r.mine;
+                  const canCall = r.has_phone && !r.dnc && (mineLead || boss);
+                  return (
+                    <tr key={r.id} className={r.hold ? 'held-row' : ''}>
+                      <td><span className="clip strong" title={r.name || ''}>{r.name ? titleCase(r.name) : <span className="faint">No name given</span>}</span></td>
+                      <td><span className="clip" title={`${r.beds || ''} ${r.location}`}>{[r.beds ? (/^\d+$/.test(r.beds) ? `${r.beds} bed` : r.beds) : '', r.location].filter(Boolean).join(' · ')}</span></td>
+                      <td className="r n">{r.budget ? String(r.budget).split(' - ').map((x) => (Number(x) ? fmt(Number(x)) : x)).join(' – ') : dash}</td>
+                      <td>{r.dnc ? <span className="faint">Do not call</span> : r.masked && (mineLead || boss) ? <CopyNumber unitId={r.id} owner={{ id: r.owner_id, masked: r.masked }} /> : <span className="ph">{r.masked || <span className="faint">none</span>}</span>}</td>
+                      <td>{r.last_called ? fd(r.last_called) : <span className="faint">Never</span>}</td>
+                      {who !== 'me' && <td><span className="clip" title={r.assigned_name || ''}>{r.assigned_name || dash}</span></td>}
+                      <td>{r.notes?.length ? <div className="nstack">{r.notes.map((n, i) => (
+                        <div key={i} className="nitem"><span className="nmeta">{fdt(n.t)} · {String(n.by || '').split(' ')[0]}</span><NoteTag text={n.text} wrap /></div>))}
+                        {r.notes_total > r.notes.length && <span className="nmore">+ {r.notes_total - r.notes.length} earlier</span>}</div> : dash}</td>
+                      <td className="callcol">{canCall && (r.hold
+                        ? <span className="heldcell"><HoldChip h={r.hold} />{boss && <button className="btn ghost" onClick={() => setCalling({ r, force: true })}>Call</button>}</span>
+                        : <button className="btn" onClick={() => setCalling({ r })}>Call</button>)}</td>
+                    </tr>);
+                })}
+              </tbody>
+            </table>
+            <div className="more">{rows.length < total
+              ? <button className="btn" disabled={busy} onClick={() => load(page + 1)}>{busy ? 'Loading…' : `Show more (${fmt(total - rows.length)} left)`}</button>
+              : rows.length > 0 ? `All ${fmt(total)} shown` : ''}</div>
+          </div>
+          </>}
+        </main>
+      </div>
+      {calling && <CallFlow lead unitId={calling.r.id} owner={{ id: calling.r.owner_id, name: calling.r.name }} force={!!calling.force}
+        label={`${calling.r.name ? titleCase(calling.r.name) : 'Lead'}, ${leadWhat(calling.r)}`}
+        onClose={(saved) => { setCalling(null); onCaps(); if (saved) load(1); }} />}
     </>
   );
 }
@@ -1734,7 +1888,7 @@ function DoneStep({ requestId, onClose, kendal }) {
   }, [requestId]);
   return <>
     <h3>Saved</h3>
-    <p className="muted">The outcome is on the unit&apos;s call history.</p>
+    <p className="muted">The outcome is on the call history.</p>
     <KendalLine k={kendal} />
     {f && !sent && <FollowUp laptop f={f} me={me} onDone={(r) => setSent(r)} />}
     {sent && <p className="muted">{sent === 'sent' ? 'WhatsApp opened. Added "WhatsApp sent" to the note.' : sent === 'unavailable' ? 'Added "WhatsApp unavailable" to the note.' : 'Added "WhatsApp not sent" to the note.'}</p>}
@@ -1743,7 +1897,7 @@ function DoneStep({ requestId, onClose, kendal }) {
   </>;
 }
 
-function CallFlow({ unitId, owner, label, onClose, force }) {
+function CallFlow({ unitId, owner, label, onClose, force, lead }) {
   const [stage, setStage] = useState('sending');
   const [msg, setMsg] = useState('');
   const [req, setReq] = useState(null);
@@ -1776,14 +1930,15 @@ function CallFlow({ unitId, owner, label, onClose, force }) {
           <p className="faint">It expires in {req.minutes} minutes.</p>
           <button className="btn" onClick={() => onClose(false)}>Cancel</button></>}
         {stage === 'expired' && <><h3>Call expired</h3><p className="muted">It wasn&apos;t tapped on your phone in time. Press Call again.</p><button className="btn" onClick={() => onClose(false)}>Close</button></>}
-        {stage === 'dialled' && <><h3>How did it go?</h3><p className="muted">{label}</p><OutcomeForm requestId={req.requestId} onSaved={(j) => { setKres(j?.kendal || null); setStage('done'); }} /></>}
+        {stage === 'dialled' && <><h3>How did it go?</h3><p className="muted">{label}</p><OutcomeForm requestId={req.requestId} lead={lead} onSaved={(j) => { setKres(j?.kendal || null); setStage('done'); }} /></>}
         {stage === 'done' && <DoneStep requestId={req.requestId} kendal={kres} onClose={() => onClose(true)} />}
       </div>
     </div>
   );
 }
 
-function OutcomeForm({ requestId, onSaved, big }) {
+const LEAD_OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wrong number', 'Do not call'];
+function OutcomeForm({ requestId, onSaved, big, lead }) {
   const [pick, setPick] = useState('');
   const [chip, setChip] = useState('');
   const [extra, setExtra] = useState('');
@@ -1792,8 +1947,8 @@ function OutcomeForm({ requestId, onSaved, big }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const note = composeNote(chip, extra);
-  const choose = (o) => { const n = pick === o ? '' : o; setPick(n); setKendal(HOT_OUTCOMES.includes(n) || KENDAL_NOTES.includes(chip)); };
-  const pickNote = (q) => { setChip(q); setKendal(HOT_OUTCOMES.includes(pick) || KENDAL_NOTES.includes(q)); };
+  const choose = (o) => { const n = pick === o ? '' : o; setPick(n); setKendal(!lead && (HOT_OUTCOMES.includes(n) || KENDAL_NOTES.includes(chip))); };
+  const pickNote = (q) => { setChip(q); setKendal(!lead && (HOT_OUTCOMES.includes(pick) || KENDAL_NOTES.includes(q))); };
   async function save() {
     setBusy(true); setErr('');
     try { const j = await api('/api/phone?action=outcome', { method: 'POST', body: { requestId, outcome: pick, note, kendal, report } }); onSaved(j); }
@@ -1803,13 +1958,13 @@ function OutcomeForm({ requestId, onSaved, big }) {
   return (
     <div>
       <div className={big ? 'outcomes' : 'radios'}>
-        {OUTCOMES.map((o) => big
+        {(lead ? LEAD_OUTCOMES : OUTCOMES).map((o) => big
           ? <button key={o} type="button" className={pick === o ? 'on' : ''} onClick={() => choose(o)}>{o}</button>
           : <label className="cb" key={o}><input type="radio" name={`oc-${requestId}`} checked={pick === o} onChange={() => {}} onClick={() => choose(o)} />{o}</label>)}
       </div>
-      <label className="cb" style={{ marginTop: 10 }}><input type="checkbox" checked={kendal} onChange={(e) => setKendal(e.target.checked)} />Send to Kendal as a lead</label>
-      <label className="cb"><input type="checkbox" checked={report} onChange={(e) => setReport(e.target.checked)} />Send a market report every month</label>
-      <QuickNotes value={chip} onPick={pickNote} />
+      {!lead && <label className="cb" style={{ marginTop: 10 }}><input type="checkbox" checked={kendal} onChange={(e) => setKendal(e.target.checked)} />Send to Kendal as a lead</label>}
+      {!lead && <label className="cb"><input type="checkbox" checked={report} onChange={(e) => setReport(e.target.checked)} />Send a market report every month</label>}
+      <QuickNotes value={chip} onPick={pickNote} lead={lead} />
       <textarea placeholder={notePlaceholder(chip, 'Or type your own note')} value={extra} maxLength={900} onChange={(e) => setExtra(e.target.value)} />
       {err && <p className="err">{err}</p>}
       <button className={big ? 'bigcall' : 'btn primary'} disabled={(!pick && !note) || busy} onClick={save}>{busy ? 'Saving…' : pick ? 'Save outcome' : 'Save note'}</button>
@@ -2655,6 +2810,7 @@ function fillTemplate(t, v) {
     .replace(/Hi ,/g, 'Hi,').replace(/Hi\s+\n/g, 'Hi,\n');
 }
 function whatsappText(f, me) {
+  if (f.lead) return leadWhatsappText(f, me);
   const first = f.is_company ? '' : titleCase(String(f.owner_name || '').split(/\s+/)[0]);
   const st = /^Street (\d+), Villa (\S+)$/.exec(String(f.unit_no || ''));
   const place = f.area === 'Commercial' ? `unit ${f.unit_no} in ${titleCase(f.building || f.subcommunity)}`
@@ -2668,14 +2824,38 @@ function whatsappText(f, me) {
   const mine = own[key] || (isNoAnswer(f) ? own.noanswer : own.spoke);   // noanswer/spoke: messages saved by the first version
   return fillTemplate(mine || standardMessage(key), v);
 }
-const standardMessage = (key) => WHATSAPP_BY_NOTE[key] || WHATSAPP[key] || WHATSAPP.default;
+const standardMessage = (key) => LEAD_WHATSAPP[key] || WHATSAPP_BY_NOTE[key] || WHATSAPP[key] || WHATSAPP.default;
+// Lead pool messages: {property} is what they asked about ("2 bed in Dubai Marina"), {area} the location
+const LEAD_TRIED = 'Hi {first}, this is {me} from Apex Homes. You enquired with us recently about a {property}, so I just tried giving you a call. Are you still looking? I have a few options that could suit.';
+const LEAD_WHATSAPP = {
+  'Lead - Called, no reply': LEAD_TRIED, 'Lead - Called, unreachable': LEAD_TRIED, 'Lead - Phone off': LEAD_TRIED,
+  'Lead - Called, line busy, call again later': 'Hi {first}, this is {me} from Apex Homes. You enquired with us recently about a {property}. I just tried calling but the line was busy. When is a good time to talk?',
+  'Lead - Still looking': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. Save my number, I\'ll send over the best options for a {property} that match what you\'re after.',
+  'Lead - Viewing booked': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. Saving my number here so we can confirm the viewing. I\'ll send the details and location shortly.',
+  'Lead - Send options': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. As promised, I\'ll send a few options for a {property} over shortly.',
+  'Lead - Follow up': 'Hi {first}, this is {me} from Apex Homes, following up on your search for a {property}. Let me know a good time to catch up.',
+  'Lead - Replied': 'Hi {first}, this is {me} from Apex Homes. Thanks for getting back to me about the {property}. When is a good time for a quick call?',
+  'Lead - Already found': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now, and glad you found a place. If you ever need help renting, buying or selling in Dubai, save my number and message me here any time.',
+  'Lead - Not looking anymore': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. If you start looking again, renting, buying or selling, save my number and message me here any time.',
+  'Lead - default': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time on the phone just now about the {property}. Save my number and message me here any time.',
+};
+function leadWhatsappText(f, me) {
+  const first = titleCase(String(f.lead.name || '').split(/\s+/)[0]);
+  const v = { first, me: String(me || '').split(/\s+/)[0], property: leadWhat(f.lead), area: f.lead.location && f.lead.location !== 'Not given' ? f.lead.location : 'Dubai' };
+  const n = String(f.note || '').toLowerCase();
+  const byNote = Object.keys(LEAD_WHATSAPP).filter((k) => k !== 'Lead - default').sort((a, b) => b.length - a.length)
+    .find((k) => n.startsWith(k.slice(7).toLowerCase()));
+  const key = byNote || (f.outcome === 'No answer' ? 'Lead - Called, no reply' : 'Lead - default');
+  return fillTemplate((f.templates || {})[key] || LEAD_WHATSAPP[key], v);
+}
 // The messages someone can make their own, in the order the editor shows them
 const MESSAGE_GROUPS = [
   ['Cold', ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'End user', 'Rented', 'Sold', 'No answer']],
   ['Hot', ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy', 'Call back']],
   ['Anything else', ['default']],
+  ['Lead pool', Object.keys(LEAD_WHATSAPP)],
 ];
-const msgLabel = (k) => (k === 'default' ? 'Any other outcome' : k === 'No answer' || k === 'Call back' ? `${k} (outcome)` : k);
+const msgLabel = (k) => (k === 'Lead - default' ? 'Lead · any other outcome' : k.startsWith('Lead - ') ? 'Lead · ' + k.slice(7) : k === 'default' ? 'Any other outcome' : k === 'No answer' || k === 'Call back' ? `${k} (outcome)` : k);
 
 // Edit your own WhatsApp messages, one per note (admins and directors can open anyone's from the Team page).
 // Every message starts as the standard one; change any of them, and put any back to standard.
@@ -2697,7 +2877,9 @@ function MessagesEditor({ user, onClose }) {
     }).catch((e) => setErr(e.message));
   }, [user]);
   const first = d ? String(d.name).split(/\s+/)[0] : '';
-  const ex = { first: 'Alaa', me: first, property: 'villa XK2060B in Zinnia', area: 'Damac Hills 2' };
+  const ex0 = { first: 'Alaa', me: first, property: 'villa XK2060B in Zinnia', area: 'Damac Hills 2' };
+  const exLead = { first: 'Alaa', me: first, property: '2 bed in Dubai Marina', area: 'Dubai Marina' };
+  const exOf = (k) => (k.startsWith('Lead - ') ? exLead : ex0);
   const custom = Object.keys(v).filter((k) => v[k]).length;
   async function save() {
     setBusy(true); setErr('');
@@ -2722,10 +2904,10 @@ function MessagesEditor({ user, onClose }) {
                   <div key={k} className={'msg-row' + (isOpen ? ' open' : '')}>
                     <button className="msg-top" onClick={() => setOpen(isOpen ? null : k)} aria-expanded={isOpen}>
                       <b>{msgLabel(k)}</b><span className={mine ? 'tag mine' : 'tag'}>{mine ? (user ? 'Their own' : 'Your own') : 'Standard'}</span>
-                      <span className="msg-peek">{fillTemplate(v[k] || standardMessage(k), ex).replace(/\s+/g, ' ')}</span></button>
+                      <span className="msg-peek">{fillTemplate(v[k] || standardMessage(k), exOf(k)).replace(/\s+/g, ' ')}</span></button>
                     {isOpen && <div className="msg-body">
                       <textarea rows={7} value={v[k] || standardMessage(k)} onChange={(e) => setV({ ...v, [k]: e.target.value === standardMessage(k) ? '' : e.target.value })} />
-                      <div className="msg-prev"><span className="lbl">Preview</span><div>{fillTemplate(v[k] || standardMessage(k), ex)}</div></div>
+                      <div className="msg-prev"><span className="lbl">Preview</span><div>{fillTemplate(v[k] || standardMessage(k), exOf(k))}</div></div>
                       <div className="msg-acts">
                         {mine && <button className="link" onClick={() => setV({ ...v, [k]: '' })}>Put back the standard message</button>}
                         {mine && cold.includes(k) && <button className="link" onClick={() => setV({ ...v, ...Object.fromEntries(cold.map((c) => [c, v[k]])) })}>Use this for all the no-answer messages</button>}
@@ -2806,7 +2988,13 @@ function NotOnWhatsApp({ requestId, name, onFixed }) {
   );
 }
 
-const phonePlace = (x) => (x.unit_type === 'Villa' ? `${x.subcommunity} · ${/^Street /.test(x.unit_no) ? '' : 'villa '}${x.unit_no}` : `${x.building} · ${x.unit_no}`);
+const leadWhat = (l) => {
+  const b = String(l?.beds || '').trim();
+  const kind = /^studio$/i.test(b) ? 'studio' : /^\d+$/.test(b) ? `${b} bed` : 'property';
+  return kind + (l?.location && l.location !== 'Not given' ? ` in ${l.location}` : '');
+};
+const budgetText = (b) => (b ? 'AED ' + String(b).split(' - ').map((x) => (Number(x) ? fmt(Number(x)) : x)).join(' – ') : '');
+const phonePlace = (x) => (x.lead ? `Lead · ${[bedsLabel(x.lead.beds) !== '—' ? bedsLabel(x.lead.beds) : '', x.lead.location, budgetText(x.lead.budget)].filter(Boolean).join(' · ')}` : x.unit_type === 'Villa' ? `${x.subcommunity} · ${/^Street /.test(x.unit_no) ? '' : 'villa '}${x.unit_no}` : `${x.building} · ${x.unit_no}`);
 
 function PhoneScreen() {
   const [st, setSt] = useState({ name: '', pending: null, awaiting: null, followup: null });
@@ -2857,14 +3045,14 @@ function PhoneScreen() {
           <span className="muted">How did the call go?</span>
           <span className="who">{awaiting.owner_name}</span>
           <span>{phonePlace(awaiting)}</span>
-          <OutcomeForm big requestId={awaiting.id} onSaved={(j) => { setSaved(j?.kendal || true); setSt((x) => ({ ...x, awaiting: null })); load().then(() => setTimeout(() => setSaved(false), j?.kendal ? 3000 : 0)); }} />
+          <OutcomeForm big lead={!!awaiting.lead} requestId={awaiting.id} onSaved={(j) => { setSaved(j?.kendal || true); setSt((x) => ({ ...x, awaiting: null })); load().then(() => setTimeout(() => setSaved(false), j?.kendal ? 3000 : 0)); }} />
         </div>
       )}
       {!pending && !awaiting && !saved && followup && <FollowUp key={followup.id} f={followup} me={name} onDone={() => { setSt((x) => ({ ...x, followup: null })); load(); }} />}
       {!pending && !awaiting && !saved && !followup && st.lastWa && <NotOnWhatsApp key={st.lastWa.id} requestId={st.lastWa.id} name={st.lastWa.owner_name} />}
       {saved && <div className="waiting">Saved{saved.status && <KendalLine k={saved} />}</div>}
       <PhoneAlerts onCall={load} />
-      {!pending && !awaiting && !saved && !followup && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner and it appears here.</div>}
+      {!pending && !awaiting && !saved && !followup && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner or a lead and it appears here.</div>}
       {err && <p className="err">{err}</p>}
       <button className="link" style={{ alignSelf: 'center' }} onClick={() => getSupa().then((sb) => sb.auth.signOut())}>Sign out</button>
     </main>
