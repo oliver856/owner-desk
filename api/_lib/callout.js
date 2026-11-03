@@ -70,7 +70,7 @@ function fakeBoard(people, mins) {
   });
 }
 
-const HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
+const HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report|still looking|viewing booked|send options)')`;
 
 // The running call out, or the one that finished in the last 15 minutes (for the results screen)
 export async function currentCallout(me) {
