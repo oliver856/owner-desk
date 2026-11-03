@@ -216,31 +216,33 @@ export async function goalFor(userId) {
   return { goal: Math.max(base, t?.target || 0), base };
 }
 
-// Today's call target: calls actually dialled (the blue button tapped), the goal, and where you sit on the team
-export async function callTarget(userId) {
-  const { goal, base } = await goalFor(userId);
-  const [r] = await sql`
-    with day as (select date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start),
-    per as (select c.user_id, count(*)::int as n from desk.calls c, day where c.called_at >= day.start group by c.user_id)
-    select
-      coalesce((select (value #>> '{}')::int from desk.settings where key = 'daily_call_target'), 50) as goal,
-      coalesce((select n from per where user_id = ${userId}), 0) as made,
-      coalesce((select sum(n) from per), 0)::int as team,
-      (select count(*) from per)::int as callers,
-      (1 + (select count(*) from per where n > coalesce((select n from per where user_id = ${userId}), 0)))::int as rank,
-      (select value from desk.settings where key = 'call_hours') as hours`;
-  // Today's race: everyone (not admins) who has made a call, plus you
-  const board = await sql`
+// Today's call target: calls actually dialled (the blue button tapped), the goal, and where you sit on the team.
+// Everyone's counts for today are worked out once every 10 seconds and shared, instead of once per person per minute:
+// with the whole office on the Desk that keeps the database free for calls.
+let todayCache = null;
+function teamToday() {
+  if (todayCache && Date.now() - todayCache.at < 10000) return todayCache.p;
+  const p = sql`
     with day as (select date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as start)
     select st.user_id, st.full_name as name, st.team, count(c.id)::int as calls, max(c.called_at) as last_at
     from desk.staff st
     left join desk.calls c on c.user_id = st.user_id and c.called_at >= (select start from day)
     where st.active
-    group by st.user_id, st.full_name, st.team
-    having count(c.id) > 0 or st.user_id = ${userId}
-    order by calls desc, last_at asc nulls last
-    limit 12`;
-  return { goal, base, made: r.made, team: r.team, callers: r.callers, rank: r.rank, hours: r.hours || { from: '09:00', to: '18:00' },
+    group by st.user_id, st.full_name, st.team`.then((rows) => rows)
+    .catch((e) => { todayCache = null; throw e; });
+  todayCache = { at: Date.now(), p };
+  return p;
+}
+export async function callTarget(userId) {
+  const [{ goal, base }, rows, hours] = await Promise.all([goalFor(userId), teamToday(), setting('call_hours', { from: '09:00', to: '18:00' })]);
+  const mine = rows.find((r) => r.user_id === userId)?.calls || 0;
+  const callers = rows.filter((r) => r.calls > 0);
+  // Today's race: everyone (not admins) who has made a call, plus you
+  const board = rows.filter((r) => r.calls > 0 || r.user_id === userId)
+    .sort((x, y) => y.calls - x.calls || (x.last_at ? new Date(x.last_at) : Infinity) - (y.last_at ? new Date(y.last_at) : Infinity))
+    .slice(0, 12);
+  return { goal, base, made: mine, team: callers.reduce((t, r) => t + r.calls, 0), callers: callers.length,
+    rank: 1 + callers.filter((r) => r.calls > mine).length, hours: hours || { from: '09:00', to: '18:00' },
     board: board.map((b) => ({ me: b.user_id === userId, name: b.name, team: b.team, calls: b.calls })) };
 }
 
