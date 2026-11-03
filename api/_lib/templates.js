@@ -26,8 +26,8 @@ export async function getTemplates(userId) {
 export async function saveTemplates(userId, t) {
   await ensureTemplates();
   const clean = {};
-  for (const [k, raw] of Object.entries(t || {}).slice(0, 30)) {
-    if (!/^[\w ,.'&-]{1,40}$/.test(k)) continue;
+  for (const [k, raw] of Object.entries(t || {}).slice(0, 60)) {
+    if (!/^[\w ,.'&-]{1,60}$/.test(k)) continue;
     const v = String(raw || '').replace(/\r/g, '').trim().slice(0, 1000);
     if (v) clean[k] = v;
   }
