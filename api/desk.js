@@ -101,19 +101,24 @@ async function periodRange(q) {
 const actions = {
   // Who am I, today's limits, and the building list for the filters
   async me(req, res, s) {
+    // The area / sub-community / building lists only change when new data is loaded, and building them reads the
+    // whole owner list, so each set is built once and kept for 30 minutes. Screens asking at the same moment share it.
     const key = [...s.listAreas].sort((a, b) => a - b).join(',');
     let p = places.get(key);
-    if (!p || p.at < Date.now() - 60e3) {
-      const rows = await sql`select * from (select distinct a.name as area, m.subcommunity, m.building from desk.mv_units m
+    if (!p || p.at < Date.now() - 30 * 60e3) {
+      const rows = sql`select * from (select distinct a.name as area, m.subcommunity, m.building from desk.mv_units m
                              join desk.areas a on a.id = m.area_id where m.area_id = any(${s.listAreas})) x
-                             order by area, upper(subcommunity), upper(building)`;
-      p = { at: Date.now(), rows: rows.map((r) => ({ area: r.area, sc: r.subcommunity, bld: r.building })) };
+                             order by area, upper(subcommunity), upper(building)`
+        .then((r) => r.map((x) => ({ area: x.area, sc: x.subcommunity, bld: x.building })))
+        .catch((e) => { places.delete(key); throw e; });
+      p = { at: Date.now(), rows };
       places.set(key, p);
     }
+    const placeRows = await p.rows;
     await ensurePrefs();
     const [c, target, [pr], rocket] = await Promise.all([caps(s.user_id), callTarget(s.user_id),
       sql`select prefs from desk.staff_prefs where user_id = ${s.user_id}`, rocketAllowed(s)]);
-    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: p.rows, prefs: pr?.prefs || null, rocket });
+    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: placeRows, prefs: pr?.prefs || null, rocket });
   },
 
   // Manager dashboard (their team) and director overview (every team)
