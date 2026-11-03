@@ -84,6 +84,20 @@ export async function currentCallout(me) {
       and (not ${isTest()} or co.started_by = ${me.user_id})
     order by (co.ended_at is null and co.ends_at > now()) desc, ${isTest()} desc, co.id desc limit 1`;
   if (!co) return { callout: null, features: { test: testsOn() } };
+  // A real call out's board is the same for everyone, so it's worked out at most once every 3 seconds and shared.
+  // (With the whole office on the Desk, every screen asks every few seconds.) Tests are only ever seen by one person.
+  if (!co.is_test) {
+    const hit = boardCache.get(co.id);
+    if (hit && Date.now() - hit.at < 3000) return shape(co, await hit.p, me);
+    const p = boardFor(co, null).catch((e) => { boardCache.delete(co.id); throw e; });
+    boardCache.clear(); boardCache.set(co.id, { at: Date.now(), p });
+    return shape(co, await p, me);
+  }
+  return shape(co, await boardFor(co, me), me);
+}
+
+const boardCache = new Map();
+async function boardFor(co, me) {
   const inTeams = co.teams && co.teams.length ? sql`coalesce(st.team, 'No team') = any(${co.teams})` : sql`true`;
   let board = await sql`
     select st.user_id, st.full_name as name, coalesce(st.team, 'No team') as team,
@@ -92,7 +106,7 @@ export async function currentCallout(me) {
            min(c.called_at) as first_at, max(c.called_at) as last_at
     from desk.staff st
     left join desk.calls c on c.user_id = st.user_id and c.called_at >= ${co.starts_at} and c.called_at <= ${co.count_to}
-    where st.active and ${inTeams} and (st.role in ('broker', 'manager') or c.id is not null or st.user_id = ${me.user_id})
+    where st.active and ${inTeams} and (st.role in ('broker', 'manager') or c.id is not null${me ? sql` or st.user_id = ${me.user_id}` : sql``})
     group by st.user_id, st.full_name, st.team`;
   const elapsed = Math.max(0, (new Date(co.count_to) - new Date(co.starts_at)) / 60000);
   if (co.is_test) board = fakeBoard(board, elapsed);
@@ -105,6 +119,10 @@ export async function currentCallout(me) {
     from desk.calls c join desk.staff st on st.user_id = c.user_id
     where c.called_at >= ${co.starts_at} and c.called_at <= ${co.count_to} and ${HOT}
     order by c.called_at desc limit 5`;
+  return { board, recent };
+}
+
+function shape(co, { board, recent }, me) {
   const meIn = board.some((b) => b.user_id === me.user_id);
   return {
     features: { test: testsOn() },
