@@ -191,7 +191,8 @@ const actions = {
       }
       return u.id;
     });
-    await sql`select desk.refresh_units()`;
+    // No rebuild of the whole owner list here: it took 30+ seconds and slowed the Desk for everyone. The unit opens
+    // straight away from its own record, and joins the owner list at the next data load.
     await audit(s.user_id, 'lookup_owner', { unitId, detail: { lookup_id: lk.id, charged: ans.charged, owners: (ans.owners || []).length, request_id: ans.request_id }, ip });
     res.json({ unitId, charged: ans.charged ?? 0 });
   },
