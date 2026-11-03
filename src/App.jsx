@@ -339,57 +339,142 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 
 .co-testmode{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px;color:var(--muted);cursor:pointer} .co-testnote{display:block;font-style:normal;margin-top:4px;color:var(--ink)} .co-testmode b{color:var(--ink);margin-right:6px} .co-testmode.on{border-style:solid;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--bg))}
 .co-tv{margin-left:10px;font-weight:600;color:var(--accent);text-decoration:none;font-size:14px} .co-tv:hover{text-decoration:underline}
-.tv{--logo-bg:#fff;--ink:#0a0a0a;--grey:#8a8a8a;--rule:#e4e4e4;position:fixed;inset:0;background:#fff;color:var(--ink);display:flex;flex-direction:column;padding:3vh 3.4vw 2.6vh;gap:2.2vh;overflow:hidden;font-size:1.6vh;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+.tv{--logo-bg:#fff;--gold:#b08a3e;--gold2:#d9b86a;--goldbg:#faf5ea;--ink:#0b0b0b;--card:#f6f5f2;--line2:#e8e5df;--grey:#8a8a8a;position:fixed;inset:0;background:#fff;color:var(--ink);display:flex;flex-direction:column;padding:2.6vh 3vw 2.4vh;gap:1.8vh;overflow:hidden;font-size:1.6vh;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
 .tv.nomouse{cursor:none} .tv .n{font-variant-numeric:tabular-nums}
-.tv-top{display:flex;justify-content:space-between;align-items:center;gap:2vw;flex-shrink:0;padding-bottom:2vh;border-bottom:1px solid var(--rule)} .tv-logo{display:block;height:8vh;color:#000} .tv-logo svg{height:100%;width:auto;display:block}
-.tv-clock{font-size:2.6vh;font-weight:300;letter-spacing:.12em}
-.tv-test{font-size:1.5vh;font-weight:700;letter-spacing:.24em;color:var(--ink);border:1.5px solid var(--ink);padding:.9vh 1.4vw}
-.tv-kick{font-size:1.6vh;font-weight:700;letter-spacing:.32em;color:var(--ink);display:inline-flex;align-items:center;gap:1.2vh} .tv-kick i{width:1.1vh;height:1.1vh;border-radius:50%;background:#e0362c;animation:copulse 1.4s infinite}
-.tv-sub{font-size:2.2vh;color:#333;font-weight:400} .tv-sub.dim{color:var(--grey)}
-.tv-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3vh;text-align:center}
-.tv-count{font-size:30vh;line-height:.9;font-weight:800;letter-spacing:-.04em}
-.tv-win{font-size:8vh;margin:0;font-weight:700;letter-spacing:-.035em}
-.tv-live{flex:1;display:grid;grid-template-columns:34fr 66fr;gap:4vw;min-height:0} .tv-live>section{min-height:0}
-.tv-left{display:flex;flex-direction:column;gap:1.4vh;justify-content:space-between;overflow:hidden}
-.tv-timer{font-size:15vh;line-height:.9;font-weight:800;letter-spacing:-.05em} .tv-timer.last{color:#e0362c;animation:copulse 1s infinite}
-.tv-track{height:.35vh;background:var(--rule);overflow:hidden} .tv-track i{display:block;height:100%;background:var(--ink);transition:width 1s linear} .tv-track.gold i{background:var(--ink)}
-.tv-calls{display:flex;flex-direction:column;gap:1vh;padding-top:2vh;border-top:1px solid var(--rule)}
-.tv-calls span,.tv-stats span{font-size:1.5vh;font-weight:700;letter-spacing:.3em;color:var(--ink)} .tv-calls b{font-size:10vh;line-height:1;font-weight:800;letter-spacing:-.045em} .tv-calls em{font-style:normal;font-size:1.9vh;color:#555}
-.tv-stats{display:grid;grid-template-columns:repeat(2,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);margin-top:.6vh} .tv-stats div{padding:1.5vh 0;display:flex;flex-direction:column;gap:.8vh} .tv-stats div+div{padding-left:2vw;border-left:1px solid var(--rule)}
-.tv-stats b{font-size:6vh;font-weight:800;line-height:1;letter-spacing:-.04em} .tv-stats small{font-size:3vh;color:var(--grey);font-weight:500}
-.tv-band{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:2.4vw;padding:2.6vh 2.6vw;background:#0a0a0a;color:#fff;flex-shrink:0;position:relative;overflow:hidden}
-.tv-band::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.09) 50%,transparent 65%);transform:translateX(-100%);animation:tvsweep 5s ease-in-out infinite;pointer-events:none}
-.tv-band .tv-cup{width:8vh;height:8vh;color:#fff;animation:tvfloat 3s ease-in-out infinite}
-.tv-band-main{display:flex;flex-direction:column;gap:1vh;min-width:0} .tv-band span{font-size:1.5vh;font-weight:700;letter-spacing:.32em;color:#9c9c9c}
-.tv-band-main b{font-size:7vh;font-weight:800;line-height:1;letter-spacing:-.035em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tv-shine{background:linear-gradient(100deg,#fff 0%,#fff 42%,#8d8d8d 50%,#fff 58%,#fff 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:tvshine 4s linear infinite}
-.tv-band-lead{display:flex;flex-direction:column;align-items:flex-end;gap:.6vh;padding-left:2.6vw;border-left:1px solid #2e2e2e;text-align:right}
-.tv-band-lead b{font-size:5vh;font-weight:800;letter-spacing:-.03em;line-height:1;animation:tvpop .7s cubic-bezier(.2,1.6,.4,1)} .tv-band-lead em{font-style:normal;font-size:2vh;color:#bdbdbd;font-weight:500}
-.tv-band.big{padding:3.6vh 3.4vw;grid-template-columns:auto auto} .tv-band.big .tv-band-main b{font-size:9vh} .tv-band.big .tv-cup{width:11vh;height:11vh}
+.tv-top{display:flex;justify-content:space-between;align-items:center;gap:2vw;flex-shrink:0} .tv-logo{display:block;height:7vh;color:var(--ink)} .tv-logo svg{height:100%;width:auto;display:block}
+.tv-clock{font-size:2.6vh;font-weight:300;letter-spacing:.12em;color:#555}
+.tv-test{font-size:1.4vh;font-weight:700;letter-spacing:.24em;color:var(--gold);border:1.5px solid var(--gold);background:var(--goldbg);padding:.9vh 1.4vw;border-radius:99px}
+.tv-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.6vh;text-align:center;position:relative}
+.tv2-k{font-size:1.45vh;font-weight:700;letter-spacing:.28em;color:var(--grey);display:inline-flex;align-items:center;gap:1vh}
+.tv2-sub{font-size:2vh;color:#555} .tv2-sub.dim{color:var(--grey)}
+.tv2-live{width:1.2vh;height:1.2vh;border-radius:50%;background:#ff3b30;box-shadow:0 0 0 0 rgba(255,59,48,.6);animation:tvping 1.6s infinite}
+@keyframes tvping{0%{box-shadow:0 0 0 0 rgba(255,59,48,.6)}100%{box-shadow:0 0 0 1.4vh rgba(255,59,48,0)}}
+.tv2-card{background:var(--card);border:1px solid var(--line2);border-radius:2.2vh;padding:2.4vh 2vw;min-width:0;position:relative;overflow:hidden}
+.tv2-hero{display:grid;grid-template-columns:30fr 40fr 30fr;gap:1.4vw;flex-shrink:0;height:31vh}
+.tv2-time{background:var(--ink);color:#fff;border-color:var(--ink);display:flex;flex-direction:column;justify-content:space-between}
+.tv2-time .tv2-k{color:#a8a8a8} .tv2-time .tv2-sub{color:#bdbdbd}
+.tv2-timer{font-size:13vh;font-weight:800;letter-spacing:-.05em;line-height:.9}
+.tv2-time.close .tv2-timer{color:#ff6b5f} .tv2-time.last{background:#e0362c;border-color:#e0362c;color:#fff;animation:tvbeat 1s infinite} .tv2-time.last .tv2-k,.tv2-time.last .tv2-sub{color:#ffe1de}
+@keyframes tvbeat{50%{transform:scale(1.015)}}
+.tv2-bar{height:.6vh;border-radius:99px;background:rgba(255,255,255,.15);overflow:hidden} .tv2-bar i{display:block;height:100%;background:var(--gold2);border-radius:99px;transition:width 1s linear}
+.tv2-calls{display:grid;grid-template-columns:auto 1fr;gap:2vw;align-items:center;background:#fff}
+.tv2-ringwrap{position:relative;height:25vh;width:25vh}
+.tv2-ring{width:100%;height:100%;transform:rotate(-90deg)} .tv2-ring circle{fill:none;stroke-width:7} .tv2-ring .bg{stroke:#efece6}
+.tv2-ring .fg{stroke:var(--gold);stroke-linecap:round;transition:stroke-dashoffset 1s ease}
+.tv2-ringin{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.tv2-ringin b{font-size:8.5vh;font-weight:800;letter-spacing:-.05em;line-height:1;animation:tvpop .6s cubic-bezier(.2,1.6,.4,1)} .tv2-ringin span{font-size:1.5vh;font-weight:700;letter-spacing:.3em;color:var(--grey)}
+.tv2-callstats{display:flex;flex-direction:column;gap:1.4vh;min-width:0}
+.tv2-callstats div{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:1vw;border-bottom:1px solid var(--line2);padding-bottom:1.1vh}
+.tv2-callstats div:last-child{border-bottom:none;padding-bottom:0}
+.tv2-callstats .tv2-k{grid-column:1} .tv2-callstats b{grid-column:2;grid-row:1/3;font-size:5vh;font-weight:800;letter-spacing:-.04em;line-height:1;align-self:center}
+.tv2-callstats em{grid-column:1;font-style:normal;font-size:1.7vh;color:#666}
+.tv2-callstats div:last-child b{color:var(--gold)}
+.tv2-prize{display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(140deg,#fbf6ea,#f3e6c6);border-color:#e6d3a3}
+.tv2-prize::after{content:'';position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.65) 50%,transparent 65%);transform:translateX(-100%);animation:tvsweep 5s ease-in-out infinite;pointer-events:none}
+.tv2-prize .tv2-k{color:var(--gold)}
+.tv2-prize-top{display:flex;gap:1.4vw;align-items:center} .tv2-prize-top>div{display:flex;flex-direction:column;gap:.9vh;min-width:0}
+.tv2-prize-top b{font-size:5.2vh;font-weight:800;letter-spacing:-.035em;line-height:1.02;color:var(--ink)}
+.tv2-prize .tv-cup{width:7vh;height:7vh;color:var(--gold);flex-shrink:0;animation:tvfloat 3s ease-in-out infinite}
+.tv2-lead{border-top:1px solid #e6d3a3;padding-top:1.6vh;display:flex;flex-direction:column;gap:1vh}
+.tv2-lead-row{display:flex;align-items:center;gap:1vw;animation:tvpop .7s cubic-bezier(.2,1.6,.4,1)} .tv2-lead-row b{font-size:3.6vh;font-weight:800;letter-spacing:-.02em} .tv2-lead-row em{font-style:normal;font-size:1.8vh;color:#6b5a35;margin-left:auto}
+.tv2-lead .tv2-av{background:var(--ink);color:#fff}
+.tv2-prize.big{width:min(90vw,110vh);padding:3.4vh 3vw} .tv2-prize.big .tv2-prize-top b{font-size:8vh} .tv2-prize.big .tv-cup{width:11vh;height:11vh}
+.tv2-av{display:inline-grid;place-items:center;width:4.6vh;height:4.6vh;border-radius:50%;background:#ecebe7;color:var(--ink);font-style:normal;font-weight:700;font-size:1.7vh;letter-spacing:.04em;flex-shrink:0}
+.tv2-av.big{width:9vh;height:9vh;font-size:3.2vh}
+.tv2-line{text-align:center;font-size:2.4vh;font-weight:600;letter-spacing:-.01em;color:var(--ink);animation:tvfade .6s ease;flex-shrink:0}
+@keyframes tvfade{from{opacity:0;transform:translateY(.8vh)}to{opacity:1;transform:none}}
+.tv2-main{flex:1;display:grid;grid-template-columns:52fr 48fr;gap:1.4vw;min-height:0}
+.tv2-podium{display:grid;grid-template-columns:repeat(3,1fr);gap:1vw;align-items:end;min-height:0}
+.tv2-pod{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:.8vh;padding:2.4vh 1vw 2vh;border-radius:2.2vh;background:var(--card);border:1px solid var(--line2);text-align:center;transition:transform .4s}
+.tv2-pod.p1{height:100%;background:var(--ink);color:#fff;border-color:var(--ink);box-shadow:0 2vh 4vh rgba(176,138,62,.18)} .tv2-pod.p2{height:86%} .tv2-pod.p3{height:76%}
+.tv2-pod.p1 .tv2-av{background:linear-gradient(140deg,var(--gold2),var(--gold));color:#fff} .tv2-pod.p1 .tv2-pteam{color:#bdbdbd}
+.tv2-pod.p1 .tv2-place{background:linear-gradient(140deg,var(--gold2),var(--gold));color:#fff}
+.tv2-pod.p1 .tv2-pscore{color:var(--gold2)}
+.tv2-pod.empty{background:transparent;border-style:dashed}
+.tv2-place{font-size:1.5vh;font-weight:800;letter-spacing:.24em;padding:.6vh 1vw;border-radius:99px;background:#ecebe7;color:var(--ink)}
+.tv2-pname{font-size:3.2vh;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tv2-pteam{font-size:1.6vh;color:var(--grey)}
+.tv2-pscore{font-size:9vh;font-weight:800;letter-spacing:-.05em;line-height:1;margin-top:auto}
+.tv2-pod.bump{animation:tvbump .9s cubic-bezier(.2,1.6,.4,1)} @keyframes tvbump{30%{transform:translateY(-1.2vh)}}
+.tv2-plus{position:absolute;top:1.2vh;right:1.2vw;font-size:2.6vh;font-weight:800;color:#fff;background:var(--gold);padding:.3vh .8vw;border-radius:99px;animation:tvplus 6s ease forwards}
+@keyframes tvplus{0%{transform:scale(.4);opacity:0}10%{transform:scale(1.15);opacity:1}20%{transform:scale(1)}80%{opacity:1}100%{opacity:0}}
+.tv2-list{display:flex;flex-direction:column;min-height:0;gap:.8vh}
+.tv2-list ol{list-style:none;margin:0;padding:0;display:grid;grid-template-rows:repeat(9,minmax(0,1fr));gap:.5vh;flex:1;min-height:0}
+.tv2-list li{display:grid;grid-template-columns:4vh auto 1fr auto 8vh;align-items:center;gap:1vw;padding:0 1.2vw;border-radius:1.4vh;background:var(--card);border:1px solid var(--line2);min-height:0;overflow:hidden;transition:background .4s}
+.tv2-list li.bump{background:var(--goldbg);border-color:var(--gold2)}
+.tv2-list li em{font-style:normal;font-size:2.2vh;font-weight:700;color:var(--grey)}
+.tv2-list .tv2-av{width:3.8vh;height:3.8vh;font-size:1.4vh;background:#fff;border:1px solid var(--line2)}
+.tv2-who{display:flex;align-items:baseline;gap:1vw;min-width:0;white-space:nowrap;line-height:1.25} .tv2-who b{font-size:2.3vh;font-weight:600;overflow:hidden;text-overflow:ellipsis} .tv2-who span{font-size:1.6vh;color:var(--grey);overflow:hidden;text-overflow:ellipsis}
+.tv2-up{font-size:1.8vh;font-weight:800;color:var(--gold)}
+.tv2-score{font-size:3.2vh;font-weight:800;letter-spacing:-.04em;text-align:right;line-height:1}
+.tv2-pod.p1 .tv2-plus{background:#fff;color:var(--gold)}
+.tv2-more{font-size:1.6vh;color:var(--grey);text-align:right}
+.tv2-ticker{display:flex;align-items:center;gap:1.4vw;flex-shrink:0;height:5vh;border-radius:99px;background:var(--card);border:1px solid var(--line2);padding:0 .6vh;overflow:hidden}
+.tv2-tk{font-size:1.4vh;font-weight:800;letter-spacing:.28em;color:#fff;background:linear-gradient(140deg,var(--gold2),var(--gold));padding:1vh 1.4vw;border-radius:99px;flex-shrink:0}
+.tv2-tick-track{flex:1;overflow:hidden;white-space:nowrap;font-size:2vh;color:#333}
+.tv2-tick-move{display:inline-flex;gap:4vw;animation:tvmarq 30s linear infinite;padding-left:2vw} .tv2-tick-move b{color:var(--ink);font-weight:800}
+@keyframes tvmarq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tv2-tick-wait{color:var(--grey)}
+.tv2-countwrap{position:relative;display:grid;place-items:center}
+.tv2-count{font-size:30vh;line-height:.9;font-weight:800;letter-spacing:-.05em;animation:tvpop .5s cubic-bezier(.2,1.6,.4,1)}
+.tv2-pulse{position:absolute;width:34vh;height:34vh;border-radius:50%;border:.4vh solid var(--gold);animation:tvring 1s ease-out infinite}
+@keyframes tvring{0%{transform:scale(.6);opacity:.8}100%{transform:scale(1.35);opacity:0}}
+.tv2-win{font-size:8vh;margin:0;font-weight:800;letter-spacing:-.04em}
+.tv-shine{background:linear-gradient(100deg,var(--ink) 0%,var(--ink) 40%,var(--gold2) 50%,var(--ink) 60%,var(--ink) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:tvshine 5s linear infinite}
+.tv-podium{display:flex;align-items:flex-end;gap:2vw;margin:1vh 0}
+.tv-podium>div{width:22vh;display:flex;flex-direction:column;align-items:center;gap:.8vh} .tv-podium b{font-size:3.6vh;font-weight:800;letter-spacing:-.02em} .tv-podium span{font-size:2vh;color:#555}
+.tv-podium>div>div{width:100%;background:var(--card);border:1px solid var(--line2);border-radius:1.6vh 1.6vh 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:1.6vh;font-size:5vh;font-weight:800}
+.tv-podium .s1>div{height:26vh;background:linear-gradient(160deg,var(--gold2),var(--gold));border-color:var(--gold);color:#fff} .tv-podium .s2>div{height:19vh} .tv-podium .s3>div{height:14vh}
+.tv-podium .s1 .tv2-av{background:var(--ink);color:#fff}
+.tv2-confetti{position:absolute;inset:-10vh 0 0;pointer-events:none;overflow:hidden}
+.tv2-confetti i{position:absolute;top:-4vh;width:1vh;height:1.8vh;background:var(--gold2);opacity:.9;animation:tvfall linear infinite}
+.tv2-confetti i:nth-child(3n){background:var(--ink)} .tv2-confetti i:nth-child(4n){background:#d6d3cc;width:1.4vh;height:1vh}
+@keyframes tvfall{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(115vh) rotate(720deg)}}
+.tv-today{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(5,auto);grid-auto-flow:column;gap:1vh 2vw;min-width:62vw}
+.tv-today li{display:grid;grid-template-columns:4vh auto 1fr auto;align-items:center;gap:1vw;font-size:2.6vh;padding:1.2vh 1.4vw;border-radius:1.4vh;background:var(--card);border:1px solid var(--line2);text-align:left}
+.tv-today li:first-child{background:var(--goldbg);border-color:var(--gold2)}
+.tv-today em{font-style:normal;color:var(--grey);font-weight:700} .tv-today b{font-weight:600} .tv-today span{font-weight:800;font-size:3.2vh}
+.tv-full{position:fixed;right:2vw;bottom:2vh;font:inherit;font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border:1px solid var(--ink);border-radius:99px;background:#fff;color:var(--ink);cursor:pointer}
 @keyframes tvsweep{0%,55%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 @keyframes tvshine{0%{background-position:100% 0}100%{background-position:-150% 0}}
 @keyframes tvfloat{50%{transform:translateY(-.6vh) rotate(-4deg)}}
 @keyframes tvpop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
-.tv-tk{font-size:1.4vh;font-weight:700;letter-spacing:.3em;color:#fff;background:#0a0a0a;padding:.5vh .8vw;align-self:center}
-.tv-board{display:flex;flex-direction:column;gap:1.2vh;min-height:0}
-.tv-board ol{list-style:none;margin:0;padding:0;display:grid;grid-template-rows:repeat(10,minmax(0,1fr));flex:1;min-height:0}
-.tv-board li{display:grid;grid-template-columns:6vh 1fr auto;align-items:center;gap:1.6vw;padding:0 .4vw;border-bottom:1px solid var(--rule);min-height:0;overflow:hidden}
-.tv-board li em{font-style:normal;font-size:2.6vh;font-weight:500;color:var(--grey);text-align:left}
-.tv-board li.p1 em,.tv-board li.p2 em,.tv-board li.p3 em{color:var(--ink);font-weight:700}
-.tv-who{display:flex;flex-direction:column;gap:.8vh;min-width:0} .tv-line{display:flex;align-items:baseline;gap:1.2vw;min-width:0;white-space:nowrap} .tv-who b{font-size:3.1vh;font-weight:500;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis} .tv-who span{font-size:1.7vh;color:var(--grey);flex-shrink:0}
-.tv-board li.p1 .tv-who b{font-weight:700}
-.tv-bar{height:.35vh;background:#f0f0f0;overflow:hidden} .tv-bar i{display:block;height:100%;background:#bdbdbd;transition:width .8s}
-.tv-board li.p1 .tv-bar i,.tv-board li.p2 .tv-bar i,.tv-board li.p3 .tv-bar i{background:var(--ink)}
-.tv-score{font-size:4.4vh;font-weight:800;min-width:9vh;text-align:right;letter-spacing:-.04em} .tv-board li:not(.p1):not(.p2):not(.p3) .tv-score{color:#3a3a3a}
-.tv-ticker{display:flex;align-items:center;gap:3vw;font-size:2vh;color:#333;padding-top:1.6vh;border-top:1px solid var(--rule);white-space:nowrap;overflow:hidden} .tv-ticker b{color:var(--ink);font-weight:700;letter-spacing:.02em}
-.tv-podium{display:flex;align-items:flex-end;gap:2vw;margin:2vh 0}
-.tv-podium>div{width:22vh;display:flex;flex-direction:column;align-items:center;gap:.8vh} .tv-podium b{font-size:3.6vh;font-weight:700;letter-spacing:-.02em} .tv-podium span{font-size:2vh;color:#555}
-.tv-podium>div>div{width:100%;background:#f1f1f1;display:flex;align-items:flex-start;justify-content:center;padding-top:1.6vh;font-size:5vh;font-weight:800;color:var(--ink)}
-.tv-podium .s1>div{height:26vh;background:var(--ink);color:#fff} .tv-podium .s2>div{height:19vh} .tv-podium .s3>div{height:14vh}
-.tv-today{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(5,auto);grid-auto-flow:column;gap:0 4vw;min-width:62vw;border-top:1.5px solid var(--ink)}
-.tv-today li{display:grid;grid-template-columns:5vh 1fr auto;align-items:center;gap:1vw;font-size:2.8vh;padding:1.4vh .4vw;border-bottom:1px solid var(--rule);text-align:left}
-.tv-today em{font-style:normal;color:var(--grey);font-weight:300} .tv-today b{font-weight:500} .tv-today span{font-weight:800;font-size:3.2vh}
-.tv-full{position:fixed;right:2vw;bottom:2vh;font:inherit;font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:9px 16px;border:1px solid var(--ink);background:#fff;color:var(--ink);cursor:pointer}
+.tv-topr{display:flex;align-items:center;gap:1.4vw}
+.tv3-line{font-size:2.6vh;font-weight:700;letter-spacing:-.01em;animation:tvfade .6s ease;text-align:center}
+.tv3{flex:1;display:grid;grid-template-columns:34fr 66fr;grid-template-rows:1fr auto;gap:1.6vh 1.4vw;min-height:0}
+.tv3-side{display:grid;grid-template-rows:auto 1fr auto;gap:1.6vh;min-height:0}
+.tv3-side .tv2-time{gap:1.2vh} .tv3-side .tv2-timer{font-size:12vh}
+.tv3-calls{display:grid;grid-template-columns:auto 1fr;gap:1.6vw;align-items:center;background:#fff;padding:2vh 1.6vw}
+.tv3-calls .tv2-ringwrap{width:22vh;height:22vh} .tv3-calls .tv2-ringin b{font-size:7vh}
+.tv3-stats{display:flex;flex-direction:column;gap:1.2vh}
+.tv3-stats div{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:1vw;align-items:center}
+.tv3-stats b{grid-row:1/3;font-size:4.4vh;font-weight:800;letter-spacing:-.04em;line-height:1;min-width:14vh}
+.tv3-stats .tv2-k{font-size:1.3vh} .tv3-stats em{font-style:normal;font-size:1.6vh;color:#666}
+.tv3-stats .gold b{color:var(--gold)}
+.tv3-prize{gap:1.2vh} .tv3-prize .tv2-prize-top b{font-size:4.6vh} .tv3-mode{font-size:1.7vh;color:#6b5a35}
+.tv3-board{display:flex;flex-direction:column;gap:1.2vh;min-height:0;background:#fff;border:1px solid var(--line2);border-radius:2.2vh;padding:2.2vh 1.8vw}
+.tv3-head{display:flex;justify-content:space-between;align-items:baseline} .tv3-lead{font-size:2.2vh;font-weight:700;color:var(--gold)}
+.tv3-top{list-style:none;margin:0;padding:0;display:grid;grid-template-rows:1.25fr 1fr 1fr;gap:1vh;flex:0 0 38%;min-height:0}
+.tv3-top li{position:relative;display:grid;grid-template-columns:5vh auto 1fr auto auto;align-items:center;gap:1.4vw;padding:0 1.8vw;border-radius:1.8vh;background:var(--card);border:1px solid var(--line2);min-height:0;transition:transform .4s}
+.tv3-top li.r1{background:var(--ink);color:#fff;border-color:var(--ink);box-shadow:0 1.4vh 3vh rgba(176,138,62,.18)}
+.tv3-top li.r1 .tv2-av{background:linear-gradient(140deg,var(--gold2),var(--gold));color:#fff} .tv3-top li.r1 .tv3-who span{color:#bdbdbd} .tv3-top li.r1 .tv3-score{color:var(--gold2)}
+.tv3-top li.r1 .tv3-medal{background:linear-gradient(140deg,var(--gold2),var(--gold));color:#fff}
+.tv3-top .tv2-av.big{width:7vh;height:7vh;font-size:2.4vh} .tv3-top li.r1 .tv2-av.big{width:8.5vh;height:8.5vh;font-size:2.8vh}
+.tv3-medal{display:grid;place-items:center;width:4.6vh;height:4.6vh;border-radius:50%;background:#ecebe7;font-weight:800;font-size:2.2vh}
+.tv3-who{display:flex;flex-direction:column;gap:.5vh;min-width:0} .tv3-who b{font-size:3.2vh;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .tv3-who span{font-size:1.7vh;color:var(--grey)}
+.tv3-top li.r1 .tv3-who b{font-size:3.8vh}
+.tv3-score{font-size:6.4vh;font-weight:800;letter-spacing:-.05em;line-height:1} .tv3-top li.r1 .tv3-score{font-size:8vh}
+.tv3-top li.bump{animation:tvbump .9s cubic-bezier(.2,1.6,.4,1)}
+.tv3-top .tv2-plus{position:static}
+.tv3-top li.r1 .tv2-plus{background:#fff;color:var(--gold)}
+.tv3-rest{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,minmax(0,1fr));grid-auto-flow:column;gap:.8vh 1vw;flex:1;min-height:0}
+.tv3-rest li{display:grid;grid-template-columns:3.6vh auto 1fr auto 6vh;align-items:center;gap:.8vw;padding:0 1.2vw;border-radius:1.4vh;background:var(--card);border:1px solid var(--line2);min-height:0;overflow:hidden;transition:background .4s}
+.tv3-rest li.bump{background:var(--goldbg);border-color:var(--gold2)}
+.tv3-rest li em{font-style:normal;font-size:2vh;font-weight:700;color:var(--grey)}
+.tv3-rest .tv2-av{width:4vh;height:4vh;font-size:1.4vh;background:#fff;border:1px solid var(--line2)}
+.tv3-rest .tv2-score{font-size:3.4vh}
+.tv3-ticker{grid-column:1/-1}
+
 
 .box.co-setup{width:min(560px,calc(100vw - 32px));display:flex;flex-direction:column;gap:16px} .co-setup h3{margin:0 0 4px} .co-setup p{margin:0}
 .co-f{display:flex;flex-direction:column;gap:7px} .co-f .lbl,.co-next .lbl{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
@@ -2344,23 +2429,39 @@ function CalloutResults({ co, onClose }) {
 // The Apex Homes DXB logo (from the brand SVG): black parts follow the text colour
 const APEX_LOGO = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"236 540 600 312\"><path d=\"M0 0 C2.25 0.875 2.25 0.875 3.25 1.875 C3.63381293 7.19544129 2.76393526 10.77674674 0.625 15.625 C-3.16368341 24.50078736 -5.94944266 33.64905046 -8.75 42.875 C-9.41 42.875 -10.07 42.875 -10.75 42.875 C-10.903479 43.71200439 -10.903479 43.71200439 -11.06005859 44.56591797 C-12.50511524 52.13228937 -14.4136285 59.55316673 -16.375 67 C-16.69984375 68.24265625 -17.0246875 69.4853125 -17.359375 70.765625 C-18.1537028 73.80276069 -18.95063126 76.83918794 -19.75 79.875 C-18.56510986 79.62322998 -17.38021973 79.37145996 -16.15942383 79.11206055 C-4.24691014 76.62820714 7.67261108 74.66886357 19.73364258 73.06469727 C22.57953048 72.68522917 25.42353931 72.29345331 28.26757812 71.90039062 C42.16407639 70.0064398 55.95724417 68.69860978 70 68.6875 C70.86109375 68.67525391 71.7221875 68.66300781 72.609375 68.65039062 C73.434375 68.64845703 74.259375 68.64652344 75.109375 68.64453125 C75.83608398 68.64042236 76.56279297 68.63631348 77.31152344 68.63208008 C79.25 68.875 79.25 68.875 82.25 70.875 C83.06757318 75.32623178 82.34669509 78.27844186 80.0625 82.0625 C69.03133958 97.29847921 51.78401809 107.79654477 36.25 117.875 C35.64236816 118.27299805 35.03473633 118.67099609 34.40869141 119.08105469 C25.70669657 124.76142662 16.74927144 129.90230986 7.625 134.875 C6.59318604 135.43936768 5.56137207 136.00373535 4.49829102 136.58520508 C3.51658936 137.1139624 2.5348877 137.64271973 1.5234375 138.1875 C0.65122559 138.65800781 -0.22098633 139.12851562 -1.11962891 139.61328125 C-8.86142531 143.32681418 -16.1142951 144.05356904 -24.4375 141.9375 C-30.07707994 138.42606344 -35.41463493 133.53700419 -37.25 126.9375 C-37.9465083 122.25265253 -37.94264156 117.47968144 -38 112.75 C-38.01450195 111.60349976 -38.01450195 111.60349976 -38.02929688 110.43383789 C-37.99967584 105.55006894 -37.2988991 101.50940446 -35.75 96.875 C-39.62826094 97.97597011 -43.506007 99.07873399 -47.38330078 100.18310547 C-48.70022041 100.55793844 -50.01727559 100.93229551 -51.33447266 101.30615234 C-53.23636555 101.84605381 -55.13771915 102.3878539 -57.0390625 102.9296875 C-58.18068848 103.25437012 -59.32231445 103.57905273 -60.49853516 103.91357422 C-61.57151855 104.23084473 -62.64450195 104.54811523 -63.75 104.875 C-64.80461426 105.13643799 -65.85922852 105.39787598 -66.94580078 105.66723633 C-70.52575862 107.20911787 -71.43055257 108.77473351 -73.328125 112.14453125 C-73.93140625 113.19833984 -74.5346875 114.25214844 -75.15625 115.33789062 C-75.7646875 116.44326172 -76.373125 117.54863281 -77 118.6875 C-77.62390625 119.78126953 -78.2478125 120.87503906 -78.890625 122.00195312 C-81.46263767 126.55009191 -83.9027519 130.97890123 -85.75 135.875 C-86.41 135.875 -87.07 135.875 -87.75 135.875 C-88.02070313 136.72707031 -88.29140625 137.57914063 -88.5703125 138.45703125 C-89.76477158 141.91779844 -91.12747442 145.22216445 -92.625 148.5625 C-93.11742187 149.68011719 -93.60984375 150.79773438 -94.1171875 151.94921875 C-95.75208947 154.87874405 -96.85464231 156.2463613 -99.75 157.875 C-102.875 158.1875 -102.875 158.1875 -105.75 157.875 C-107.75 155.875 -107.75 155.875 -108.03515625 153.56420898 C-107.7006997 150.41006612 -106.77986323 148.58362107 -105.1875 145.84765625 C-104.6411792 144.89640869 -104.0948584 143.94516113 -103.53198242 142.96508789 C-102.94392822 141.96598389 -102.35587402 140.96687988 -101.75 139.9375 C-101.16001221 138.9158374 -100.57002441 137.8941748 -99.9621582 136.84155273 C-98.78066442 134.79682733 -97.59493712 132.75454173 -96.40478516 130.71484375 C-94.22291472 126.97044762 -92.0795528 123.20474963 -89.9375 119.4375 C-88.87559269 117.58299383 -87.81336944 115.72866818 -86.75 113.875 C-95.33021087 115.81149848 -102.79023102 119.05450031 -110.625 123 C-112.80729788 124.09114894 -114.99210579 125.17729581 -117.1796875 126.2578125 C-118.13085449 126.73621582 -119.08202148 127.21461914 -120.06201172 127.70751953 C-122.64757666 128.83051422 -124.97361237 129.4409335 -127.75 129.875 C-127.75 130.535 -127.75 131.195 -127.75 131.875 C-130.37433632 133.70408289 -132.9908445 134.97510652 -135.9453125 136.203125 C-139.9846411 137.91807917 -143.75640843 140.01147067 -147.5625 142.1875 C-148.26101074 142.58122803 -148.95952148 142.97495605 -149.67919922 143.38061523 C-153.64999126 145.63018037 -157.52566057 147.98420325 -161.375 150.4375 C-164.94991392 152.61982519 -167.46867552 153.64344286 -171.75 152.875 C-172.75 151.875 -172.75 151.875 -173.25 148.6875 C-172.75 144.875 -172.75 144.875 -170.0625 141.9375 C-162.05986152 135.90351058 -153.29603011 131.021319 -144.375 126.5 C-143.72152588 126.16629395 -143.06805176 125.83258789 -142.39477539 125.48876953 C-138.25178389 123.43757481 -134.22992748 122.02102796 -129.75 120.875 C-129.75 120.215 -129.75 119.555 -129.75 118.875 C-129.03457031 118.59301758 -128.31914062 118.31103516 -127.58203125 118.02050781 C-124.30320227 116.72573091 -121.02659818 115.42541132 -117.75 114.125 C-116.62464844 113.6815625 -115.49929688 113.238125 -114.33984375 112.78125 C-107.30577026 109.98806815 -107.30577026 109.98806815 -100.48046875 106.73046875 C-95.80732603 104.30504272 -90.86040745 102.80123396 -85.84179688 101.25195312 C-77.7758194 98.58268916 -73.92121483 93.01455884 -69.25 86.25 C-68.477771 85.14543457 -68.477771 85.14543457 -67.68994141 84.01855469 C-64.34648984 79.22261181 -61.05754033 74.39039569 -57.77416992 69.55322266 C-52.72215565 62.11468321 -47.55729712 54.85249054 -42.0078125 47.77734375 C-39.87737791 45.03874011 -37.83405325 42.2570348 -35.8125 39.4375 C-28.90628788 29.89311485 -21.58077322 20.72260905 -13.875 11.8125 C-13.33979736 11.19342773 -12.80459473 10.57435547 -12.25317383 9.93652344 C-10.76734239 8.23483779 -9.26643609 6.54944093 -7.75 4.875 C-7.28916016 4.36453125 -6.82832031 3.8540625 -6.35351562 3.328125 C-3.08435411 -0.14019791 -3.08435411 -0.14019791 0 0 Z \" fill=\"currentColor\" transform=\"translate(561.75,550.125)\"/><path d=\"M0 0 C1.17175781 0.01353516 1.17175781 0.01353516 2.3671875 0.02734375 C2.94726562 0.03894531 3.52734375 0.05054688 4.125 0.0625 C-1.26518939 12.01465909 -16.0625188 19.68654028 -26.5625 26.5 C-27.13637451 26.87412018 -27.71024902 27.24824036 -28.30151367 27.63369751 C-35.75551102 32.49014876 -43.25036567 37.20103385 -51.04296875 41.49609375 C-53.81035608 43.02674522 -56.49717184 44.6509468 -59.1875 46.3125 C-67.52219424 51.2726595 -74.85444582 55.04619049 -84.875 53.0625 C-87.87385336 50.97412653 -89.2510762 48.31034759 -90.875 45.0625 C-91.14331512 41.94435302 -91.10673204 38.81588732 -91.125 35.6875 C-91.145625 34.84316406 -91.16625 33.99882813 -91.1875 33.12890625 C-91.2299144 26.09871979 -89.81264729 19.80042734 -87.875 13.0625 C-62.38148415 7.76711095 -62.38148415 7.76711095 -50.5703125 6.421875 C-47.78251481 6.1361562 -47.78251481 6.1361562 -44.875 5.0625 C-42.36835856 4.71638025 -39.86945064 4.40565776 -37.35546875 4.125 C-36.61927811 4.04000244 -35.88308746 3.95500488 -35.12458801 3.86743164 C-32.77089476 3.59609063 -30.41674283 3.32902713 -28.0625 3.0625 C-25.71904165 2.79539252 -23.37570009 2.52734085 -21.032547 2.25756836 C-19.57577991 2.09002918 -18.11882762 1.92408992 -16.66166687 1.76000977 C-1.13953026 -0.01726561 -1.13953026 -0.01726561 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(625.875,628.9375)\"/><path d=\"M0 0 C8.04656452 -0.44877078 13.88590802 1.24712644 20.26171875 6.26953125 C25.97710491 12.99873314 26.89991532 19.65387752 26.26171875 28.26953125 C24.85881397 35.12949782 21.02348021 40.29695052 15.5859375 44.59375 C8.75172101 48.76452452 0.29055085 48.27985552 -7.32421875 46.75 C-14.29076572 44.26893152 -19.44336503 38.76089494 -22.73828125 32.26953125 C-24.40368337 24.70139073 -23.78924794 16.94226844 -19.73828125 10.26953125 C-18.01953125 8.22265625 -18.01953125 8.22265625 -16.23828125 6.51953125 C-15.65046875 5.9471875 -15.06265625 5.37484375 -14.45703125 4.78515625 C-9.85383134 0.72597088 -5.80315684 0.57120945 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(589.73828125,747.73046875)\"/><path d=\"M0 0 C27.45 0 27.45 0 32.875 5 C33.44992187 5.515625 34.02484375 6.03125 34.6171875 6.5625 C37.84137983 9.91420276 37.38631746 13.74829623 37.3515625 18.16796875 C36.69699469 23.44087613 33.74144974 26.31472606 30.0625 29.875 C24.94499479 32.66636648 18.79601696 32.12497731 13.125 32.0625 C12.34125 32.05798828 11.5575 32.05347656 10.75 32.04882812 C8.83329986 32.03714093 6.91663952 32.01920908 5 32 C5 36.95 5 41.9 5 47 C3.35 47 1.7 47 0 47 C0 31.49 0 15.98 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(299,748)\"/><path d=\"M0 0 C2.31 0 4.62 0 7 0 C12.94515909 12.79459804 12.94515909 12.79459804 14.5625 16.6875 C15.73053345 19.37905535 16.97823104 21.95307526 18.3125 24.5625 C20.45006749 28.79853314 22.42066974 33.08769591 24.3125 37.4375 C24.82425781 38.61183594 25.33601563 39.78617188 25.86328125 40.99609375 C27 44 27 44 27 47 C25.35 47 23.7 47 22 47 C21.35309078 45.3962669 20.70751236 43.79199694 20.0625 42.1875 C19.70285156 41.29417969 19.34320313 40.40085937 18.97265625 39.48046875 C18.26386514 37.6729091 17.6139753 35.84192591 17 34 C8.09 34 -0.82 34 -10 34 C-10.33 35.32 -10.66 36.64 -11 38 C-11.65789642 39.59586121 -12.34647343 41.17936107 -13.0625 42.75 C-13.42472656 43.54921875 -13.78695312 44.3484375 -14.16015625 45.171875 C-14.43730469 45.77515625 -14.71445313 46.3784375 -15 47 C-16.65 47 -18.3 47 -20 47 C-17.56123394 40.44331748 -15.14346689 33.96230869 -11.8984375 27.7578125 C-11.02173856 26.04253197 -10.25882276 24.27058644 -9.5 22.5 C-8.42729198 19.99701462 -7.31806653 17.65365266 -6.0625 15.25 C-3.56316912 10.34783749 -1.7945658 5.19278615 0 0 Z \" fill=\"currentColor\" transform=\"translate(251,748)\"/><path d=\"M0 0 C1.32 0 2.64 0 4 0 C4 15.84 4 31.68 4 48 C2.68 48 1.36 48 0 48 C0 35.79 0 23.58 0 11 C-0.66 11 -1.32 11 -2 11 C-2.23074219 11.81726563 -2.46148438 12.63453125 -2.69921875 13.4765625 C-4.28524883 17.77265598 -6.45106304 21.46593499 -8.8125 25.375 C-9.23853516 26.09171875 -9.66457031 26.8084375 -10.10351562 27.546875 C-10.96020211 28.9828941 -11.82360247 30.41493034 -12.69384766 31.84277344 C-13.59135339 33.32508384 -14.47032739 34.81872443 -15.33349609 36.32128906 C-15.76355957 37.0531543 -16.19362305 37.78501953 -16.63671875 38.5390625 C-17.01916748 39.20373535 -17.40161621 39.8684082 -17.7956543 40.55322266 C-18.19308838 41.03065918 -18.59052246 41.5080957 -19 42 C-19.99 42 -20.98 42 -22 42 C-22.44730469 41.154375 -22.89460937 40.30875 -23.35546875 39.4375 C-26.37081865 33.77970061 -29.40989968 28.18469321 -32.8671875 22.78125 C-38 14.71034483 -38 14.71034483 -38 12 C-38.66 12 -39.32 12 -40 12 C-40 23.88 -40 35.76 -40 48 C-41.65 48 -43.3 48 -45 48 C-45 32.49 -45 16.98 -45 1 C-43.35 1 -41.7 1 -40 1 C-38.41015625 2.8359375 -38.41015625 2.8359375 -37.0625 5.375 C-36.5571875 6.2928125 -36.051875 7.210625 -35.53125 8.15625 C-35.0259375 9.0946875 -34.520625 10.033125 -34 11 C-33.02997238 12.63047195 -32.05094751 14.25562855 -31.0625 15.875 C-30.04059509 17.58269255 -29.01984239 19.29107491 -28 21 C-27.36191406 22.06476562 -26.72382812 23.12953125 -26.06640625 24.2265625 C-25.42574219 25.30679688 -24.78507813 26.38703125 -24.125 27.5 C-23.52945313 28.5003125 -22.93390625 29.500625 -22.3203125 30.53125 C-21 33 -21 33 -21 35 C-20.34 35 -19.68 35 -19 35 C-18.66742187 33.80117188 -18.66742187 33.80117188 -18.328125 32.578125 C-16.6206659 27.97802932 -14.2488013 23.96041157 -11.75 19.75 C-11.25491943 18.91041748 -10.75983887 18.07083496 -10.24975586 17.20581055 C-9.27291506 15.5500694 -8.29437236 13.89533092 -7.31396484 12.24169922 C-6.20851213 10.35573362 -5.14074908 8.44774834 -4.08203125 6.53515625 C-3.58058594 5.63667969 -3.07914063 4.73820313 -2.5625 3.8125 C-1.94568359 2.67748047 -1.94568359 2.67748047 -1.31640625 1.51953125 C-0.88199219 1.01808594 -0.44757812 0.51664063 0 0 Z \" fill=\"currentColor\" transform=\"translate(685,747)\"/><path d=\"M0 0 C1.36574212 4.39360088 0.17676598 7.72415331 -1.125 12 C-1.59504079 13.60601423 -2.06238614 15.21281927 -2.52734375 16.8203125 C-2.77081543 17.66110352 -3.01428711 18.50189453 -3.26513672 19.36816406 C-4.75157852 24.6916998 -6.02140103 30.07238726 -7.29931641 35.44921875 C-7.49315918 36.24714844 -7.68700195 37.04507813 -7.88671875 37.8671875 C-8.05389404 38.56956543 -8.22106934 39.27194336 -8.39331055 39.99560547 C-9.07438418 42.24575216 -9.69256543 44.03390756 -11 46 C-13.13891602 46.98901367 -13.13891602 46.98901367 -15.75390625 47.66796875 C-16.69041016 47.92126953 -17.62691406 48.17457031 -18.59179688 48.43554688 C-20.06229492 48.80776367 -20.06229492 48.80776367 -21.5625 49.1875 C-23.50195544 49.69935366 -25.44079466 50.21354995 -27.37890625 50.73046875 C-28.67163452 51.06147583 -28.67163452 51.06147583 -29.99047852 51.39916992 C-31.978641 51.82033621 -31.978641 51.82033621 -33 53 C-34.66617115 53.04063832 -36.33388095 53.042721 -38 53 C-36.02964249 48.90647031 -33.57700704 45.29320577 -31 41.5625 C-30.51233154 40.85456299 -30.02466309 40.14662598 -29.5222168 39.41723633 C-25.63203403 33.81554919 -21.54178394 28.39992241 -17.34375 23.02734375 C-14.43955962 19.27609784 -11.66873041 15.43756194 -8.89453125 11.58984375 C-6.01791048 7.6574735 -3.02031612 3.82258759 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(540,589)\"/><path d=\"M0 0 C8.04656452 -0.44877078 13.88590802 1.24712644 20.26171875 6.26953125 C25.97710491 12.99873314 26.89991532 19.65387752 26.26171875 28.26953125 C24.85881397 35.12949782 21.02348021 40.29695052 15.5859375 44.59375 C8.75172101 48.76452452 0.29055085 48.27985552 -7.32421875 46.75 C-14.29076572 44.26893152 -19.44336503 38.76089494 -22.73828125 32.26953125 C-24.40368337 24.70139073 -23.78924794 16.94226844 -19.73828125 10.26953125 C-18.01953125 8.22265625 -18.01953125 8.22265625 -16.23828125 6.51953125 C-15.65046875 5.9471875 -15.06265625 5.37484375 -14.45703125 4.78515625 C-9.85383134 0.72597088 -5.80315684 0.57120945 0 0 Z M-13.61328125 10.14453125 C-17.82007424 16.33099153 -18.74233206 21.88924021 -17.73828125 29.26953125 C-15.50681372 34.94875976 -11.62071405 38.76691642 -6.73828125 42.26953125 C-1.504004 44.01429033 4.37765802 44.39407258 9.5859375 42.36328125 C14.85414414 39.2324613 19.28785056 35.19113583 21.26171875 29.26953125 C21.73926301 23.40591405 22.12387486 18.08963859 19.57421875 12.70703125 C14.00357839 6.83527519 9.48569664 4.60476759 1.32421875 3.95703125 C-4.52504561 4.14973957 -9.67304418 5.66121166 -13.61328125 10.14453125 Z \" fill=\"currentColor\" transform=\"translate(589.73828125,747.73046875)\"/><path d=\"M0 0 C1.65 0 3.3 0 5 0 C5 15.84 5 31.68 5 48 C3.35 48 1.7 48 0 48 C0 41.07 0 34.14 0 27 C-9.57 27 -19.14 27 -29 27 C-29 33.93 -29 40.86 -29 48 C-30.65 48 -32.3 48 -34 48 C-34 32.49 -34 16.98 -34 1 C-32.35 1 -30.7 1 -29 1 C-29 7.93 -29 14.86 -29 22 C-19.43 22 -9.86 22 0 22 C0 14.74 0 7.48 0 0 Z \" fill=\"currentColor\" transform=\"translate(538,747)\"/><path d=\"M0 0 C10.56 0 21.12 0 32 0 C32 1.65 32 3.3 32 5 C23.09 5 14.18 5 5 5 C5 10.61 5 16.22 5 22 C12.92 22 20.84 22 29 22 C29 23.32 29 24.64 29 26 C21.08 26 13.16 26 5 26 C5 31.94 5 37.88 5 44 C14.24 44 23.48 44 33 44 C33 45.32 33 46.64 33 48 C22.11 48 11.22 48 0 48 C0 32.16 0 16.32 0 0 Z \" fill=\"currentColor\" transform=\"translate(717,747)\"/><path d=\"M0 0 C10.56 0 21.12 0 32 0 C32 1.32 32 2.64 32 4 C23.09 4 14.18 4 5 4 C5 9.61 5 15.22 5 21 C12.92 21 20.84 21 29 21 C29 22.65 29 24.3 29 26 C21.08 26 13.16 26 5 26 C5 31.61 5 37.22 5 43 C14.24 43 23.48 43 33 43 C33 44.32 33 45.64 33 47 C22.11 47 11.22 47 0 47 C0 31.49 0 15.98 0 0 Z \" fill=\"currentColor\" transform=\"translate(360,748)\"/><path d=\"M0 0 C27.45 0 27.45 0 32.875 5 C33.44992187 5.515625 34.02484375 6.03125 34.6171875 6.5625 C37.84137983 9.91420276 37.38631746 13.74829623 37.3515625 18.16796875 C36.69699469 23.44087613 33.74144974 26.31472606 30.0625 29.875 C24.94499479 32.66636648 18.79601696 32.12497731 13.125 32.0625 C12.34125 32.05798828 11.5575 32.05347656 10.75 32.04882812 C8.83329986 32.03714093 6.91663952 32.01920908 5 32 C5 36.95 5 41.9 5 47 C3.35 47 1.7 47 0 47 C0 31.49 0 15.98 0 0 Z M5 4 C5 11.92 5 19.84 5 28 C7.660625 28.0825 10.32125 28.165 13.0625 28.25 C13.8862915 28.28641602 14.71008301 28.32283203 15.55883789 28.36035156 C22.0153656 28.45622145 26.08389072 26.63390515 30.9375 22.25 C32.53810671 18.86047991 32.52150326 15.63603664 32 12 C30.64805213 8.62013032 29.52780769 7.3388395 26.46875 5.375 C22.02712883 3.61435737 18.34034789 3.66699636 13.625 3.8125 C10.77875 3.874375 7.9325 3.93625 5 4 Z \" fill=\"currentColor\" transform=\"translate(299,748)\"/><path d=\"M0 0 C-0.33 1.32 -0.66 2.64 -1 4 C-5 3 -5 3 -6.76953125 2.484375 C-12.55276494 1.22847136 -18.83871957 0.94054881 -24.1875 3.5625 C-26.5068672 6.68164899 -26.77871438 9.16438252 -27 13 C-22.47131582 15.59980018 -17.371637 16.68169798 -12.375 18.05664062 C-1.17901802 21.23147297 -1.17901802 21.23147297 2 26 C2.68681317 30.71185778 2.69895195 34.73650993 0.375 38.9375 C-5.42141646 43.97123008 -10.22210095 44.46849484 -17.73046875 44.296875 C-23.51302257 43.77181635 -28.18402983 42.21064678 -33 39 C-32.67 37.68 -32.34 36.36 -32 35 C-30.35 35.33 -28.7 35.66 -27 36 C-27 36.66 -27 37.32 -27 38 C-21.02609278 39.35973261 -15.09219988 39.68644506 -9 39 C-5.5518732 37.14067097 -5.5518732 37.14067097 -4 34 C-3.16600125 30.91318914 -3.16600125 30.91318914 -4 28 C-7.46403539 25.46260963 -10.6408576 24.46698287 -14.8125 23.625 C-21.43906544 22.07444897 -27.59686229 19.39613019 -32 14 C-32.84678178 10.2953297 -32.80242565 6.56522534 -31.05078125 3.1484375 C-23.99186677 -5.89231732 -9.45842431 -4.72921215 0 0 Z \" fill=\"currentColor\" transform=\"translate(803,751)\"/><path d=\"M0 0 C2.18359375 -0.390625 2.18359375 -0.390625 5 0 C6.93507329 2.06328307 8.46872702 3.94925199 10.0625 6.25 C10.90482473 7.42383691 11.74982965 8.59575574 12.59765625 9.765625 C12.99871582 10.32185547 13.39977539 10.87808594 13.81298828 11.45117188 C15.37213748 13.48556977 17.12821522 15.25357725 19 17 C20.60446931 14.91689914 22.20858518 12.83352773 23.8125 10.75 C24.26431641 10.16347656 24.71613281 9.57695313 25.18164062 8.97265625 C25.62314453 8.39902344 26.06464844 7.82539062 26.51953125 7.234375 C26.95048096 6.67782227 27.38143066 6.12126953 27.82543945 5.54785156 C28.8053163 4.25655678 29.73717798 2.92900558 30.65625 1.59375 C32 0 32 0 34.6875 -0.25 C35.450625 -0.1675 36.21375 -0.085 37 0 C33.86620526 5.73183535 30.2699954 10.85697145 26.27148438 16.01367188 C23.72557824 19.14206028 23.72557824 19.14206028 23.20800781 22.94799805 C24.10780999 25.2793289 25.24503088 27.023749 26.72265625 29.0390625 C27.26083984 29.78414062 27.79902344 30.52921875 28.35351562 31.296875 C29.19946289 32.44929687 29.19946289 32.44929687 30.0625 33.625 C31.18260868 35.15577282 32.29871202 36.68948716 33.41015625 38.2265625 C33.90652588 38.90283691 34.40289551 39.57911133 34.91430664 40.27587891 C36 42 36 42 36 44 C36.99 44.33 37.98 44.66 39 45 C39 45.66 39 46.32 39 47 C36.41796875 47.5546875 36.41796875 47.5546875 33 47 C30.33325992 44.34967785 28.36629855 41.26162397 26.3125 38.125 C25.18796418 36.45798095 24.0592289 34.79378503 22.92578125 33.1328125 C22.43505127 32.38918457 21.94432129 31.64555664 21.4387207 30.87939453 C19.96294664 28.74165524 19.96294664 28.74165524 17 27 C16.690625 28.0209375 16.690625 28.0209375 16.375 29.0625 C14.85020841 32.32000931 12.9748204 34.44701946 10.57421875 37.0859375 C8.91729091 39.1005644 7.74798719 41.15154288 6.5 43.4375 C5.30078125 45.46484375 5.30078125 45.46484375 4 47 C0.6875 47.5 0.6875 47.5 -2 47 C-0.65089758 44.14986742 0.87751976 41.6270221 2.71484375 39.06640625 C3.23626953 38.33486328 3.75769531 37.60332031 4.29492188 36.84960938 C5.10799805 35.71749023 5.10799805 35.71749023 5.9375 34.5625 C10.70432877 27.93658159 10.70432877 27.93658159 15 21 C14.01 20.67 13.02 20.34 12 20 C11.07887413 18.43067445 10.16873608 16.85382178 9.31640625 15.24609375 C7.06073277 11.39739271 4.29647051 7.91047649 1.609375 4.35546875 C0 2 0 2 0 0 Z \" fill=\"currentColor\" transform=\"translate(412,748)\"/><path d=\"M0 0 C7.22364571 6.01970476 8.77862875 14.11451501 11 23 C4.07 23 -2.86 23 -10 23 C-9.10831533 18.54157664 -7.90799356 15.0845124 -6.125 10.9375 C-5.61195313 9.72964844 -5.09890625 8.52179687 -4.5703125 7.27734375 C-3.24987015 4.52149515 -1.94438045 2.33442084 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(254,755)\"/><path d=\"M0 0 C10.03296703 -0.48351648 10.03296703 -0.48351648 14.125 1.5625 C16.61328559 4.79727127 17 6.93536918 17 11 C15.63571607 13.92346557 14.27249091 15.72750909 12 18 C7.98805634 18.27783543 4.02552638 18.0856495 0 18 C0 12.06 0 6.12 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(454,829)\"/><path d=\"M0 0 C9.1796875 -0.1953125 9.1796875 -0.1953125 12 0 C12.66 0.66 13.32 1.32 14 2 C13.96712417 4.72869407 13.43602229 7.2966618 13 10 C13.99 10.33 14.98 10.66 16 11 C16 12.65 16 14.3 16 16 C10.99791398 19.08381031 5.70008452 18.12391488 0 18 C0 12.06 0 6.12 0 0 Z \" fill=\"currentColor\" transform=\"translate(565,829)\"/><path d=\"M0 0 C1.32 0 2.64 0 4 0 C4 15.84 4 31.68 4 48 C2.68 48 1.36 48 0 48 C0 35.79 0 23.58 0 11 C-0.66 11 -1.32 11 -2 11 C-2.66 12.32 -3.32 13.64 -4 15 C-4.66 14.67 -5.32 14.34 -6 14 C-5.60026466 8.6701955 -3.68506131 3.91351525 0 0 Z \" fill=\"currentColor\" transform=\"translate(685,747)\"/><path d=\"M0 0 C10.03296703 -0.48351648 10.03296703 -0.48351648 14.125 1.5625 C16.61328559 4.79727127 17 6.93536918 17 11 C15.63571607 13.92346557 14.27249091 15.72750909 12 18 C7.98805634 18.27783543 4.02552638 18.0856495 0 18 C0 12.06 0 6.12 0 0 Z M2 2 C2 6.62 2 11.24 2 16 C8.39825263 16.47326369 8.39825263 16.47326369 14 14 C15.39551161 8.55212258 15.39551161 8.55212258 13.625 3.5 C9.67400229 1.24228702 6.51004296 1.73470336 2 2 Z \" fill=\"currentColor\" transform=\"translate(454,829)\"/><path d=\"M0 0 C0.99 0.33 1.98 0.66 3 1 C2.4462522 6.10454793 -0.02592796 9.96575557 -2.5625 14.3125 C-2.98724609 15.05306641 -3.41199219 15.79363281 -3.84960938 16.55664062 C-4.89351653 18.37468118 -5.94592192 20.18783748 -7 22 C-8.32 21.67 -9.64 21.34 -11 21 C-9.53171057 15.82064939 -7.18508737 11.65626588 -4.375 7.125 C-3.95476563 6.43664062 -3.53453125 5.74828125 -3.1015625 5.0390625 C-2.07307528 3.35608342 -1.037279 1.67757468 0 0 Z \" fill=\"currentColor\" transform=\"translate(678,759)\"/><path d=\"M0 0 C0.99 0 1.98 0 3 0 C4.37868281 1.62935241 5.71274093 3.29749607 7 5 C7.66 5.33 8.32 5.66 9 6 C9.268125 5.195625 9.53625 4.39125 9.8125 3.5625 C10.204375 2.716875 10.59625 1.87125 11 1 C11.99 0.67 12.98 0.34 14 0 C12 5 12 5 10.5625 7.3125 C9.8549982 10.69278639 10.58459286 11.44784858 12.375 14.3125 C13.23298844 15.55360093 14.10292921 16.78684721 15 18 C14.01 18 13.02 18 12 18 C9.8125 15 9.8125 15 8 12 C6.8553125 13.2065625 6.8553125 13.2065625 5.6875 14.4375 C3 17 3 17 0 18 C1.07401108 15.08482708 1.77810176 13.22189824 4 11 C4.61923571 7.28458576 3.98494724 5.97506886 2 2.6875 C1.34 1.800625 0.68 0.91375 0 0 Z \" fill=\"currentColor\" transform=\"translate(510,829)\"/><path d=\"M0 0 C1.32 0 2.64 0 4 0 C4 15.84 4 31.68 4 48 C3.67 48 3.34 48 3 48 C2.67 32.82 2.34 17.64 2 2 C1.01 2.33 0.02 2.66 -1 3 C-0.67 2.01 -0.34 1.02 0 0 Z \" fill=\"currentColor\" transform=\"translate(685,747)\"/><path d=\"M0 0 C2.64 0 5.28 0 8 0 C8.38218767 1.65614657 8.71395102 3.32457024 9 5 C8 6 8 6 6.15234375 6.09765625 C4.1015625 6.06510417 2.05078125 6.03255208 0 6 C0 4.02 0 2.04 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(568,831)\"/><path d=\"M0 0 C3.3 0 6.6 0 10 0 C9.67 1.65 9.34 3.3 9 5 C6.03 5 3.06 5 0 5 C0 3.35 0 1.7 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(568,840)\"/><path d=\"M0 0 C0.99 0.33 1.98 0.66 3 1 C2.38461538 6.53846154 2.38461538 6.53846154 0.4375 8.875 C-0.2740625 9.431875 -0.2740625 9.431875 -1 10 C-1.99 9.67 -2.98 9.34 -4 9 C-2.94124926 5.59687262 -1.99097846 2.98646769 0 0 Z \" fill=\"currentColor\" transform=\"translate(671,771)\"/><path d=\"M0 0 C0.99 0 1.98 0 3 0 C3.81302325 1.45804169 4.62540131 2.91644315 5.4375 4.375 C5.88996094 5.18710937 6.34242188 5.99921875 6.80859375 6.8359375 C7.5650536 8.20996622 8.29854631 9.59709261 9 11 C8.01 11 7.02 11 6 11 C4.61876037 9.03277992 3.28511874 7.03131672 2 5 C1.34 4.67 0.68 4.34 0 4 C0 2.68 0 1.36 0 0 Z \" fill=\"currentColor\" transform=\"translate(516,836)\"/><path d=\"M0 0 C0.66 0.99 1.32 1.98 2 3 C0.625 5.0625 0.625 5.0625 -2 7 C-5.40060685 7.05863115 -8.65559323 6.58718592 -12 6 C-12 5.67 -12 5.34 -12 5 C-11.06027344 4.90912109 -11.06027344 4.90912109 -10.1015625 4.81640625 C-8.87566406 4.69072266 -8.87566406 4.69072266 -7.625 4.5625 C-6.81289063 4.48128906 -6.00078125 4.40007813 -5.1640625 4.31640625 C-2.95727195 4.10909886 -2.95727195 4.10909886 -1 3 C-0.67 2.01 -0.34 1.02 0 0 Z \" fill=\"currentColor\" transform=\"translate(468,840)\"/><path d=\"M0 0 C0.66 1.32 1.32 2.64 2 4 C1.21654285 5.17219543 0.42297164 6.33763668 -0.375 7.5 C-0.81585937 8.1496875 -1.25671875 8.799375 -1.7109375 9.46875 C-2.13632812 9.9740625 -2.56171875 10.479375 -3 11 C-3.66 11 -4.32 11 -5 11 C-3.92598892 8.08482708 -3.22189824 6.22189824 -1 4 C-0.3574765 1.93125966 -0.3574765 1.93125966 0 0 Z \" fill=\"currentColor\" transform=\"translate(515,836)\"/><path d=\"M0 0 C0.93065133 2.60582371 1.14917407 3.64198224 0.0625 6.25 C-0.4634375 7.11625 -0.4634375 7.11625 -1 8 C-1.33 7.34 -1.66 6.68 -2 6 C-2.99 6 -3.98 6 -5 6 C-3.35 4.02 -1.7 2.04 0 0 Z \" fill=\"var(--logo-bg,#000)\" transform=\"translate(540,589)\"/><path d=\"M0 0 C0.33 0.99 0.66 1.98 1 3 C-0.3125 4.5 -0.3125 4.5 -2 6 C-2.99 6 -3.98 6 -5 6 C-3.86695008 2.60085025 -2.87481525 1.94745549 0 0 Z \" fill=\"currentColor\" transform=\"translate(440,757)\"/><path d=\"M0 0 C0.99 0.33 1.98 0.66 3 1 C1.37660195 2.70884005 -0.29319053 4.37446717 -2 6 C-2.66 6 -3.32 6 -4 6 C-2.84826645 3.53199953 -1.95216435 1.95216435 0 0 Z \" fill=\"currentColor\" transform=\"translate(776,750)\"/><path d=\"M0 0 C-1.39332574 3.36720387 -2.9789286 4.9859524 -6 7 C-5.37162381 3.35541809 -4.14650034 0 0 0 Z \" fill=\"currentColor\" transform=\"translate(395,691)\"/></svg>";
 
-// The prize band across the top: what they're playing for, and who's taking it right now
-function TvPrizeBand({ c, leader, score, big }) {
-  const unit = c.mode === 'hot' ? 'hot' : c.mode === 'points' ? 'pts' : (score === 1 ? 'call' : 'calls');
-  return (
-    <div className={`tv-band${big ? ' big' : ''}`}>
-      <Trophy />
-      <div className="tv-band-main"><span>PLAYING FOR · {CO_MODE[c.mode].toUpperCase()}</span><b className="tv-shine">{c.prize || CO_MODE[c.mode]}</b></div>
-      {leader !== undefined && <div className="tv-band-lead"><span>IN THE LEAD</span>
-        {leader ? <><b key={leader}>{leader}</b><em className="n">{score} {unit}</em></> : <b>Up for grabs</b>}</div>}
-    </div>
-  );
-}
 const Trophy = () => (
   <svg className="tv-cup" viewBox="0 0 64 64" aria-hidden="true"><path fill="currentColor" d="M18 6h28v6h10v6c0 8-6 14-13.5 14.8A15 15 0 0 1 35 40v8h9v6H20v-6h9v-8a15 15 0 0 1-7.5-7.2C14 32 8 26 8 18v-6h10V6Zm-4 12c0 4 2.5 7.5 6 8.7V18h-6Zm30 0v8.7c3.5-1.2 6-4.7 6-8.7h-6Z"/></svg>
 );
+const shortName = (n) => { const p = String(n || '').split(/\s+/).filter(Boolean); return p.length > 1 ? `${p[0]} ${p[p.length - 1][0]}.` : p[0] || ''; };
+const unitWord = (mode, n) => (mode === 'hot' ? 'hot' : mode === 'points' ? 'pts' : n === 1 ? 'call' : 'calls');
 
-// ── TV screen (/tv): for the office TV. Big timer, total calls and the leaderboard while a call out runs;
+// The prize card: what they're playing for, and who's taking it right now
+function TvPrize({ c, lead, second, big }) {
+  const ls = lead ? coScore({ callout: c }, lead) : 0;
+  const gap = lead && second ? ls - coScore({ callout: c }, second) : 0;
+  return (
+    <section className={'tv2-card tv2-prize' + (big ? ' big' : '')}>
+      <div className="tv2-prize-top"><Trophy /><div><span className="tv2-k">PLAYING FOR</span><b className="tv-shine">{c.prize || CO_MODE[c.mode]}</b></div></div>
+      {!big && <div className="tv2-lead"><span className="tv2-k">IN THE LEAD</span>
+        {lead ? <div className="tv2-lead-row" key={lead.name}><i className="tv2-av">{initials(lead.name)}</i><b>{shortName(lead.name)}</b>
+          <em className="n">{ls} {unitWord(c.mode, ls)}{gap > 0 ? ` · ${gap} clear` : gap === 0 && second ? ' · tied' : ''}</em></div>
+          : <div className="tv2-lead-row"><b>Up for grabs</b></div>}</div>}
+    </section>
+  );
+}
+
+// Team calls against the target, as a ring
+function TvRing({ pct }) {
+  const r = 46, l = 2 * Math.PI * r;
+  return (
+    <svg className="tv2-ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r={r} className="bg" />
+      <circle cx="50" cy="50" r={r} className="fg" strokeDasharray={l} strokeDashoffset={l * (1 - Math.min(1, pct))} />
+    </svg>
+  );
+}
+
+// ── TV screen (/tv): for the office TV. Big timer, team calls and the leaderboard while a call out runs;
 // the countdown before it starts, the results after it ends, and today's board in between. Nothing to click.
 function TvScreen() {
   const [co, setCo] = useState(null);
@@ -2399,77 +2500,153 @@ function TvScreen() {
   const c = co?.callout;
   const board = co?.board || [];
   const now = coNow(co);
+
+  // What changed since the last update: who scored (+1 flash) and who climbed (▲)
+  const prev = useRef(null);
+  const [moves, setMoves] = useState({});
+  const samples = useRef([]);
+  const sig = board.map((b) => `${b.name}:${b.calls}:${b.hot}`).join('|');
+  useEffect(() => {
+    if (!c) return;
+    const nowT = Date.now();
+    const cur = Object.fromEntries(board.map((b, i) => [b.name, { s: coScore(co, b), r: i }]));
+    if (prev.current && prev.current.id === c.id) {
+      const m = {};
+      for (const [n, v] of Object.entries(cur)) {
+        const p = prev.current.map[n];
+        if (!p) continue;
+        if (v.s > p.s || v.r < p.r) m[n] = { up: Math.max(0, p.r - v.r), plus: v.s - p.s, at: nowT };
+      }
+      if (Object.keys(m).length) setMoves((old) => ({ ...Object.fromEntries(Object.entries(old).filter(([, x]) => nowT - x.at < 6000)), ...m }));
+    }
+    prev.current = { id: c.id, map: cur };
+    const total = board.reduce((a, b) => a + b.calls, 0);
+    samples.current = [...samples.current.filter((x) => x.id === c.id && nowT - x.t < 6 * 60000), { id: c.id, t: nowT, total }];
+  }, [sig, c?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fresh = (n) => moves[n] && Date.now() - moves[n].at < 6000 ? moves[n] : null;
+
   let body;
+  let headLine = null;
   if (phase === 'countdown') {
     const left = Math.ceil((new Date(c.startsAt).getTime() - now) / 1000);
     body = (<div className="tv-center">
-      <span className="tv-kick">CALL OUT STARTS IN</span>
-      <b className="tv-count n">{left > 59 ? mmss(left * 1000) : Math.max(1, left)}</b>
-      <TvPrizeBand c={c} big />
-      <span className="tv-sub">{c.minutes} minutes · {CO_MODE[c.mode]} · {board.length} people · phones ready</span>
+      <span className="tv2-k">CALL OUT STARTS IN</span>
+      <div className="tv2-countwrap"><span className="tv2-pulse" /><b className="tv2-count n" key={left}>{left > 59 ? mmss(left * 1000) : Math.max(1, left)}</b></div>
+      <TvPrize c={c} big />
+      <span className="tv2-sub">{c.minutes} minutes · {CO_MODE[c.mode]} · {board.length} people · phones ready</span>
     </div>);
   } else if (phase === 'live') {
-    const end = new Date(c.endsAt).getTime();
+    const start = new Date(c.startsAt).getTime(), end = new Date(c.endsAt).getTime();
     const total = board.reduce((a, b) => a + b.calls, 0);
     const hot = board.reduce((a, b) => a + b.hot, 0);
     const teamTarget = (c.target || 0) * board.length;
     const leftMs = end - now;
-    const top = board.slice(0, 10);
-    const lead = board[0] && coScore(co, board[0]) > 0 ? board[0] : null;
-    body = (<>
-      <TvPrizeBand c={c} leader={lead ? lead.name.split(' ')[0] : null} score={lead ? coScore(co, lead) : 0} />
-      <div className="tv-live">
-        <section className="tv-left">
-          <span className="tv-kick"><i />CALL OUT LIVE · ENDS {new Date(end).toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' })}</span>
-          <b className={`tv-timer n${leftMs < 60000 ? ' last' : ''}`}>{mmss(leftMs)}</b>
-          <div className="tv-calls"><span>CALLS</span><b className="n">{fmt(total)}</b>
-            {teamTarget > 0 && <><div className="tv-track"><i style={{ width: `${Math.min(100, (total / teamTarget) * 100)}%` }} /></div>
-              <em>{Math.round((total / teamTarget) * 100)}% of the {fmt(teamTarget)} target</em></>}</div>
-          <div className="tv-stats">
-            <div><span>HOT LEADS</span><b className="n">{hot}</b></div>
-            <div><span>CALLING</span><b className="n">{board.filter((b) => b.calls > 0).length}<small>/{board.length}</small></b></div>
+    const elapsed = Math.max(1, now - start);
+    const pace = Math.round(total / elapsed * (end - start));
+    const old = samples.current.find((x) => x.id === c.id && Date.now() - x.t >= 4.5 * 60000) || samples.current[0];
+    const lastFive = old ? total - old.total : 0;
+    const fiveLabel = old && Date.now() - old.t >= 4.5 * 60000 ? 'in the last 5 min' : 'since this screen opened';
+    const calling = board.filter((b) => b.calls > 0).length;
+    const ranked = board.filter((b) => coScore(co, b) > 0);
+    const lead = ranked[0] || null;
+    // One motivating line, changing every 8 seconds
+    const lines = [
+      teamTarget > total ? `${fmt(teamTarget - total)} calls to the team target` : teamTarget ? 'Team target smashed. Keep going.' : null,
+      lastFive > 0 ? `${lastFive} calls ${fiveLabel}` : null,
+      board[1] && lead && coScore(co, board[0]) - coScore(co, board[1]) <= 3 ? `${board[1].name.split(' ')[0]} is ${coScore(co, board[0]) - coScore(co, board[1]) || 'level'}${coScore(co, board[0]) - coScore(co, board[1]) ? ' behind 1st' : ' with 1st'}` : null,
+      `On pace for ${fmt(pace)} calls`,
+      'The next call could be the one.',
+    ].filter(Boolean);
+    const line = lines[Math.floor(Date.now() / 8000) % lines.length];
+    const lead2 = ranked[1];
+    const gap = lead && lead2 ? coScore(co, lead) - coScore(co, lead2) : 0;
+    const top3 = board.slice(0, 3);
+    const rest = board.slice(3, 11);
+    headLine = line;
+    body = (<div className="tv3">
+      <aside className="tv3-side">
+        <section className={'tv2-card tv2-time' + (leftMs < 60000 ? ' last' : leftMs < 5 * 60000 ? ' close' : '')}>
+          <span className="tv2-k"><i className="tv2-live" />LIVE · TIME LEFT</span>
+          <b className="tv2-timer n">{mmss(leftMs)}</b>
+          <div className="tv2-bar"><i style={{ width: `${Math.min(100, ((now - start) / (end - start)) * 100)}%` }} /></div>
+          <span className="tv2-sub">Ends {new Date(end).toLocaleTimeString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', minute: '2-digit' })}</span>
+        </section>
+        <section className="tv2-card tv3-calls">
+          <div className="tv2-ringwrap"><TvRing pct={teamTarget ? total / teamTarget : 0} />
+            <div className="tv2-ringin"><b className="n" key={total}>{fmt(total)}</b><span>CALLS</span></div></div>
+          <div className="tv3-stats">
+            <div><b className="n">{teamTarget ? `${Math.round((total / teamTarget) * 100)}%` : '—'}</b><span className="tv2-k">OF TARGET</span><em>{teamTarget ? fmt(teamTarget) : 'none set'}</em></div>
+            <div><b className="n">{hot}</b><span className="tv2-k">HOT LEADS</span><em>{calling}/{board.length} calling</em></div>
+            <div className="gold"><b className="n">+{lastFive}</b><span className="tv2-k">MOMENTUM</span><em>{fiveLabel === 'in the last 5 min' ? 'last 5 min' : 'so far'}</em></div>
           </div>
         </section>
-        <section className="tv-board">
-          <ol>{top.map((b, i) => (
-            <li key={b.name} className={i < 3 ? 'p' + (i + 1) : ''}>
-              <em>{i + 1}</em>
-              <div className="tv-who"><div className="tv-line"><b>{b.name}</b><span>{b.team}{b.hot ? ` · ${b.hot} hot` : ''}</span></div></div>
-              <b className="tv-score n">{coScore(co, b)}</b>
-            </li>))}</ol>
+        <section className="tv2-card tv2-prize tv3-prize">
+          <div className="tv2-prize-top"><Trophy /><div><span className="tv2-k">PLAYING FOR</span><b className="tv-shine">{c.prize || CO_MODE[c.mode]}</b></div></div>
+          <span className="tv3-mode">{CO_MODE[c.mode]}</span>
         </section>
-      </div>
-      {(co.recent || []).length > 0 && <div className="tv-ticker"><span className="tv-tk">HOT</span>{co.recent.map((r, i) => <span key={i}><b>{r.name.split(' ')[0]}</b> {r.what}</span>)}</div>}
-    </>);
+      </aside>
+      <section className="tv3-board">
+        <div className="tv3-head"><span className="tv2-k">LEADERBOARD</span>
+          <span className="tv3-lead">{lead ? <>{shortName(lead.name)} leads{gap > 0 ? ` by ${gap}` : lead2 ? ', tied' : ''}</> : 'Up for grabs'}</span></div>
+        <ol className="tv3-top">{top3.map((b, i) => {
+          const f = fresh(b.name);
+          return (
+            <li key={b.name + i} className={'r' + (i + 1) + (f ? ' bump' : '')}>
+              <span className="tv3-medal">{i + 1}</span>
+              <i className="tv2-av big">{initials(b.name)}</i>
+              <div className="tv3-who"><b>{b.name}</b><span>{b.team}{b.hot ? ` · ${b.hot} hot` : ''}</span></div>
+              {f && f.plus > 0 ? <span className="tv2-plus">+{f.plus}</span> : <span />}
+              <b className="tv3-score n">{coScore(co, b)}</b>
+            </li>);
+        })}</ol>
+        <ol className="tv3-rest" start={4}>{rest.map((b, i) => {
+          const f = fresh(b.name);
+          return (
+            <li key={b.name + i} className={f ? 'bump' : ''}>
+              <em className="n">{i + 4}</em>
+              <i className="tv2-av">{initials(b.name)}</i>
+              <div className="tv2-who"><b>{shortName(b.name)}</b><span>{b.team}</span></div>
+              {f && f.up > 0 ? <span className="tv2-up">▲ {f.up}</span> : f && f.plus > 0 ? <span className="tv2-up">+{f.plus}</span> : <span />}
+              <b className="tv2-score n">{coScore(co, b)}</b>
+            </li>);
+        })}</ol>
+        {board.length > 11 && <span className="tv2-more">+{board.length - 11} more in this call out</span>}
+      </section>
+      <div className="tv2-ticker tv3-ticker"><span className="tv2-tk">HOT</span>
+        <div className="tv2-tick-track">{(co.recent || []).length
+          ? <div className="tv2-tick-move">{[...co.recent, ...co.recent].map((r, i) => <span key={i}><b>{r.name.split(' ')[0]}</b> {r.what}</span>)}</div>
+          : <span className="tv2-tick-wait">First hot lead of the call out goes here. Who&apos;s it going to be?</span>}</div></div>
+    </div>);
   } else if (phase === 'done') {
     const ranked = board.filter((b) => coScore(co, b) > 0);
     const total = board.reduce((a, b) => a + b.calls, 0);
     const hot = board.reduce((a, b) => a + b.hot, 0);
     const podium = [ranked[1], ranked[0], ranked[2]];
-    body = (<div className="tv-center">
-      <span className="tv-kick">CALL OUT FINISHED · {c.minutes} MIN</span>
-      <h1 className="tv-win">{ranked[0] ? `${ranked[0].name.split(' ')[0]} wins${c.prize ? ` ${c.prize.charAt(0).toLowerCase() + c.prize.slice(1)}.` : '.'}` : 'Call out finished.'}</h1>
+    body = (<div className="tv-center tv2-done">
+      <div className="tv2-confetti" aria-hidden="true">{Array.from({ length: 36 }, (_, i) => <i key={i} style={{ left: `${(i * 37) % 100}%`, animationDelay: `${(i % 12) * 0.35}s`, animationDuration: `${3.5 + (i % 5) * 0.6}s` }} />)}</div>
+      <span className="tv2-k">CALL OUT FINISHED · {c.minutes} MIN</span>
+      <h1 className="tv2-win">{ranked[0] ? <>{ranked[0].name.split(' ')[0]} wins{c.prize ? <> <span className="tv-shine dark">{c.prize.charAt(0).toLowerCase() + c.prize.slice(1)}</span></> : ''}.</> : 'Call out finished.'}</h1>
       <div className="tv-podium">{podium.map((b, i) => b ? (
-        <div key={i} className={'s' + [2, 1, 3][i]}><b>{b.name.split(' ')[0]}</b><span>{coScore(co, b)} {c.mode === 'hot' ? 'hot' : c.mode === 'points' ? 'pts' : 'calls'}</span><div>{[2, 1, 3][i]}</div></div>
+        <div key={i} className={'s' + [2, 1, 3][i]}><i className="tv2-av big">{initials(b.name)}</i><b>{b.name.split(' ')[0]}</b><span>{coScore(co, b)} {unitWord(c.mode, coScore(co, b))}</span><div>{[2, 1, 3][i]}</div></div>
       ) : <div key={i} className={'s' + [2, 1, 3][i] + ' gap'} />)}</div>
-      <span className="tv-sub">{fmt(total)} calls · {hot} hot leads · {ranked.length} of {board.length} people calling</span>
+      <span className="tv2-sub">{fmt(total)} calls · {hot} hot leads · {ranked.length} of {board.length} people calling</span>
     </div>);
   } else {
     const rows = (today?.rows || []).filter((r) => r.calls > 0).sort((a, b) => b.calls - a.calls).slice(0, 10);
     const total = (today?.rows || []).reduce((a, r) => a + r.calls, 0);
     body = (<div className="tv-center">
-      <span className="tv-kick">NO CALL OUT RUNNING</span>
-      <h1 className="tv-win">{today ? `${fmt(total)} calls today.` : 'Waiting for the next call out.'}</h1>
-      {rows.length > 0 && <ol className="tv-today">{rows.map((r, i) => <li key={r.name + i}><em>{i + 1}</em><b>{r.name}</b><span className="n">{r.calls}</span></li>)}</ol>}
-      <span className="tv-sub dim">This screen switches over by itself when a call out starts.</span>
+      <span className="tv2-k">NO CALL OUT RUNNING</span>
+      <h1 className="tv2-win">{today ? `${fmt(total)} calls today.` : 'Waiting for the next call out.'}</h1>
+      {rows.length > 0 && <ol className="tv-today">{rows.map((r, i) => <li key={r.name + i}><em>{i + 1}</em><i className="tv2-av">{initials(r.name)}</i><b>{r.name}</b><span className="n">{r.calls}</span></li>)}</ol>}
+      <span className="tv2-sub dim">This screen switches over by itself when a call out starts.</span>
     </div>);
   }
   return (
     <div className={`tv${idleMouse ? ' nomouse' : ''}`}>
       <header className="tv-top"><span className="tv-logo" aria-label="Apex Homes DXB" dangerouslySetInnerHTML={{ __html: APEX_LOGO }} />
-        {c?.test && <span className="tv-test">TEST · ONLY YOU CAN SEE THIS · NUMBERS ARE MADE UP</span>}
-        <span className="tv-clock n">{clock}</span></header>
-      {co === null ? <div className="tv-center"><span className="tv-sub dim">Loading…</span></div> : body}
+        {headLine ? <span className="tv3-line" key={headLine}>{headLine}</span> : <span />}
+        <span className="tv-topr">{c?.test && <span className="tv-test">TEST · ONLY YOU SEE THIS</span>}<span className="tv-clock n">{clock}</span></span></header>
+      {co === null ? <div className="tv-center"><span className="tv2-sub dim">Loading…</span></div> : body}
       {!full && !idleMouse && <button className="tv-full" onClick={goFull}>Full screen</button>}
     </div>
   );
