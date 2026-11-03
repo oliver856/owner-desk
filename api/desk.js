@@ -10,11 +10,20 @@ import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
 import { ensureReports, setReportOptin } from './_lib/reports.js';
 import { ensureKendal } from './_lib/kendal.js';
+import { ensureLeads, leadAllowed, LEAD_RETRY } from './_lib/leads.js';
 
 const PAGE = 100;
 const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 'size_sqft', 'lease_status', 'end_date', 'annual_rent',
   'prev_rent', 'renewals', 'last_sale_price', 'owner_id', 'owner_name', 'owner_masked', 'has_phone', 'owner_units', 'owners_n', 'mortgaged',
   'last_called', 'last_outcome'];
+
+// Leads: brokers can only copy, call or note their own. Nothing to check until the Lead pool exists.
+// (Returns a piece of SQL, so it must never be awaited: awaiting a piece of SQL runs it on its own.)
+function leadCheck(s) {
+  return s.leadArea ? leadAllowed(s, 'u.id') : sql`true`;
+}
+const LEAD_HOT = "^(still looking|viewing booked|send options|follow up|replied|wants to|in discussion)";
+const LEAD_TABS = ['todo', 'retry', 'hot', 'called', 'all'];
 
 const places = new Map(); // building list per area set, kept for 1 minute
 
@@ -58,8 +67,8 @@ const ensureNotes = ensureOnce((q) => q`select to_regclass('desk.notes') is not 
   await tx`revoke all on desk.notes from anon, authenticated`;
 });
 // Hot and cold, the same way the dashboards count them
-const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report)')`;
-const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|end user|rented|other|sold|agent|cold)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report|still looking|viewing booked|send options)')`;
+const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|end user|rented|other|sold|agent|cold|already found|not looking)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
 
 // The time window for the dashboards (Dubai time): today, this week, this month, last month, or any from/to dates.
 // end is exclusive. workdays = Mon-Fri in the window up to today, for the call target.
@@ -209,7 +218,7 @@ const actions = {
     if (req.method === 'POST') {
       const b = body(req).order || {};
       const clean = {};
-      for (const g of ['Cold', 'Hot']) if (Array.isArray(b[g])) clean[g] = b[g].map((x) => String(x).slice(0, 60)).slice(0, 30);
+      for (const g of ['Cold', 'Hot', 'Lead Cold', 'Lead Hot']) if (Array.isArray(b[g])) clean[g] = b[g].map((x) => String(x).slice(0, 60)).slice(0, 30);
       await sql`insert into desk.staff_ui (user_id, quick_order) values (${s.user_id}, ${sql.json(clean)})
                 on conflict (user_id) do update set quick_order = excluded.quick_order, updated_at = now()`;
       return res.json({ ok: true, order: clean });
@@ -350,6 +359,7 @@ const actions = {
   // not do-not-call, not being worked by someone else. Every copy is logged and there's a daily limit.
   async copyNumber(req, res, s, ip) {
     if (req.method !== 'POST') return res.status(405).end();
+    if (s.leadArea) await ensureLeads();
     const unitId = Number(body(req).unitId), ownerId = Number(body(req).ownerId);
     if (!Number.isInteger(unitId) || !Number.isInteger(ownerId)) return res.status(400).json({ error: 'Bad request' });
     const c = await caps(s.user_id);   // no daily limit; every copy is still logged
@@ -357,7 +367,7 @@ const actions = {
       select ph.phone from desk.units u join desk.buildings b on b.id = u.building_id
       join desk.unit_owners uo on uo.unit_id = u.id and uo.owner_id = ${ownerId} and uo.role = 'owner'
       join desk.owner_phones ph on ph.owner_id = uo.owner_id
-      where u.id = ${unitId} and b.area_id = any(${s.areas})`;
+      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${leadCheck(s)}`;
     if (!x) return res.status(403).json({ error: 'This owner isn\'t in your areas or has no mobile.' });
     const [dnc] = await sql`select 1 from desk.do_not_call where owner_id = ${ownerId}`;
     if (dnc) return res.status(403).json({ error: 'This owner asked not to be contacted.' });
@@ -374,16 +384,17 @@ const actions = {
 
   async call(req, res, s, ip) {
     if (req.method !== 'POST') return res.status(405).end();
+    if (s.leadArea) await ensureLeads();
     const unitId = Number(body(req).unitId), ownerId = Number(body(req).ownerId);
     if (!Number.isInteger(unitId) || !Number.isInteger(ownerId)) return res.status(400).json({ error: 'Bad request' });
     // No calling hours and no daily call limit: brokers can call any time, as much as they like
     const [x] = await sql`
-      select o.name as owner_name, u.unit_no, u.unit_type, b.subcommunity, b.name as building
+      select o.name as owner_name, u.unit_no, u.unit_type, b.subcommunity, b.name as building, b.area_id
       from desk.units u join desk.buildings b on b.id = u.building_id
       join desk.unit_owners uo on uo.unit_id = u.id and uo.owner_id = ${ownerId} and uo.role = 'owner'
       join desk.owners o on o.id = uo.owner_id
       join desk.owner_phones ph on ph.owner_id = uo.owner_id
-      where u.id = ${unitId} and b.area_id = any(${s.areas})`;
+      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${leadCheck(s)}`;
     if (!x) return res.status(403).json({ error: 'This owner isn\'t in your areas or has no mobile.' });
     const [dnc] = await sql`select 1 from desk.do_not_call where owner_id = ${ownerId}`;
     if (dnc) return res.status(403).json({ error: 'This owner asked not to be called.' });
@@ -410,7 +421,10 @@ const actions = {
 
     const parts = x.owner_name.toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()).split(' ');
     const shortName = parts.length > 2 ? `${parts[0]} ${parts[parts.length - 1]}` : parts.join(' ');
-    const place = x.unit_type === 'Villa' ? (/^Street /.test(x.unit_no) ? `${x.subcommunity} ${x.unit_no}` : `${x.subcommunity} villa ${x.unit_no}`) : `${x.building} ${x.unit_no}`;
+    const lead = s.leadArea && Number(x.area_id) === s.leadArea;
+    if (lead && x.owner_name === 'No name given') parts.splice(0, parts.length, 'lead');
+    const place = lead ? `Lead · ${x.building}`
+      : x.unit_type === 'Villa' ? (/^Street /.test(x.unit_no) ? `${x.subcommunity} ${x.unit_no}` : `${x.subcommunity} villa ${x.unit_no}`) : `${x.building} ${x.unit_no}`;
     let phones = 0;
     try { phones = await pushToUser(s.user_id, { title: `Call ${shortName}`, body: `${place} · tap to call`, url: '/phone', tag: 'call' }); } catch { phones = 0; }
     res.json({ requestId: Number(r.id), phones, minutes });
@@ -419,12 +433,14 @@ const actions = {
   // A note on a unit, written any time (not only after a call). Notes stay on the record; they can't be deleted.
   async addNote(req, res, s, ip) {
     if (req.method !== 'POST') return res.status(405).end();
+    if (s.leadArea) await ensureLeads();
     const b = body(req);
     const unitId = Number(b.unitId);
     const text = String(b.body || '').trim().slice(0, 2000);
     if (!Number.isInteger(unitId) || !text) return res.status(400).json({ error: 'Write a note first.' });
     await ensureNotes();
-    const [ok] = await sql`select 1 from desk.mv_units where id = ${unitId} and area_id = any(${s.areas})`;
+    const [ok] = await sql`select 1 from desk.units u join desk.buildings b on b.id = u.building_id
+      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${leadCheck(s)}`;
     if (!ok) return res.status(403).json({ error: 'That unit isn\'t in your areas.' });
     const [n] = await sql`
       insert into desk.notes (unit_id, user_id, body) values (${unitId}, ${s.user_id}, ${text})
@@ -476,6 +492,93 @@ const actions = {
     const t = await saveTemplates(who, b.templates);
     await audit(s.user_id, 'templates_saved', { detail: { user: who }, ip });
     res.json({ ok: true, templates: t });
+  },
+
+  // ── Lead pool: this person's own leads (managers and up can look at anyone's, or everyone's) ──
+  async leads(req, res, s) {
+    const q = query(req);
+    if (!s.leadArea) return res.json({ ready: false, rows: [], counts: {}, locations: [] });
+    await Promise.all([ensureLeads(), ensureNotes(), ensureHolds()]);
+    const boss = s.role !== 'broker';
+    const who = boss ? (q.get('who') || 'me') : 'me';
+    const tab = LEAD_TABS.includes(q.get('tab')) ? q.get('tab') : 'todo';
+    const page = Math.max(1, Number(q.get('page')) || 1);
+    const locs = (q.get('loc') || '').split('|').map((x) => x.trim()).filter(Boolean).slice(0, 40);
+    const text = String(q.get('q') || '').trim().toLowerCase().slice(0, 60);
+    const whose = who === 'all' ? sql`l.assigned_to is not null`
+      : who === 'me' ? sql`l.assigned_to = ${s.user_id}`
+      : /^[0-9a-f-]{36}$/.test(who) ? sql`l.assigned_to = ${who}` : sql`false`;
+    const base = sql`${whose}
+      ${locs.length ? sql`and l.location = any(${locs})` : sql``}
+      ${text ? sql`and lower(concat_ws(' ', l.name, l.location, l.beds, l.budget)) like ${'%' + text + '%'}` : sql``}`;
+    // The latest call on each lead, worked out once
+    const last = sql`(select c.called_at, c.outcome, c.note from desk.calls c where c.owner_id = l.owner_id order by c.called_at desc limit 1)`;
+    const tabSqlL = (t) => (t === 'todo' ? sql`lc.called_at is null`
+      : t === 'retry' ? sql`(lc.outcome = 'No answer' or lc.note ~* ${LEAD_RETRY})`
+      : t === 'hot' ? sql`(lc.outcome = 'Call back' or lc.note ~* ${LEAD_HOT})`
+      : t === 'called' ? sql`lc.called_at is not null` : sql`true`);
+    const sort = q.get('sort');
+    const order = sort === 'budget_hi' ? sql`l.budget_num desc nulls last, l.unit_id`
+      : sort === 'budget_lo' ? sql`l.budget_num asc nulls last, l.unit_id`
+      : sort === 'recent' ? sql`lc.called_at desc nulls last, l.unit_id`
+      // Default: shuffled, but the same shuffle every time for this person, so the list doesn't jump about
+      : sql`md5(l.unit_id::text || ${s.user_id}::text)`;
+    const [rows, [counts], locations] = await Promise.all([
+      sql`select l.unit_id as id, l.owner_id, l.name, l.location, l.beds, l.budget, l.budget_num, (l.assigned_to = ${s.user_id}) as mine,
+            st.full_name as assigned_name, ph.masked, (ph.owner_id is not null) as has_phone,
+            exists (select 1 from desk.do_not_call d where d.owner_id = l.owner_id) as dnc,
+            lc.called_at as last_called, lc.outcome as last_outcome,
+            (select coalesce(json_agg(y order by y.t desc), '[]') from (
+               select n.body as text, n.created_at as t, sx.full_name as by
+               from desk.notes n join desk.staff sx on sx.user_id = n.user_id where n.unit_id = l.unit_id
+               union all
+               select coalesce(nullif(c.note, ''), c.outcome), coalesce(c.outcome_at, c.called_at), sx.full_name
+               from desk.calls c join desk.staff sx on sx.user_id = c.user_id
+               where c.owner_id = l.owner_id and (coalesce(c.note, '') <> '' or c.outcome is not null)
+               order by 2 desc limit 3) y) as notes,
+            ((select count(*) from desk.notes n where n.unit_id = l.unit_id)
+             + (select count(*) from desk.calls c where c.owner_id = l.owner_id and (coalesce(c.note, '') <> '' or c.outcome is not null)))::int as notes_total,
+            (select json_build_object('by', sx.full_name, 'until', h.until, 'why', h.why)
+               from desk.owner_hold(l.owner_id, ${s.user_id}) h join desk.staff sx on sx.user_id = h.by_user) as hold
+          from desk.leads l
+          left join desk.owner_phones ph on ph.owner_id = l.owner_id
+          left join desk.staff st on st.user_id = l.assigned_to
+          left join lateral ${last} lc on true
+          where ${base} and ${tabSqlL(tab)}
+          order by ${order} limit ${PAGE} offset ${(page - 1) * PAGE}`,
+      sql`select count(*) filter (where ${tabSqlL('todo')})::int as todo, count(*) filter (where ${tabSqlL('retry')})::int as retry,
+                 count(*) filter (where ${tabSqlL('hot')})::int as hot, count(*) filter (where ${tabSqlL('called')})::int as called,
+                 count(*)::int as all
+          from desk.leads l left join lateral ${last} lc on true where ${base}`,
+      sql`select l.location as name, count(*)::int as n from desk.leads l where ${whose} group by 1 order by 2 desc, 1`,
+    ]);
+    // Managers and up: who has leads, for the "whose leads" picker, and how the split stands
+    const people = boss ? await sql`
+      select st.user_id, st.full_name as name, count(*)::int as leads,
+             count(*) filter (where exists (select 1 from desk.calls c where c.owner_id = l.owner_id))::int as called
+      from desk.leads l join desk.staff st on st.user_id = l.assigned_to group by 1, 2 order by 2` : [];
+    res.json({ ready: true, rows, counts, locations, page, pageSize: PAGE, people, me: s.user_id, canSplit: ['admin', 'director'].includes(s.role) });
+  },
+
+  // Share the leads nobody has called yet evenly, at random, between everyone active (brokers and managers).
+  // Leads someone has already called stay with them.
+  async leadsSplit(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    if (!['admin', 'director'].includes(s.role)) return res.status(403).json({ error: 'Only admins and directors can re-split the lead pool.' });
+    await ensureLeads();
+    const r = await sql`
+      with people as (
+        select user_id, row_number() over (order by random()) - 1 as i, count(*) over () as n
+        from desk.staff where active and role in ('broker', 'manager')),
+      deal as (
+        select l.unit_id, row_number() over (order by random()) - 1 as k from desk.leads l
+        where not exists (select 1 from desk.calls c where c.owner_id = l.owner_id))
+      update desk.leads l set assigned_to = p.user_id, assigned_at = now()
+      from deal d join people p on p.i = d.k % p.n
+      where l.unit_id = d.unit_id returning l.assigned_to`;
+    const people = new Set(r.map((x) => x.assigned_to)).size;
+    await audit(s.user_id, 'leads_split', { detail: { leads: r.length, people }, ip });
+    res.json({ ok: true, leads: r.length, people });
   },
 
   // ── Call out mode ──
