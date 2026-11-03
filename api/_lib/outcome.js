@@ -18,6 +18,9 @@ export async function saveOutcome(s, requestId, outcome, note, kendal, ip, repor
     where request_id = ${requestId} and user_id = ${s.user_id}
     returning id, unit_id, owner_id`;
   if (!c) return null;
+  // Lead pool calls: no Kendal push (the leads came from Kendal) and no monthly owner report
+  const [lead] = await sql`select to_regclass('desk.leads') is not null as t`.then(([t]) => (t.t ? sql`select 1 from desk.leads where unit_id = ${c.unit_id}` : []));
+  if (lead) { kendal = false; report = false; }
   if (outcome === 'Do not call') {
     await sql`insert into desk.do_not_call (owner_id, added_by, reason) values (${c.owner_id}, ${s.user_id}, 'Owner asked on a call')
               on conflict (owner_id) do nothing`;
