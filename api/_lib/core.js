@@ -120,16 +120,68 @@ export async function staffFor(req) {
   // brokers only reach their own leads (checked where a number is copied or called).
   const leadArea = s.lead_area ? Number(s.lead_area) : null;
   const own = (s.areas || []).map(Number).filter((a) => a !== lookupArea && a !== leadArea);
-  return { ...s, lookupArea, leadArea, listAreas: own, areas: [...own, ...(lookupArea ? [lookupArea] : []), ...(leadArea ? [leadArea] : [])] };
+  const locked = await lockedFor(s.user_id);
+  return { ...s, lookupArea, leadArea, locked, listAreas: own, areas: [...own, ...(lookupArea ? [lookupArea] : []), ...(leadArea ? [leadArea] : [])] };
+}
+
+// ── Building locks ──
+// A lock hides some buildings from some people (e.g. Ivan's best Greens buildings from Naythan and Kevin) until they
+// have called a share (e.g. 80%) of everything else in that area between them. Then it opens by itself, for good.
+// Locks are rows in desk.building_locks, set up with SQL. If that table isn't there yet, nobody is locked out of anything.
+const lockCache = new Map();   // user -> { at, ids }
+const lockChecked = new Map(); // lock id -> when its progress was last worked out
+const LOCK_USER_MS = 60e3, LOCK_PROGRESS_MS = 5 * 60e3;
+async function lockedFor(userId) {
+  const c = lockCache.get(userId);
+  if (c && c.at > Date.now() - LOCK_USER_MS) return c.ids;
+  let ids = [];
+  try {
+    const locks = await sql`select id, user_ids, building_ids, unlock_pct from desk.building_locks
+                            where unlocked_at is null and ${userId}::uuid = any(user_ids)`;
+    for (const l of locks) {
+      if (await lockOpened(l)) continue;
+      ids.push(...l.building_ids.map(Number));
+    }
+  } catch { ids = c?.ids || []; }
+  ids = [...new Set(ids)];
+  lockCache.set(userId, { at: Date.now(), ids });
+  return ids;
+}
+// Share of units with a mobile in the lock's area(s), outside the locked buildings, that these people have called
+export async function lockProgress(l) {
+  const [p] = await sql`
+    with a as (select distinct area_id from desk.buildings where id = any(${l.building_ids})),
+    u as (select m.id from desk.mv_units m join desk.units uu on uu.id = m.id
+          where m.area_id in (select area_id from a) and m.has_phone and not (uu.building_id = any(${l.building_ids})))
+    select (select count(*) from u)::int as total,
+           (select count(distinct c.unit_id) from desk.calls c where c.unit_id in (select id from u) and c.user_id = any(${l.user_ids}))::int as called`;
+  return { ...p, pct: p.total ? Math.round(1000 * p.called / p.total) / 10 : 100 };
+}
+async function lockOpened(l) {
+  const last = lockChecked.get(l.id);
+  if (last && last > Date.now() - LOCK_PROGRESS_MS) return false;
+  lockChecked.set(l.id, Date.now());
+  try {
+    const p = await lockProgress(l);
+    if (p.pct < l.unlock_pct) return false;
+    await sql`update desk.building_locks set unlocked_at = now() where id = ${l.id} and unlocked_at is null`;
+    return true;
+  } catch { return false; }
+}
+// Use in a where clause: true for units in buildings this person may see. bld is the building id column.
+export function notLocked(s, bld) {
+  return s?.locked?.length ? sql`not (${bld} = any(${s.locked}))` : sql`true`;
 }
 
 // Wraps a route: office-IP check, sign-in check, no caching, friendly errors.
 // Watchdog: no request may take longer than this. If one does, its database connections are presumed stuck,
 // they're replaced, and the page gets a quick "try again" (the screen retries by itself) instead of hanging.
-const REQUEST_LIMIT_MS = 9000;
+const REQUEST_LIMIT_MS = 12000;
+// A read that hasn't answered after this long is almost always stuck on a dead connection, not doing real work:
+// it is started again straight away on fresh connections, and whichever answers first wins.
+const RETRY_READ_MS = 4500;
 // Vercel freezes a server copy between requests. Database connections left open across a freeze are often dead when it
-// wakes, and the next queries on them hang until the watchdog fires (the "random 12 second" stalls). So if this copy has
-// been idle for a few seconds and nothing else is running on it, it starts with fresh connections (about 0.1s) instead.
+// wakes, so if this copy has been idle for a few seconds and nothing else is running on it, it starts with fresh ones.
 const IDLE_RESET_MS = 4000;
 let inflight = 0;
 export function route(fn, { office = true, auth = true } = {}) {
@@ -137,26 +189,66 @@ export function route(fn, { office = true, auth = true } = {}) {
     res.setHeader('Cache-Control', 'no-store');
     if (inflight === 0 && globalThis.__dbLast && Date.now() - globalThis.__dbLast > IDLE_RESET_MS) resetDb();
     inflight++;
-    let timedOut = false;
-    const dog = setTimeout(() => {
-      timedOut = true;
-      console.error('Request took too long, resetting database connections:', req.url);
-      resetDb();
-      if (!res.headersSent) res.status(503).json({ error: 'The Owner Desk is busy. Trying again…', retry: true });
-    }, REQUEST_LIMIT_MS);
-    try {
-      const ip = clientIp(req);
-      if (office && !officeAllowed(ip)) return res.status(403).json({ error: 'The Owner Desk only works from the Apex office network.' });
-      let staff = null;
-      if (auth) {
-        staff = await staffFor(req);
-        if (!staff) return res.status(401).json({ error: 'Signed out' });
+    const isRead = !req.method || req.method === 'GET';
+    let retried = false;
+    // Each attempt writes through its own wrapper, so only the first answer reaches the browser
+    const wrap = () => {
+      let code = 200;
+      const w = {
+        get headersSent() { return res.headersSent; },
+        setHeader: (...a) => { if (!res.headersSent) res.setHeader(...a); return w; },
+        status: (c) => { code = c; return w; },
+        json: (j) => { if (!res.headersSent) res.status(code).json(j); return w; },
+        send: (x) => { if (!res.headersSent) res.status(code).send(x); return w; },
+        end: (x) => { if (!res.headersSent) res.status(code).end(x); return w; },
+      };
+      return w;
+    };
+    const attempt = async (second) => {
+      const w = wrap();
+      try {
+        const ip = clientIp(req);
+        if (office && !officeAllowed(ip)) return w.status(403).json({ error: 'The Owner Desk only works from the Apex office network.' });
+        let staff = null;
+        if (auth) {
+          staff = await staffFor(req);
+          if (!staff) return w.status(401).json({ error: 'Signed out' });
+        }
+        await fn(req, w, staff, ip);
+      } catch (e) {
+        if (!second && retried) return;   // the first try was replaced by a fresh one; its error doesn't matter
+        console.error(e);
+        if (!res.headersSent) res.status(500).json({ error: 'Something went wrong. Try again.' });
       }
-      await fn(req, res, staff, ip);
-    } catch (e) {
-      if (!timedOut) console.error(e);
-      if (!res.headersSent) res.status(500).json({ error: 'Something went wrong. Try again.' });
-    } finally { clearTimeout(dog); inflight--; globalThis.__dbLast = Date.now(); }
+    };
+    const timers = [];
+    try {
+      const done = [attempt(false)];
+      if (isRead) {
+        done.push(new Promise((resolve) => timers.push(setTimeout(() => {
+          if (res.headersSent) return resolve();
+          console.error('Read stuck, retrying on fresh connections:', req.url);
+          retried = true; resetDb();
+          attempt(true).then(resolve);
+        }, RETRY_READ_MS))));
+      }
+      timers.push(setTimeout(() => {
+        console.error('Request took too long:', req.url);
+        resetDb();
+        if (!res.headersSent) res.status(503).json({ error: 'The Owner Desk is busy. Trying again…', retry: true });
+      }, REQUEST_LIMIT_MS));
+      // Finish as soon as an answer has gone out (or every attempt has ended)
+      await new Promise((resolve) => {
+        let left = done.length;
+        const tick = () => { if (res.headersSent || --left <= 0) resolve(); };
+        done.forEach((p) => p.then(tick, tick));
+        const iv = setInterval(() => { if (res.headersSent) { clearInterval(iv); resolve(); } }, 50);
+        timers.push(iv);
+      });
+    } finally {
+      timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
+      inflight--; globalThis.__dbLast = Date.now();
+    }
   };
 }
 
