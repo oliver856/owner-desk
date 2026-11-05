@@ -4,13 +4,14 @@ import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout, runningCalloutId, isTest, testsOn } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
-import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed } from './_lib/core.js';
+import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed, notLocked } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
 import { ensureReports, setReportOptin } from './_lib/reports.js';
 import { ensureKendal } from './_lib/kendal.js';
 import { ensureLeads, leadAllowed, LEAD_RETRY } from './_lib/leads.js';
+import { ensureFollowups } from './_lib/followups.js';
 
 const PAGE = 100;
 const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 'size_sqft', 'lease_status', 'end_date', 'annual_rent',
@@ -103,14 +104,14 @@ const actions = {
   async me(req, res, s) {
     // The area / sub-community / building lists only change when new data is loaded, and building them reads the
     // whole owner list, so each set is built once and kept for 30 minutes. Screens asking at the same moment share it.
-    const key = [...s.listAreas].sort((a, b) => a - b).join(',');
+    const key = [...s.listAreas].sort((a, b) => a - b).join(',') + '|' + [...(s.locked || [])].sort((a, b) => a - b).join(',');
     let p = places.get(key);
     if (!p || p.at < Date.now() - 30 * 60e3) {
       // Read from the buildings list (a few thousand rows), not the whole owner list: fast even when the database is busy
       const rows = sql`select a.name as area, b.subcommunity,
                          case when exists (select 1 from desk.units u where u.building_id = b.id and u.unit_type <> 'Villa') then b.name end as building
                        from desk.buildings b join desk.areas a on a.id = b.area_id
-                       where b.area_id = any(${s.listAreas}) and exists (select 1 from desk.units u where u.building_id = b.id)`
+                       where b.area_id = any(${s.listAreas}) and ${notLocked(s, sql`b.id`)} and exists (select 1 from desk.units u where u.building_id = b.id)`
         .then((r) => {
           const seen = new Set(); const out = [];
           for (const x of r) { const k = `${x.area}|${x.subcommunity}|${x.building}`; if (!seen.has(k)) { seen.add(k); out.push({ area: x.area, sc: x.subcommunity, bld: x.building }); } }
@@ -267,8 +268,8 @@ const actions = {
     // only=<unit id>: refresh one row in place (after a call) without reloading the list
     const only = Number(q.get('only')) || 0;
     const rowWhere = only
-      ? sql`${whereSql(new URLSearchParams(), s.listAreas, s.user_id)} and v_unit_list.id = ${only}`
-      : sql`${whereSql(q, s.listAreas, s.user_id)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}`;
+      ? sql`${whereSql(new URLSearchParams(), s.listAreas, s.user_id, s.locked)} and v_unit_list.id = ${only}`
+      : sql`${whereSql(q, s.listAreas, s.user_id, s.locked)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}`;
     const [rows, [counts]] = await Promise.all([
       sql`select ${sql(COLS)},
             (select x.body from (
@@ -311,7 +312,7 @@ const actions = {
             count(*) filter (where ${tabSql('callbacks', s.user_id, s.role !== 'broker')})::int as callbacks,
             count(*) filter (where ${tabSql('reports', s.user_id, s.role !== 'broker')})::int as reports,
             count(*) filter (where ${tabSql('monthly', s.user_id, s.role !== 'broker')})::int as monthly
-          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id)}`,
+          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id, s.locked)}`,
     ]);
     const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more', 'only'].includes(k));
     // Awaited on purpose: anything still running after the reply is sent gets frozen mid-query by Vercel and
@@ -325,9 +326,9 @@ const actions = {
     const id = Number(query(req).get('id'));
     await Promise.all([ensureNotes(), ensureHolds(), ensureUnitExtras()]);
     // Checked against the units themselves (not the owner list), so a unit added a moment ago by Lookup opens straight away
-    const inArea = sql`exists (select 1 from desk.units uu join desk.buildings bb on bb.id = uu.building_id where uu.id = ${id} and bb.area_id = any(${s.areas}))`;
+    const inArea = sql`exists (select 1 from desk.units uu join desk.buildings bb on bb.id = uu.building_id where uu.id = ${id} and bb.area_id = any(${s.areas}) and ${notLocked(s, sql`bb.id`)})`;
     const [[u0], owners, calls, notes, [extra]] = await Promise.all([
-      sql`select * from desk.v_unit_list where id = ${id} and area_id = any(${s.areas})`,
+      sql`select * from desk.v_unit_list where id = ${id} and area_id = any(${s.areas}) and ${inArea}`,
       sql`select o.id, o.name, o.is_company, uo.role, ph.masked, (ph.owner_id is not null) as has_phone,
                  (select count(*) from desk.unit_owners x where x.owner_id = o.id and x.role = 'owner')::int as units,
                  exists (select 1 from desk.do_not_call d where d.owner_id = o.id) as dnc,
@@ -355,7 +356,7 @@ const actions = {
              false as is_company, null as owner_masked, false as has_phone, 1 as owner_units, 0 as owners_n, false as mortgaged,
              null as last_called, null as last_outcome
       from desk.units u join desk.buildings b on b.id = u.building_id left join desk.lease_status ls on ls.unit_id = u.id
-      where u.id = ${id} and b.area_id = any(${s.areas})`)[0];
+      where u.id = ${id} and b.area_id = any(${s.areas}) and ${notLocked(s, sql`b.id`)}`)[0];
     if (!u) return res.status(404).json({ error: 'That unit isn\'t in your areas.' });
     delete u.search_text;
     Object.assign(u, extra || {});
@@ -364,7 +365,7 @@ const actions = {
       sql`select uo.owner_id, u.id, u.unit_no, u.unit_type, b.subcommunity, b.name as building
           from desk.unit_owners uo join desk.units u on u.id = uo.unit_id join desk.buildings b on b.id = u.building_id
           where uo.owner_id = any(${owners.map((o) => o.id)}) and uo.role = 'owner' and u.id <> ${id}
-            and b.area_id = any(${s.areas}) order by b.subcommunity, u.unit_no limit 60`,
+            and b.area_id = any(${s.areas}) and ${notLocked(s, sql`b.id`)} order by b.subcommunity, u.unit_no limit 60`,
     ]);
     await ensureReports();
     const [report] = await sql`select r.created_at as at, st.full_name as by from desk.report_optins r join desk.staff st on st.user_id = r.user_id where r.unit_id = ${id}`;
@@ -395,7 +396,7 @@ const actions = {
       select ph.phone from desk.units u join desk.buildings b on b.id = u.building_id
       join desk.unit_owners uo on uo.unit_id = u.id and uo.owner_id = ${ownerId} and uo.role = 'owner'
       join desk.owner_phones ph on ph.owner_id = uo.owner_id
-      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${leadCheck(s)}`;
+      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${notLocked(s, sql`b.id`)} and ${leadCheck(s)}`;
     if (!x) return res.status(403).json({ error: 'This owner isn\'t in your areas or has no mobile.' });
     const [dnc] = await sql`select 1 from desk.do_not_call where owner_id = ${ownerId}`;
     if (dnc) return res.status(403).json({ error: 'This owner asked not to be contacted.' });
@@ -422,7 +423,7 @@ const actions = {
       join desk.unit_owners uo on uo.unit_id = u.id and uo.owner_id = ${ownerId} and uo.role = 'owner'
       join desk.owners o on o.id = uo.owner_id
       join desk.owner_phones ph on ph.owner_id = uo.owner_id
-      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${leadCheck(s)}`;
+      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${notLocked(s, sql`b.id`)} and ${leadCheck(s)}`;
     if (!x) return res.status(403).json({ error: 'This owner isn\'t in your areas or has no mobile.' });
     const [dnc] = await sql`select 1 from desk.do_not_call where owner_id = ${ownerId}`;
     if (dnc) return res.status(403).json({ error: 'This owner asked not to be called.' });
@@ -468,7 +469,7 @@ const actions = {
     if (!Number.isInteger(unitId) || !text) return res.status(400).json({ error: 'Write a note first.' });
     await ensureNotes();
     const [ok] = await sql`select 1 from desk.units u join desk.buildings b on b.id = u.building_id
-      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${leadCheck(s)}`;
+      where u.id = ${unitId} and b.area_id = any(${s.areas}) and ${notLocked(s, sql`b.id`)} and ${leadCheck(s)}`;
     if (!ok) return res.status(403).json({ error: 'That unit isn\'t in your areas.' });
     const [n] = await sql`
       insert into desk.notes (unit_id, user_id, body) values (${unitId}, ${s.user_id}, ${text})
@@ -520,6 +521,53 @@ const actions = {
     const t = await saveTemplates(who, b.templates);
     await audit(s.user_id, 'templates_saved', { detail: { user: who }, ip });
     res.json({ ok: true, templates: t });
+  },
+
+  // ── Today's actions: this person's call-backs due today or overdue (count only with ?count=1) ──
+  async actions(req, res, s) {
+    await ensureFollowups();
+    const q = query(req);
+    const endToday = sql`(date_trunc('day', now() at time zone 'Asia/Dubai') + interval '1 day') at time zone 'Asia/Dubai'`;
+    if (q.get('count') === '1') {
+      const [c] = await sql`select count(*)::int as n from desk.followups f where f.user_id = ${s.user_id} and f.done_at is null and f.due_at < ${endToday}
+        and not exists (select 1 from desk.do_not_call d where d.owner_id = f.owner_id)`;
+      return res.json({ due: c.n });
+    }
+    const [lt] = await sql`select to_regclass('desk.leads') is not null as ok`;
+    const leadJson = lt.ok ? sql`(select json_build_object('name', l.name, 'location', l.location, 'beds', l.beds, 'budget', l.budget) from desk.leads l where l.unit_id = f.unit_id)` : sql`null`;
+    const rows = await sql`
+      select f.id, f.due_at, f.kind, (f.due_at < now()) as overdue, f.unit_id, f.owner_id, o.name as owner_name, ph.masked, (ph.owner_id is not null) as has_phone,
+             u.unit_no, u.unit_type, b.subcommunity, b.name as building, ${leadJson} as lead,
+             c.outcome as last_outcome, coalesce(nullif(c.note, ''), c.outcome) as last_note, c.called_at as last_called,
+             (select json_build_object('by', st.full_name, 'until', h.until, 'why', h.why)
+                from desk.owner_hold(f.owner_id, ${s.user_id}) h join desk.staff st on st.user_id = h.by_user) as hold
+      from desk.followups f
+      join desk.owners o on o.id = f.owner_id
+      left join desk.owner_phones ph on ph.owner_id = f.owner_id
+      join desk.units u on u.id = f.unit_id join desk.buildings b on b.id = u.building_id
+      left join desk.calls c on c.id = f.call_id
+      where f.user_id = ${s.user_id} and f.done_at is null and f.due_at < ${endToday}
+        and not exists (select 1 from desk.do_not_call d where d.owner_id = f.owner_id)
+      order by f.due_at limit 300`;
+    const [up] = await sql`select count(*)::int as n from desk.followups f where f.user_id = ${s.user_id} and f.done_at is null
+      and f.due_at >= ${endToday} and f.due_at < ${endToday} + interval '7 days'`;
+    res.json({ rows, comingWeek: up.n });
+  },
+
+  // Tick a call-back off without calling (e.g. sorted on WhatsApp), or move it to another day
+  async followupDone(req, res, s) {
+    if (req.method !== 'POST') return res.status(405).end();
+    await ensureFollowups();
+    const b = body(req);
+    const id = Number(b.id);
+    if (b.moveTo) {
+      const at = new Date(b.moveTo);
+      if (isNaN(at)) return res.status(400).json({ error: 'Pick a date and time.' });
+      await sql`update desk.followups set due_at = ${at}, kind = 'custom' where id = ${id} and user_id = ${s.user_id}`;
+    } else {
+      await sql`update desk.followups set done_at = now() where id = ${id} and user_id = ${s.user_id}`;
+    }
+    res.json({ ok: true });
   },
 
   // ── Lead pool: this person's own leads (managers and up can look at anyone's, or everyone's) ──
