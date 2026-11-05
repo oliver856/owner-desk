@@ -59,11 +59,13 @@ export function sortSql(k) {
   }
 }
 
-export function whereSql(q, areas, me) {
+export function whereSql(q, areas, me, locked = []) {
   const one = (k) => (q.get(k) || '').trim();
   const many = (k) => q.getAll(k).filter(Boolean);
   const num = (k) => { const v = one(k).replace(/,/g, ''); return v === '' || isNaN(Number(v)) ? null : Number(v); };
   const w = [sql`area_id = any(${areas})`];
+  // Buildings locked away from this person for now (see building locks in core.js)
+  if (locked.length) w.push(sql`id not in (select lu.id from desk.units lu where lu.building_id = any(${locked}))`);
 
   one('q').toLowerCase().replace(/[%_\\]/g, '').split(/\s+/).filter(Boolean).slice(0, 5)
     .forEach((word) => w.push(sql`(search_text like ${'%' + word + '%'}
