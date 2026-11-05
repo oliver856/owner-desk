@@ -1,11 +1,12 @@
 import { sql, audit } from './core.js';
 import { setReportOptin } from './reports.js';
 import { pushCallToKendal } from './kendal.js';
+import { setFollowup } from './followups.js';
 
 export const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
 
 // Outcome is optional: a broker can save just a note (e.g. one of the quick notes)
-export async function saveOutcome(s, requestId, outcome, note, kendal, ip, report = false) {
+export async function saveOutcome(s, requestId, outcome, note, kendal, ip, report = false, followup = null) {
   const [c] = await sql`
     update desk.calls set
       -- Saved twice (laptop and phone both open)? Never wipe what's there: keep the first outcome and add the new note to it
@@ -21,6 +22,8 @@ export async function saveOutcome(s, requestId, outcome, note, kendal, ip, repor
   // Lead pool calls: no Kendal push (the leads came from Kendal) and no monthly owner report
   const [lead] = await sql`select to_regclass('desk.leads') is not null as t`.then(([t]) => (t.t ? sql`select 1 from desk.leads where unit_id = ${c.unit_id}` : []));
   if (lead) { kendal = false; report = false; }
+  // When to call back (a month by default; none for Do not call). A follow-up problem never loses the outcome.
+  const fu = await setFollowup(s, c, outcome, followup).catch((e) => { console.error('follow-up not saved', e.message); return null; });
   if (outcome === 'Do not call') {
     await sql`insert into desk.do_not_call (owner_id, added_by, reason) values (${c.owner_id}, ${s.user_id}, 'Owner asked on a call')
               on conflict (owner_id) do nothing`;
@@ -34,5 +37,5 @@ export async function saveOutcome(s, requestId, outcome, note, kendal, ip, repor
     k = await pushCallToKendal(c.id).catch((e) => ({ status: 'error', detail: String(e.message || e) }));
     if (k.status !== 'off') await audit(s.user_id, 'kendal_push', { unitId: c.unit_id, detail: { call_id: c.id, status: k.status, detail: k.detail }, ip });
   }
-  return { ok: true, kendal: k };
+  return { ok: true, kendal: k, followup: fu };
 }
