@@ -68,8 +68,29 @@ const ensureNotes = ensureOnce((q) => q`select to_regclass('desk.notes') is not 
   await tx`revoke all on desk.notes from anon, authenticated`;
 });
 // Hot and cold, the same way the dashboards count them
-const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|send report|still looking|viewing booked|send options)')`;
-const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|end user|rented|other|sold|agent|cold|already found|not looking)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|wants valuation|send report|still looking|viewing booked|send options)')`;
+const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|end user|rented|other|sold|agent|cold|already found|not looking|not interested|not selling|price too high|wrong number|do not call)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+
+// The reason behind each call, for the Hot & cold report: [note starts with / 'outcome:' + outcome, label, group]
+// group: hot, objection (spoke to them, not interested), nocontact (didn't get through)
+const REASONS = [
+  ['Unit available, send WhatsApp', 'Unit available', 'hot'], ['In discussion', 'In discussion', 'hot'], ['Replied', 'Replied', 'hot'],
+  ['Follow up', 'Call back', 'hot'], ['Send report', 'Wants a report', 'hot'], ['Wants to sell', 'Wants to sell', 'hot'],
+  ['Wants to rent', 'Wants to rent', 'hot'], ['Wants to buy', 'Wants to buy', 'hot'], ['Still looking', 'Still looking (lead)', 'hot'],
+  ['Viewing booked', 'Viewing booked (lead)', 'hot'], ['Send options', 'Send options (lead)', 'hot'],
+  ['outcome:Call back', 'Call back', 'hot'], ['outcome:Wants valuation', 'Wants valuation', 'hot'],
+  ['outcome:Listing opportunity', 'Listing opportunity', 'hot'], ['outcome:Wants to sell', 'Wants to sell', 'hot'],
+  ['End user', 'Lives in it (end user)', 'objection'], ['Rented', 'Already rented', 'objection'], ['Sold', 'Already sold', 'objection'],
+  ['Agent', 'Has an agent', 'objection'], ['Other', 'Other (own words)', 'objection'],
+  ['Already found', 'Already found (lead)', 'objection'], ['Not looking anymore', 'Not looking anymore (lead)', 'objection'],
+  ['Not interested', 'Not interested', 'objection'], ['Not selling yet', 'Not selling yet', 'objection'],
+  ['Price too high', 'Price expectations too high', 'objection'], ['Wrong number', 'Wrong number', 'objection'], ['Do not call', 'Do not call', 'objection'],
+  ['Wants valuation', 'Wants valuation', 'hot'],
+  ['outcome:Not interested', 'Not interested', 'objection'], ['outcome:Wrong number', 'Wrong number', 'objection'],
+  ['outcome:Do not call', 'Do not call', 'objection'],
+  ['Called, no reply', 'No reply', 'nocontact'], ['Called, unreachable', 'Unreachable', 'nocontact'],
+  ['Called, line busy', 'Line busy', 'nocontact'], ['Phone off', 'Phone off', 'nocontact'], ['outcome:No answer', 'No reply', 'nocontact'],
+];
 
 // The time window for the dashboards (Dubai time): today, this week, this month, last month, or any from/to dates.
 // end is exclusive. workdays = Mon-Fri in the window up to today, for the call target.
@@ -133,6 +154,49 @@ const actions = {
       soon(rocketAllowed(s), 2000, false)]);
     const pr = prRows[0];
     res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: placeRows, prefs: pr?.prefs || null, rocket });
+  },
+
+  // Hot & cold report: why calls went the way they did, from the quick note (or the outcome) on each call.
+  // Everyone, one team or one broker. Managers only see their own team.
+  async insights(req, res, s) {
+    if (s.role === 'broker') return res.status(403).json({ error: 'Only managers and directors can see this report.' });
+    const q = query(req);
+    if (!q.get('period')) q.set('period', 'week');
+    const r = await periodRange(q);
+    const all = s.role === 'admin' || s.role === 'director';
+    const team = all ? (q.get('team') || '') : (s.team || 'No team');
+    const user = /^[0-9a-f-]{36}$/i.test(q.get('user') || '') ? q.get('user') : '';
+    const inRange = sql`c.called_at >= ${r.start} and c.called_at < ${r.end}`;
+    const who = sql`(${team === ''} or coalesce(st.team, 'No team') = ${team}) and (${user === ''} or st.user_id = nullif(${user}, '')::uuid)`;
+    // Every call with its reason: the longest quick note its note starts with, else its outcome
+    const why = sql`
+      with reasons(prefix, label, grp) as (values ${sql(REASONS.map((x) => [x[0], x[1], x[2]]))}),
+      c as (
+        select c.id, c.user_id, st.full_name, coalesce(st.team, 'No team') as team, c.note,
+               coalesce(n.label, o.label, case when coalesce(c.note, '') = '' then 'Nothing logged' else 'Own note' end) as reason,
+               coalesce(n.grp, o.grp, case when coalesce(c.note, '') = '' then 'none' else 'other' end) as grp
+        from desk.calls c join desk.staff st on st.user_id = c.user_id
+        left join lateral (select label, grp from reasons where lower(coalesce(c.note, '')) like lower(prefix) || '%'
+                           and prefix not like 'outcome:%' order by length(prefix) desc limit 1) n on true
+        left join lateral (select label, grp from reasons where prefix = 'outcome:' || c.outcome limit 1) o on true
+        where ${inRange} and ${who})`;
+    const [reasons, people, own] = await Promise.all([
+      sql`${why} select reason, grp, count(*)::int as n from c group by 1, 2 order by n desc`,
+      sql`${why} select user_id, full_name as name, team, count(*)::int as calls,
+            count(*) filter (where grp = 'hot')::int as hot, count(*) filter (where grp = 'objection')::int as objection,
+            count(*) filter (where grp = 'nocontact')::int as nocontact,
+            jsonb_object_agg(reason, n) as reasons
+          from (select user_id, full_name, team, reason, grp, count(*) over (partition by user_id, reason) as n from c) x
+          group by 1, 2, 3 order by calls desc, name`,
+      sql`${why} select full_name as name, substr(note, 1, 220) as note from c
+          where reason = 'Other (own words)' and length(note) > 7 order by id desc limit 40`,
+    ]);
+    const choices = await sql`select st.user_id, st.full_name as name, coalesce(st.team, 'No team') as team from desk.staff st
+      where st.active and (${all} or coalesce(st.team, 'No team') = ${s.team || 'No team'})
+        and (st.role in ('broker', 'manager') or exists (select 1 from desk.calls c where c.user_id = st.user_id and ${inRange}))
+      order by st.full_name`;
+    res.json({ period: r.period, from: r.from, to: r.to, team, user, all, myTeam: s.team, reasons, people, own,
+      teams: [...new Set(choices.map((x) => x.team))].sort(), brokers: choices });
   },
 
   // Manager dashboard (their team) and director overview (every team)
