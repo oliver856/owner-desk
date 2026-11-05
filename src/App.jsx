@@ -10,28 +10,83 @@ import { createClient } from '@supabase/supabase-js';
 const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
 // One-tap notes offered after a call and in the unit's Notes box. Brokers can still type their own.
 // Each one also picks the WhatsApp follow-up message (see WHATSAPP_BY_NOTE). 'kendal' ticks "Send to Kendal".
-const QUICK_NOTES = {
-  Cold: ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'End user', 'Rented', 'Sold', 'Agent', 'Other'],
-  Hot: ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy'],
+// ── Call results ──
+// One list drives the call outcome panel, the unit notes, hot/cold colouring, the WhatsApp message and the Hot & cold
+// report. k = what's saved at the start of the note (never change an existing k, old notes and reports match on it),
+// label = what the broker sees, o = the outcome saved with it, kendal = ticks "Send to Kendal", report = ticks the
+// monthly report, wa: false = no WhatsApp afterwards.
+const RESULTS = {
+  owner: [
+    { tone: 'cold', title: "Didn't get through", items: [
+      { k: 'Called, no reply', label: 'No reply', o: 'No answer' },
+      { k: 'Called, line busy, call again later', label: 'Line busy', o: 'No answer' },
+      { k: 'Called, unreachable', label: 'Unreachable', o: 'No answer' },
+      { k: 'Phone off', o: 'No answer' },
+      { k: 'Wrong number', o: 'Wrong number', wa: false }] },
+    { tone: 'cold', title: 'Spoke, not interested', items: [
+      { k: 'Not interested', o: 'Not interested' },
+      { k: 'Not selling yet', o: 'Not interested' },
+      { k: 'Price too high', label: 'Price expectations too high', o: 'Not interested' },
+      { k: 'End user', label: 'Lives in it', o: 'Not interested' },
+      { k: 'Rented', label: 'Already rented', o: 'Not interested' },
+      { k: 'Sold', label: 'Already sold', o: 'Not interested' },
+      { k: 'Agent', label: 'Has an agent', o: 'Not interested' },
+      { k: 'Other', label: 'Other (say why)', o: 'Not interested' },
+      { k: 'Do not call', o: 'Do not call', wa: false }] },
+    { tone: 'hot', title: 'Ready now', items: [
+      { k: 'Wants to sell', o: 'Wants to sell', kendal: true },
+      { k: 'Wants to rent', label: 'Wants to rent it out', o: 'Listing opportunity', kendal: true },
+      { k: 'Wants valuation', label: 'Wants a valuation', o: 'Wants valuation', kendal: true },
+      { k: 'Unit available, send WhatsApp', label: 'Unit available, send details', o: 'Listing opportunity', kendal: true },
+      { k: 'Wants to buy', o: 'Call back', kendal: true }] },
+    { tone: 'hot', title: 'Keep warm', items: [
+      { k: 'Follow up', label: 'Call back', o: 'Call back' },
+      { k: 'In discussion', o: 'Call back' },
+      { k: 'Send report', label: 'Send a market report', o: 'Call back', report: true },
+      { k: 'Replied', o: 'Call back' }] },
+  ],
+  lead: [
+    { tone: 'cold', title: "Didn't get through", items: [
+      { k: 'Called, no reply', label: 'No reply', o: 'No answer' },
+      { k: 'Called, line busy, call again later', label: 'Line busy', o: 'No answer' },
+      { k: 'Called, unreachable', label: 'Unreachable', o: 'No answer' },
+      { k: 'Phone off', o: 'No answer' },
+      { k: 'Wrong number', o: 'Wrong number', wa: false }] },
+    { tone: 'cold', title: 'Spoke, not interested', items: [
+      { k: 'Already found', o: 'Not interested' },
+      { k: 'Not looking anymore', o: 'Not interested' },
+      { k: 'Agent', label: 'Using another agent', o: 'Not interested' },
+      { k: 'Not interested', o: 'Not interested' },
+      { k: 'Other', label: 'Other (say why)', o: 'Not interested' },
+      { k: 'Do not call', o: 'Do not call', wa: false }] },
+    { tone: 'hot', title: 'Ready now', items: [
+      { k: 'Viewing booked', o: 'Call back' },
+      { k: 'Send options', o: 'Call back' },
+      { k: 'Still looking', o: 'Call back' }] },
+    { tone: 'hot', title: 'Keep warm', items: [
+      { k: 'Follow up', label: 'Call back', o: 'Call back' },
+      { k: 'Replied', o: 'Call back' }] },
+  ],
 };
-// Lead pool calls (buyers and tenants who enquired) get their own quick notes
-const LEAD_NOTES = {
-  Cold: ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'Already found', 'Not looking anymore', 'Agent', 'Other'],
-  Hot: ['Still looking', 'Viewing booked', 'Send options', 'Follow up', 'Replied'],
-};
+const resultsFor = (lead) => RESULTS[lead ? 'lead' : 'owner'];
+const findResult = (k, lead) => resultsFor(lead).flatMap((g) => g.items.map((x) => ({ ...x, tone: g.tone }))).find((x) => x.k === k);
+const resultLabel = (k) => findResult(k)?.label || findResult(k, true)?.label || k;
+// The unit notes use the same notes, just as Cold and Hot
+const notesOf = (lead, tone) => [...new Set(resultsFor(lead).filter((g) => g.tone === tone).flatMap((g) => g.items.map((x) => x.k)).filter((k) => k !== 'Do not call' && k !== 'Wrong number'))];
+const QUICK_NOTES = { Cold: notesOf(false, 'cold'), Hot: notesOf(false, 'hot') };
+const LEAD_NOTES = { Cold: notesOf(true, 'cold'), Hot: notesOf(true, 'hot') };
 // Hot or cold, from how a note starts. Shown as green (hot) or red (cold) wherever notes appear.
 function noteTone(text) {
   const t = String(text || '').toLowerCase();
   const hit = (list) => list.some((q) => t.startsWith(q.toLowerCase()));
   if (hit(QUICK_NOTES.Hot) || hit(LEAD_NOTES.Hot) || hit(HOT_OUTCOMES) || t.startsWith('call back')) return 'hot';
-  if (hit(QUICK_NOTES.Cold) || hit(LEAD_NOTES.Cold) || t.startsWith('cold') || hit(['No answer', 'Not interested', 'Wrong number', 'Do not call'])) return 'cold';
+  if (hit(QUICK_NOTES.Cold) || hit(LEAD_NOTES.Cold) || t.startsWith('cold') || hit(['No answer', 'Not interested', 'Wrong number', 'Do not call', 'Not selling', 'Price too high'])) return 'cold';
   return '';
 }
 function NoteTag({ text, clip, wrap }) {
   const tone = noteTone(text);
   return <span className={'notetag ' + tone + (clip ? ' clip' : '') + (wrap ? ' wrap' : '')} title={text}>{tone && <i className="nd" />}<span className="nt">{text}</span></span>;
 }
-const KENDAL_NOTES = ['Unit available, send WhatsApp', 'Wants to sell', 'Wants to rent', 'Wants to buy'];
 // A quick note plus the broker's own words: "Wants to sell. Asking 2.1m, vacant in March".
 // "Other" is a cold note in their own words: "Other: lives abroad, call in December".
 function composeNote(chip, extra) {
@@ -85,7 +140,7 @@ function QuickNotes({ value, onPick, lead }) {
               onDragOver={(e) => { if (drag?.group === group) e.preventDefault(); }}
               onDrop={(e) => { e.preventDefault(); if (drag?.group === group) move(group, drag.q, q); setDrag(null); setOver(null); }}
               onDragEnd={() => { setDrag(null); setOver(null); }}
-              onClick={() => onPick(value === q ? '' : q)}>{q}</button>))}
+              onClick={() => onPick(value === q ? '' : q)}>{resultLabel(q)}</button>))}
         </div>
       ))}
       {custom && <button type="button" className="link qreset" onClick={reset}>Reset note order</button>}
@@ -121,6 +176,12 @@ const WHATSAPP_BY_NOTE = {
   'Wants to sell': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. As discussed, I\'ll put together a valuation and recent sales for your {property}, {area} and send it over shortly.',
   'Wants to rent': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. As discussed, I\'ll pull together current rents for your {property}, {area} and come back to you with a plan to get it rented.',
   'Wants to buy': 'Hi {first}, this is {me} from Apex Homes. Great speaking with you just now. Send me your budget and what you\'re looking for, and I\'ll share the best options available.',
+  'Wants valuation': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. As promised, I\'ll put together an up-to-date valuation for your {property}, {area}, with recent sales nearby, and send it over shortly.',
+  'Not interested': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. No problem at all. If anything changes, or you\'d like to know what it\'s worth, save my number and message me here any time.',
+  'Not selling yet': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Understood, not just yet. I\'ll keep you updated on what similar units are selling for, so you have the numbers when the time is right. Save my number and message me here any time.',
+  'Price too high': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. I\'ll send you the most recent sales nearby so you can see where the market is today. If the numbers move your way, I\'ll let you know straight away.',
+  'Agent': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now regarding your {property}, {area}. Glad it\'s in good hands. If things don\'t work out, or you\'d like a second opinion on price, save my number and message me here any time.',
+  'Other': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time on the phone just now regarding your {property}, {area}. Save my number and message me here any time.',
 };
 const WHATSAPP = {
   'No answer': 'Hi {first}, this is {me} from Apex Homes. I just tried giving you a call regarding your {property}, {area}. When would be a good time to talk?',
@@ -205,6 +266,20 @@ table.grid.fixed{table-layout:fixed;min-width:100%}
 th:hover .rz::after,.col-resizing .rz::after{background:var(--line)} .rz:hover::after{background:var(--accent)!important}
 body.col-resizing{cursor:col-resize;user-select:none}
 .qnotes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.result{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.res-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px} @media (max-width:640px){.res-cols{grid-template-columns:1fr}}
+.res-col{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:10px}
+.res-col.cold{border-color:color-mix(in srgb,var(--cold) 35%,var(--line))} .res-col.hot{border-color:color-mix(in srgb,var(--hot) 35%,var(--line))}
+.res-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em} .res-col.cold .res-h{color:var(--cold)} .res-col.hot .res-h{color:var(--hot)}
+.res-g{display:flex;flex-direction:column;gap:5px} .res-gt{font-size:11.5px;color:var(--muted)}
+.res-chips{display:flex;flex-wrap:wrap;gap:5px} .res-chips .chip{font-size:12.5px}
+.res-col.cold .chip.on{border-color:var(--cold);color:var(--cold);background:color-mix(in srgb,var(--cold) 10%,var(--bg));font-weight:600}
+.res-col.hot .chip.on{border-color:var(--hot);color:var(--hot);background:color-mix(in srgb,var(--hot) 10%,var(--bg));font-weight:600}
+.result textarea{min-height:56px}
+.res-opts{display:flex;gap:6px 18px;flex-wrap:wrap} .res-opts .cb{margin:0}
+.res-warn{margin:0;padding:8px 10px;border-radius:8px;font-size:13px;color:var(--cold);background:color-mix(in srgb,var(--cold) 9%,var(--bg))}
+.res-hint{margin:0;font-size:12px}
+.result.big .res-chips .chip{font-size:14px;padding:9px 13px} .result.big .res-gt{font-size:12.5px}
 .qcol{display:flex;flex-direction:column;align-items:flex-start;gap:5px;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .qcol .chip[draggable]{cursor:grab} .qcol .chip.dragging{opacity:.4} .qcol .chip.over{box-shadow:0 -2px 0 0 var(--accent)}
 .qreset{grid-column:1/-1;justify-self:end;font-size:12px}
@@ -328,6 +403,24 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .co-start{font:inherit;font-weight:600;background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:6px 14px;margin-left:14px;cursor:pointer}
 .co-pill{display:inline-flex;align-items:center;gap:6px;margin-left:14px;font-weight:600;color:var(--accent)} .co-pill i{width:8px;height:8px;border-radius:50%;background:#ff6b5f;animation:copulse 1.2s infinite}
 @keyframes copulse{50%{opacity:.3}}
+.cbk{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 14px} .cbk .lbl{font-size:12px;color:var(--muted);font-weight:600;width:100%}
+.cbk-chips{display:flex;gap:6px;flex-wrap:wrap} .cbk-chips button{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);cursor:pointer}
+.cbk-chips button.on{border-color:var(--accent);color:var(--accent);font-weight:600;background:color-mix(in srgb,var(--accent) 8%,var(--bg))}
+.cbk input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px} .cbk-hint{font-size:12px}
+.todaybtn{margin-left:auto;font:inherit;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);cursor:pointer}
+.todaybtn .n{min-width:22px;padding:1px 7px;border-radius:999px;background:var(--hover);font-size:12.5px;text-align:center}
+.todaybtn.due{border-color:var(--accent);color:var(--accent)} .todaybtn.due .n{background:var(--accent);color:var(--accent-ink)}
+.ta-box{width:min(760px,calc(100vw - 32px));max-height:min(86vh,900px);display:flex;flex-direction:column;gap:10px}
+.ta-head{display:flex;justify-content:space-between;align-items:center} .ta-head h3{margin:0}
+.ta-list{overflow:auto;display:flex;flex-direction:column;gap:14px;padding-right:4px}
+.ta-sec{display:flex;flex-direction:column;gap:6px} .ta-sec .lbl{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ta-row{display:grid;grid-template-columns:90px 1fr auto;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.ta-row.late{border-color:color-mix(in srgb,#c0392b 40%,var(--line))} .ta-row.late .ta-when{color:#c0392b}
+.ta-when{font-weight:600;font-size:13px} .ta-who{display:flex;flex-direction:column;gap:3px;min-width:0} .ta-who b{font-size:14px} .ta-who .muted{font-size:12.5px}
+.ta-acts{display:flex;gap:6px;align-items:center} .ta-move{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end}
+.ta-move input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+@media (max-width:640px){.ta-row{grid-template-columns:1fr}.ta-acts{justify-content:flex-start}}
+
 .head-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap} .srcsw button{padding:5px 14px}
 .leadpool{display:flex;flex-direction:column;min-height:0}
 .lp-tools{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:10px 0 12px}
@@ -550,6 +643,32 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .pp{display:flex;align-items:center;gap:10px;flex-wrap:nowrap} .pp-dates{display:flex;gap:6px;align-items:center;white-space:nowrap} .pp-dates input{opacity:.75} .pp-dates.on input{opacity:1;border-color:var(--accent)} @media (max-width:900px){.pp{flex-wrap:wrap}} .pp-dates input{padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:13px}
 .dash-ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end} .dash-ctl select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .kpis{display:grid;grid-template-columns:1.6fr repeat(4,1fr);gap:12px;margin-bottom:12px}
+.rep .small{font-size:12px;margin:2px 0 10px} .rep .dash-ctl .btn{white-space:nowrap} .rep-more{margin-top:8px} .rep .rep-top{font-size:18px;line-height:1.25;color:var(--cold)}
+.rep-split{display:flex;height:34px;border-radius:8px;overflow:hidden;gap:2px} .rep-split i{display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12.5px;font-weight:650;color:#fff;min-width:4px}
+.rep-split .hot,.rep-key .hot,.hb-t .hot{background:var(--hot)} .rep-split .cold,.rep-key .cold,.hb-t .cold{background:var(--cold)}
+.rep-split .noc,.rep-key .noc,.hb-t .noc{background:#9aa29f} .rep-split .none,.rep-key .none{background:var(--line);color:var(--muted)}
+.rep-key{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--muted)} .rep-key i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.rep-grid{grid-template-columns:1fr 1fr} @media (max-width:900px){.rep-grid{grid-template-columns:1fr}}
+.hbars{display:flex;flex-direction:column;gap:7px}
+.hb-row{display:grid;grid-template-columns:minmax(120px,38%) 1fr 74px;align-items:center;gap:10px;font-size:13px}
+.hb-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .hb-t{height:14px;background:var(--hover);border-radius:4px;overflow:hidden} .hb-t i{display:block;height:100%;border-radius:4px}
+.hb-n{text-align:right;white-space:nowrap} .hb-n em{font-style:normal;color:var(--faint);font-size:12px;margin-left:2px}
+.rep-gh{display:flex;justify-content:space-between;align-items:center;gap:10px} .rep-gh h4{margin:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden} .seg button{border:0;background:none;padding:5px 12px;font-size:12.5px;color:var(--muted);cursor:pointer} .seg button.on{background:var(--accent);color:var(--accent-ink)}
+.rep-wrap{overflow-x:auto} .rep-t th.rep-c{max-width:96px;white-space:normal;line-height:1.2;font-size:11.5px;vertical-align:bottom}
+.rep-t td.heat{background:color-mix(in srgb,var(--cold) calc(var(--h,0) * 42%),transparent)}
+.rep-own{list-style:none;margin:0;padding:0;columns:2 340px;column-gap:24px} .rep-own li{break-inside:avoid;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;display:flex;justify-content:space-between;gap:12px}
+.rep-own em{font-style:normal;color:var(--faint);white-space:nowrap;font-size:12px}
+@media print{
+  header.top,.noprint,.toast{display:none!important}
+  :root{--bg:#fff;--ink:#1c2120;--line:#e2e5e4;--hover:#f1f3f2}
+  body{background:#fff}
+  .rep{padding:0!important;max-width:none;zoom:.72}
+  .rep .card,.rep .kpi{break-inside:avoid;box-shadow:none}
+  .rep-split i,.hb-t i,.rep-key i,.rep-t td.heat{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .rep-wrap{overflow:visible}
+  @page{size:A4 landscape;margin:12mm}
+}
 @media (max-width:1000px){.kpis{grid-template-columns:1fr 1fr}}
 .kpi{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;background:var(--bg)}
 .kpi span{font-size:12px;color:var(--muted)} .kpi b{font-size:28px;font-weight:700;letter-spacing:-.02em} .kpi b small{font-size:15px;color:var(--faint);font-weight:500}
@@ -940,9 +1059,9 @@ function Desk() {
           {boss && <button className="co-start" onClick={() => setStartOpen(true)}>{(phase === 'live' || phase === 'countdown') && !co?.callout?.test ? 'Test mode' : 'Start call out'}</button>}
           {boss && <a className="co-tv" href="/tv" target="apex-tv" title="Open the big screen for the office TV">TV screen</a>}
           <div className="right">
-            {me && <span title="Owner profiles opened today">Profiles <span className="n">{me.caps.profiles}</span></span>}
-            {me && <span>Calls <span className="n">{me.caps.calls}</span></span>}
-            {me && me.caps.copies != null && <span title="Numbers copied today">Numbers <span className="n">{me.caps.copies}</span></span>}
+            {me?.caps && <span title="Owner profiles opened today">Profiles <span className="n">{me.caps.profiles}</span></span>}
+            {me?.caps && <span>Calls <span className="n">{me.caps.calls}</span></span>}
+            {me?.caps && me.caps.copies != null && <span title="Numbers copied today">Numbers <span className="n">{me.caps.copies}</span></span>}
             <ThemeToggle />
             {me && <button className="link" onClick={() => setMsgFor('me')}>My messages</button>}
             {me && <span>{me.staff.name}</span>}
@@ -1198,7 +1317,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
       {busy && <div className="loadbar" />}
       {banner || (target && <TargetBar t={target} onTarget={onCaps} />)}
       <div className="head gut">
-        <div className="head-row"><h1>Owners</h1>{switcher}</div>
+        <div className="head-row"><h1>Owners</h1>{switcher}<TodayActionsButton /></div>
         <p>{fmt(c.all)} units in your areas · {DATA_NOTE}</p>
       </div>
       <main className={'layout gut' + (side ? '' : ' noside')}>
@@ -1302,6 +1421,60 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   );
 }
 
+// ── Today's actions: call-backs due today or overdue ─────────────────────────
+function TodayActionsButton() {
+  const [n, setN] = useState(null);
+  const [open, setOpen] = useState(false);
+  const load = useCallback(() => api('/api/desk?action=actions&count=1').then((j) => setN(j.due)).catch(() => {}), []);
+  useEffect(() => { load(); const t = setInterval(() => document.visibilityState === 'visible' && load(), 120000); return () => clearInterval(t); }, [load]);
+  return (<>
+    <button className={'todaybtn' + (n ? ' due' : '')} onClick={() => setOpen(true)} title="Call-backs due today">Today&apos;s actions{n != null && <span className="n">{n}</span>}</button>
+    {open && <TodayActions onClose={() => { setOpen(false); load(); }} />}
+  </>);
+}
+function TodayActions({ onClose }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [calling, setCalling] = useState(null);
+  const [moving, setMoving] = useState(null);
+  const load = useCallback(() => api('/api/desk?action=actions').then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message)), []);
+  useEffect(() => { load(); }, [load]);
+  const done = (id, moveTo) => api('/api/desk?action=followupDone', { method: 'POST', body: moveTo ? { id, moveTo: new Date(moveTo).toISOString() } : { id } })
+    .then(() => { setMoving(null); load(); }).catch((e) => setErr(e.message));
+  const rows = d?.rows || [];
+  const overdue = rows.filter((r) => r.overdue), today = rows.filter((r) => !r.overdue);
+  const nameOf = (r) => (r.lead ? (r.lead.name ? titleCase(r.lead.name) : 'Lead') : titleCase(r.owner_name));
+  const section = (title, list) => list.length > 0 && (
+    <div className="ta-sec"><span className="lbl">{title} · {list.length}</span>
+      {list.map((r) => (
+        <div key={r.id} className={'ta-row' + (r.overdue ? ' late' : '')}>
+          <span className="ta-when n">{new Date(r.due_at).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', ...(r.overdue ? { day: 'numeric', month: 'short' } : {}), hour: '2-digit', minute: '2-digit' })}</span>
+          <div className="ta-who"><b>{nameOf(r)}</b><span className="muted">{phonePlace(r)}</span>
+            {r.last_note && <NoteTag text={r.last_note} clip />}</div>
+          <div className="ta-acts">
+            {r.hold ? <HoldChip h={r.hold} /> : r.has_phone && <button className="btn primary" onClick={() => setCalling(r)}>Call</button>}
+            <button className="btn" onClick={() => setMoving(moving === r.id ? null : r.id)}>Move</button>
+            <button className="btn ghost" onClick={() => done(r.id)} title="Sorted without a call">Done</button>
+          </div>
+          {moving === r.id && <div className="ta-move"><input type="datetime-local" defaultValue={localInput(new Date(Date.now() + 864e5))} min={localInput(new Date())} id={'mv' + r.id} />
+            <button className="btn" onClick={() => done(r.id, document.getElementById('mv' + r.id).value)}>Save</button></div>}
+        </div>))}
+    </div>);
+  return (
+    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="box ta-box" role="dialog" aria-label="Today's actions">
+        <div className="ta-head"><h3>Today&apos;s actions</h3><button className="link" onClick={onClose}>Close</button></div>
+        <p className="muted" style={{ margin: 0 }}>Your call-backs due today and anything overdue.{d ? ` ${d.comingWeek} more due in the next 7 days.` : ''}</p>
+        {err && <p className="err">{err}</p>}
+        {!d ? <p className="muted">Loading…</p> : rows.length === 0 ? <p className="muted" style={{ padding: '20px 0' }}>Nothing due today. Nice.</p>
+          : <div className="ta-list">{section('Overdue', overdue)}{section('Due today', today)}</div>}
+      </div>
+      {calling && <CallFlow lead={!!calling.lead} unitId={calling.unit_id} owner={{ id: calling.owner_id, name: calling.owner_name }}
+        label={`${nameOf(calling)}, ${phonePlace(calling)}`} onClose={() => { setCalling(null); load(); }} />}
+    </div>
+  );
+}
+
 // Owners page switch: call from the owner data, or from the lead pool
 function SourceSwitch({ v, onChange }) {
   return (
@@ -1363,7 +1536,7 @@ function LeadPool({ me, switcher, banner, onCaps }) {
         {busy && <div className="loadbar" />}
         {banner || (me.target && <TargetBar t={me.target} onTarget={onCaps} />)}
         <div className="head gut">
-          <div className="head-row"><h1>Lead pool</h1>{switcher}</div>
+          <div className="head-row"><h1>Lead pool</h1>{switcher}<TodayActionsButton /></div>
           <p>{who === 'me' ? `${fmt(c.all)} leads are yours. Nobody else has them.` : who === 'all' ? `${fmt(c.all)} leads across the team` : `${fmt(c.all)} leads`} · Buyer and tenant enquiries from August to October 2026, shuffled</p>
         </div>
         <main className="gut leadpool">
@@ -1610,6 +1783,7 @@ function raceLine(board, me) {
     return gap <= 2 ? `You're leading, but ${first(second.name)} is only ${gap} behind. Don't slow down!` : `You're in the lead by ${gap}. ${first(second.name)} is chasing.`;
   }
   const above = board[i - 1];
+  if (!above) return 'Every call moves you up the board.';
   const gap = above.calls - me.calls;
   if (gap === 0) return `Level with ${first(above.name)}. One more call and you're ahead!`;
   const chase = gap <= 2 ? `So close! ${gap} more and you pass ${first(above.name)}.` : `${gap} calls behind ${first(above.name)} for #${i}.`;
@@ -1964,7 +2138,7 @@ function KendalLine({ k }) {
 
 // Laptop side of a call: send to phone, wait for the tap, then log the outcome
 // After the outcome is saved on the laptop: offer the WhatsApp follow-up here too (it also shows on the phone)
-function DoneStep({ requestId, onClose, kendal }) {
+function DoneStep({ requestId, onClose, kendal, callBack }) {
   const [f, setF] = useState(undefined);
   const [me, setMe] = useState('');
   const [sent, setSent] = useState(false);
@@ -1973,7 +2147,7 @@ function DoneStep({ requestId, onClose, kendal }) {
   }, [requestId]);
   return <>
     <h3>Saved</h3>
-    <p className="muted">The outcome is on the call history.</p>
+    <p className="muted">The outcome is on the call history.{callBack ? ` Call back ${fdtShort(callBack.due_at)}.` : ''}</p>
     <KendalLine k={kendal} />
     {f && !sent && <FollowUp laptop f={f} me={me} onDone={(r) => setSent(r)} />}
     {sent && <p className="muted">{sent === 'sent' ? 'WhatsApp opened. Added "WhatsApp sent" to the note.' : sent === 'unavailable' ? 'Added "WhatsApp unavailable" to the note.' : 'Added "WhatsApp not sent" to the note.'}</p>}
@@ -1987,6 +2161,7 @@ function CallFlow({ unitId, owner, label, onClose, force, lead }) {
   const [msg, setMsg] = useState('');
   const [req, setReq] = useState(null);
   const [kres, setKres] = useState(null);
+  const [cb, setCb] = useState(null);
 
   useEffect(() => {
     api('/api/desk?action=call', { method: 'POST', body: { unitId, ownerId: owner.id, force } })
@@ -2015,45 +2190,77 @@ function CallFlow({ unitId, owner, label, onClose, force, lead }) {
           <p className="faint">It expires in {req.minutes} minutes.</p>
           <button className="btn" onClick={() => onClose(false)}>Cancel</button></>}
         {stage === 'expired' && <><h3>Call expired</h3><p className="muted">It wasn&apos;t tapped on your phone in time. Press Call again.</p><button className="btn" onClick={() => onClose(false)}>Close</button></>}
-        {stage === 'dialled' && <><h3>How did it go?</h3><p className="muted">{label}</p><OutcomeForm requestId={req.requestId} lead={lead} onSaved={(j) => { setKres(j?.kendal || null); setStage('done'); }} /></>}
-        {stage === 'done' && <DoneStep requestId={req.requestId} kendal={kres} onClose={() => onClose(true)} />}
+        {stage === 'dialled' && <><h3>How did it go?</h3><p className="muted">{label}</p><OutcomeForm requestId={req.requestId} lead={lead} onSaved={(j) => { setKres(j?.kendal || null); setCb(j?.callBack || null); setStage('done'); }} /></>}
+        {stage === 'done' && <DoneStep requestId={req.requestId} kendal={kres} callBack={cb} onClose={() => onClose(true)} />}
       </div>
     </div>
   );
 }
 
-const LEAD_OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wrong number', 'Do not call'];
+// When to call back. Not picked = a month later (set by the server). Do not call = none.
+const CALLBACKS = [['day', 'Tomorrow'], ['week', 'In a week'], ['custom', 'Pick a date']];
+const localInput = (d) => { const x = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return x.toISOString().slice(0, 16); };
+const fdtShort = (d) => new Date(d).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function CallBackPicker({ value, onChange }) {
+  const set = (kind) => onChange(value.kind === kind ? { kind: '', at: value.at } : { kind, at: value.at || localInput(new Date(Date.now() + 2 * 864e5)) });
+  return (
+    <div className="cbk">
+      <span className="lbl">Call back</span>
+      <div className="cbk-chips">{CALLBACKS.map(([k, l]) => <button type="button" key={k} className={value.kind === k ? 'on' : ''} onClick={() => set(k)}>{l}</button>)}</div>
+      {value.kind === 'custom' && <input type="datetime-local" value={value.at} min={localInput(new Date())} onChange={(e) => onChange({ kind: 'custom', at: e.target.value })} />}
+      <span className="faint cbk-hint">{value.kind ? '' : 'Not picked: set for a month from now.'}</span>
+    </div>
+  );
+}
 function OutcomeForm({ requestId, onSaved, big, lead }) {
-  const [pick, setPick] = useState('');
   const [chip, setChip] = useState('');
+  const [callBack, setCallBack] = useState({ kind: '', at: '' });
   const [extra, setExtra] = useState('');
   const [kendal, setKendal] = useState(false);
   const [report, setReport] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const r = chip ? findResult(chip, lead) : null;
   const note = composeNote(chip, extra);
-  const choose = (o) => { const n = pick === o ? '' : o; setPick(n); setKendal(!lead && (HOT_OUTCOMES.includes(n) || KENDAL_NOTES.includes(chip))); };
-  const pickNote = (q) => { setChip(q); setKendal(!lead && (HOT_OUTCOMES.includes(pick) || KENDAL_NOTES.includes(q))); };
+  const pickResult = (x) => {
+    const next = chip === x.k ? null : x;
+    setChip(next ? next.k : '');
+    setKendal(!lead && !!next?.kendal);
+    setReport(!lead && !!next?.report);
+  };
+  const needsWords = chip === 'Other' && !extra.trim();
+  const noCallBack = r && (r.o === 'Do not call' || r.o === 'Wrong number');
   async function save() {
     setBusy(true); setErr('');
-    try { const j = await api('/api/phone?action=outcome', { method: 'POST', body: { requestId, outcome: pick, note, kendal, report } }); onSaved(j); }
+    try { const j = await api('/api/phone?action=outcome', { method: 'POST', body: { requestId, outcome: r?.o || '', note, kendal, report,
+      callBack: noCallBack ? { kind: '' } : callBack.kind === 'custom' ? { kind: 'custom', at: callBack.at ? new Date(callBack.at).toISOString() : null } : { kind: callBack.kind } } }); onSaved(j); }
     catch (e) { setErr(e.message); }
     setBusy(false);
   }
   return (
-    <div>
-      <div className={big ? 'outcomes' : 'radios'}>
-        {(lead ? LEAD_OUTCOMES : OUTCOMES).map((o) => big
-          ? <button key={o} type="button" className={pick === o ? 'on' : ''} onClick={() => choose(o)}>{o}</button>
-          : <label className="cb" key={o}><input type="radio" name={`oc-${requestId}`} checked={pick === o} onChange={() => {}} onClick={() => choose(o)} />{o}</label>)}
+    <div className={'result' + (big ? ' big' : '')}>
+      <div className="res-cols">
+        {['cold', 'hot'].map((tone) => (
+          <div key={tone} className={'res-col ' + tone}>
+            <span className="res-h">{tone === 'cold' ? 'Cold' : 'Hot'}</span>
+            {resultsFor(lead).filter((g) => g.tone === tone).map((g) => (
+              <div key={g.title} className="res-g">
+                <span className="res-gt">{g.title}</span>
+                <div className="res-chips">{g.items.map((x) => (
+                  <button type="button" key={x.k} className={'chip' + (chip === x.k ? ' on' : '')} onClick={() => pickResult(x)}>{x.label || x.k}</button>))}</div>
+              </div>))}
+          </div>))}
       </div>
-      {!lead && <label className="cb" style={{ marginTop: 10 }}><input type="checkbox" checked={kendal} onChange={(e) => setKendal(e.target.checked)} />Send to Kendal as a lead</label>}
-      {!lead && <label className="cb"><input type="checkbox" checked={report} onChange={(e) => setReport(e.target.checked)} />Send a market report every month</label>}
-      <QuickNotes value={chip} onPick={pickNote} lead={lead} />
-      <textarea placeholder={notePlaceholder(chip, 'Or type your own note')} value={extra} maxLength={900} onChange={(e) => setExtra(e.target.value)} />
+      <textarea placeholder={chip === 'Other' ? 'Why? (needed for Other)' : chip ? 'Add your own words (optional)' : 'Pick a result above, then add anything useful'} value={extra} maxLength={900} onChange={(e) => setExtra(e.target.value)} />
+      <div className="res-opts">
+        {!lead && <label className="cb"><input type="checkbox" checked={kendal} onChange={(e) => setKendal(e.target.checked)} />Send to Kendal as a lead</label>}
+        {!lead && <label className="cb"><input type="checkbox" checked={report} onChange={(e) => setReport(e.target.checked)} />Send a market report every month</label>}
+      </div>
+      {!noCallBack && <CallBackPicker value={callBack} onChange={setCallBack} />}
+      {r?.o === 'Do not call' && <p className="res-warn">The owner goes on the Do not call list. Nobody will be able to call them again.</p>}
       {err && <p className="err">{err}</p>}
-      <button className={big ? 'bigcall' : 'btn primary'} disabled={(!pick && !note) || busy} onClick={save}>{busy ? 'Saving…' : pick ? 'Save outcome' : 'Save note'}</button>
-      <p className="faint" style={{ margin: '6px 0 0', fontSize: 12 }}>{chip === 'Other' && !extra.trim() ? 'Write what happened for "Other".' : 'An outcome is optional. A note on its own is enough.'}</p>
+      <button className={big ? 'bigcall' : 'btn primary'} disabled={!chip || needsWords || busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+      <p className="faint res-hint">{!chip ? 'Pick how the call went.' : needsWords ? 'Write why for "Other".' : r.wa === false ? 'No WhatsApp follow-up for this one.' : 'A WhatsApp follow-up is ready after you save.'}</p>
     </div>
   );
 }
@@ -2881,6 +3088,7 @@ function MyDashboard({ onTeam }) {
 }
 
 function Dashboard({ onMine }) {
+  const [report, setReport] = useState(false);
   const [pick, setPick] = useState({ period: 'today', from: '', to: '' });
   const [team, setTeam] = useState('');
   const [d, setD] = useState(null);
@@ -2888,7 +3096,8 @@ function Dashboard({ onMine }) {
   const load = useCallback(() => {
     api(`/api/desk?action=dashboard&${periodQuery(pick)}&team=${encodeURIComponent(team)}`).then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message));
   }, [pick, team]);
-  useEffect(() => { load(); const t = setInterval(() => document.visibilityState === 'visible' && load(), 60000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { if (report) return; load(); const t = setInterval(() => document.visibilityState === 'visible' && load(), 60000); return () => clearInterval(t); }, [load, report]);
+  if (report) return <CallReport onBack={() => setReport(false)} />;
   if (err) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p></main>;
   if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
   const per = d.goal * d.workdays;
@@ -2910,6 +3119,7 @@ function Dashboard({ onMine }) {
           <p className="muted">{d.all ? 'Calls across every team' : 'Your team\'s calls'} {label} · target {d.goal} a day per person (or their own, if higher){!d.byHour ? ` · ${d.workdays} working day${d.workdays > 1 ? 's' : ''}` : ''}</p></div>
         <div className="dash-ctl">
           {onMine && <button className="btn" onClick={onMine}>My numbers</button>}
+          <button className="btn" onClick={() => setReport(true)}>Hot &amp; cold report</button>
           {d.all && <select value={team} onChange={(e) => setTeam(e.target.value)}><option value="">All teams</option>{d.teamNames.map((t) => <option key={t} value={t}>{t}</option>)}</select>}
           <PeriodPicker value={pick} onChange={setPick} shown={d} />
         </div>
@@ -2952,6 +3162,138 @@ function Dashboard({ onMine }) {
               <td className="muted">{r.last_at ? fdt(r.last_at) : 'No calls yet'}</td>
             </tr>))}</tbody></table>
         {d.rows.length === 0 && <p className="muted">Nobody is set up in this team yet.</p>}
+      </section>
+    </main>
+  );
+}
+
+// ── Hot & cold report ──
+// Why calls went the way they did (from the quick note or outcome on each call), for everyone, a team or one broker.
+// Export PDF prints just the report; Download CSV gives the per-person numbers.
+const pctOf = (n, of) => (of ? Math.round((n / of) * 100) : 0);
+function HBars({ items, of, tone, empty }) {
+  const max = Math.max(1, ...items.map((x) => x.n));
+  if (!items.length) return <p className="muted small">{empty}</p>;
+  return (
+    <div className="hbars">{items.map((x) => (
+      <div key={x.reason} className="hb-row" title={`${x.reason}: ${x.n}`}>
+        <span className="hb-l">{x.reason}</span>
+        <span className="hb-t"><i className={tone} style={{ width: `${(x.n / max) * 100}%` }} /></span>
+        <span className="hb-n n"><b>{x.n}</b> <em>{pctOf(x.n, of)}%</em></span>
+      </div>))}</div>
+  );
+}
+function CallReport({ onBack }) {
+  const [pick, setPick] = useState({ period: 'week', from: '', to: '' });
+  const [scope, setScope] = useState('');   // '', 'team:<name>' or 'user:<id>'
+  const [by, setBy] = useState('broker');   // grid rows: broker or team
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [allOwn, setAllOwn] = useState(false);
+  useEffect(() => {
+    const [k, v] = scope ? [scope.slice(0, scope.indexOf(':')), scope.slice(scope.indexOf(':') + 1)] : ['', ''];
+    setErr('');
+    api(`/api/desk?action=insights&${periodQuery(pick)}${k ? `&${k}=${encodeURIComponent(v)}` : ''}`).then(setD).catch((e) => setErr(e.message));
+  }, [pick, scope]);
+  if (err) return <main className="gut"><p className="err" style={{ marginTop: 30 }}>{err}</p><button className="btn" onClick={onBack}>Back</button></main>;
+  if (!d) return <main className="gut muted" style={{ padding: 40 }}>Loading…</main>;
+  const sum = (g) => d.reasons.filter((r) => r.grp === g).reduce((a, r) => a + r.n, 0);
+  const calls = d.reasons.reduce((a, r) => a + r.n, 0);
+  const hot = sum('hot'), obj = sum('objection'), noc = sum('nocontact'), rest = calls - hot - obj - noc;
+  const spoke = hot + obj;
+  const objections = d.reasons.filter((r) => r.grp === 'objection');
+  const hots = d.reasons.filter((r) => r.grp === 'hot');
+  const nocs = d.reasons.filter((r) => r.grp === 'nocontact');
+  const cols = objections.slice(0, 6).map((r) => r.reason);
+  const broker = d.user ? d.brokers.find((b) => b.user_id === d.user) : null;
+  const title = broker ? broker.name : d.team ? d.team : d.all ? 'Every team' : (d.myTeam || 'Your team');
+  // Grid rows: each person, or each team added up
+  const rows = by === 'team' && !d.team && !d.user
+    ? Object.values(d.people.reduce((acc, p) => {
+        const t = acc[p.team] ||= { key: 'team:' + p.team, name: p.team, calls: 0, hot: 0, objection: 0, nocontact: 0, reasons: {} };
+        t.calls += p.calls; t.hot += p.hot; t.objection += p.objection; t.nocontact += p.nocontact;
+        for (const [k, n] of Object.entries(p.reasons || {})) t.reasons[k] = (t.reasons[k] || 0) + n;
+        return acc; }, {})).sort((a, b) => b.calls - a.calls)
+    : d.people.map((p) => ({ ...p, key: 'user:' + p.user_id }));
+  const top = (r) => Object.entries(r.reasons || {}).filter(([k]) => objections.some((o) => o.reason === k) || cols.includes(k))
+    .filter(([k]) => d.reasons.find((x) => x.reason === k)?.grp === 'objection').sort((a, b) => b[1] - a[1])[0];
+  const cell = (r, c) => { const n = r.reasons?.[c] || 0; const sp = r.hot + r.objection; return { n, p: pctOf(n, sp) }; };
+  const maxCell = Math.max(1, ...rows.flatMap((r) => cols.map((c) => cell(r, c).p)));
+  const label = periodLabel(d);
+  const csv = () => {
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const head = [by === 'team' && !d.team && !d.user ? 'Team' : 'Name', ...(by === 'team' && !d.team && !d.user ? [] : ['Team']), 'Calls', 'Got through', 'Hot', 'Hot % of conversations', 'Not interested', "Didn't get through", ...cols.map((c) => `${c}`), 'Biggest objection'];
+    const lines = rows.map((r) => [r.name, ...(by === 'team' && !d.team && !d.user ? [] : [r.team]), r.calls, r.hot + r.objection, r.hot, pctOf(r.hot, r.hot + r.objection) + '%', r.objection, r.nocontact,
+      ...cols.map((c) => cell(r, c).n), top(r)?.[0] || '']);
+    const blob = new Blob([[head, ...lines].map((l) => l.map(q).join(',')).join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Hot and cold ${title} ${d.from} to ${d.to}.csv`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  const seg = (n, cls, name) => n ? <i className={cls} style={{ flexGrow: n }} title={`${name}: ${n} (${pctOf(n, calls)}%)`}>{pctOf(n, calls) >= 7 ? `${pctOf(n, calls)}%` : ''}</i> : null;
+  return (
+    <main className="gut dash rep">
+      <div className="dash-head">
+        <div><h1>Hot &amp; cold report · {title}</h1>
+          <p className="muted">{label} · {fmt(calls)} calls · why each call went the way it did, from the quick note or outcome</p></div>
+        <div className="dash-ctl noprint">
+          <button className="btn" onClick={onBack}>Back</button>
+          <select value={scope} onChange={(e) => setScope(e.target.value)}>
+            <option value="">{d.all ? 'Every team' : (d.myTeam || 'My team')}</option>
+            {d.all && <optgroup label="Teams">{d.teams.map((t) => <option key={t} value={'team:' + t}>{t}</option>)}</optgroup>}
+            <optgroup label="Brokers">{d.brokers.map((b) => <option key={b.user_id} value={'user:' + b.user_id}>{b.name}{d.all ? ` · ${b.team}` : ''}</option>)}</optgroup>
+          </select>
+          <PeriodPicker value={pick} onChange={setPick} shown={d} />
+          <button className="btn" onClick={() => window.print()}>Export PDF</button>
+          <button className="btn" onClick={csv} disabled={!rows.length}>Download CSV</button>
+        </div>
+      </div>
+
+      <div className="kpis">
+        <div className="kpi big"><span>Calls</span><b className="n">{fmt(calls)}</b><em>{fmt(spoke)} conversations · {pctOf(spoke, calls)}% got through</em></div>
+        <div className="kpi hot"><span>Hot</span><b className="n">{fmt(hot)}</b><em>{pctOf(hot, spoke)}% of conversations</em></div>
+        <div className="kpi cold"><span>Not interested</span><b className="n">{fmt(obj)}</b><em>{pctOf(obj, spoke)}% of conversations</em></div>
+        <div className="kpi"><span>Didn&apos;t get through</span><b className="n">{fmt(noc)}</b><em>{pctOf(noc, calls)}% of calls</em></div>
+        <div className="kpi"><span>Biggest objection</span><b className="n rep-top">{objections[0]?.reason || '—'}</b><em>{objections[0] ? `${objections[0].n} calls · ${pctOf(objections[0].n, obj)}% of objections` : 'none yet'}</em></div>
+      </div>
+
+      <section className="card">
+        <h4>How the calls went</h4>
+        <div className="rep-split">{seg(hot, 'hot', 'Hot')}{seg(obj, 'cold', 'Not interested')}{seg(noc, 'noc', "Didn't get through")}{seg(rest, 'none', 'Nothing logged')}</div>
+        <div className="rep-key"><span><i className="hot" />Hot {hot}</span><span><i className="cold" />Not interested {obj}</span><span><i className="noc" />Didn&apos;t get through {noc}</span>{rest > 0 && <span><i className="none" />Nothing logged {rest}</span>}</div>
+      </section>
+
+      <div className="dash-grid rep-grid">
+        <section className="card"><h4>Top objections</h4><p className="muted small">Spoke to them, not interested · % of all objections</p>
+          <HBars items={objections} of={obj} tone="cold" empty="No objections logged." /></section>
+        <section className="card"><h4>What&apos;s working</h4><p className="muted small">Hot calls · % of all hot</p>
+          <HBars items={hots} of={hot} tone="hot" empty="No hot calls yet." />
+          <h4 style={{ marginTop: 18 }}>Didn&apos;t get through</h4>
+          <HBars items={nocs} of={noc} tone="noc" empty="—" /></section>
+      </div>
+
+      {!d.user && <section className="card">
+        <div className="rep-gh"><h4>Who&apos;s struggling with what</h4>
+          {d.all && !d.team && <div className="seg noprint">{[['broker', 'By broker'], ['team', 'By team']].map(([k, l]) => <button key={k} className={by === k ? 'on' : ''} onClick={() => setBy(k)}>{l}</button>)}</div>}</div>
+        <p className="muted small">Each objection as a % of that {by === 'team' && !d.team ? 'team' : 'person'}&apos;s conversations. Darker means it comes up more. Click a row to see just them.</p>
+        <div className="rep-wrap"><table className="mini rep-t"><thead><tr><th>{by === 'team' && !d.team ? 'Team' : 'Name'}</th><th className="r">Calls</th><th className="r">Got through</th><th className="r">Hot</th>
+          {cols.map((c) => <th key={c} className="r rep-c">{c}</th>)}<th>Biggest objection</th></tr></thead>
+          <tbody>{rows.map((r) => { const sp = r.hot + r.objection; const t = top(r); return (
+            <tr key={r.key} className="click" onClick={() => { setScope(r.key); setBy('broker'); }}>
+              <td><b>{r.name}</b>{r.team && by !== 'team' && d.all && !d.team ? <span className="faint"> · {r.team}</span> : null}</td>
+              <td className="r n">{r.calls}</td><td className="r n">{pctOf(sp, r.calls)}%</td><td className="r n hotc">{pctOf(r.hot, sp)}%</td>
+              {cols.map((c) => { const x = cell(r, c); return <td key={c} className="r n heat" style={{ '--h': x.p / maxCell }} title={`${x.n} of ${sp} conversations`}>{x.n ? `${x.p}%` : ''}</td>; })}
+              <td className="coldc">{t ? `${t[0]} (${t[1]})` : '—'}</td>
+            </tr>); })}</tbody></table></div>
+        {!rows.length && <p className="muted">No calls {label}.</p>}
+      </section>}
+
+      <section className="card">
+        <h4>In their own words</h4><p className="muted small">The latest &quot;Other&quot; notes{d.user ? '' : ', newest first'}</p>
+        {d.own.length ? <><ul className="rep-own">{(allOwn ? d.own : d.own.slice(0, 12)).map((o, i) => <li key={i}><span>{o.note.replace(/^Other:\s*/i, '')}</span>{!d.user && <em>{o.name}</em>}</li>)}</ul>
+          {d.own.length > 12 && <button className="link rep-more noprint" onClick={() => setAllOwn(!allOwn)}>{allOwn ? 'Show fewer' : `Show all ${d.own.length}`}</button>}</>
+          : <p className="muted small">None {label}.</p>}
       </section>
     </main>
   );
@@ -3013,6 +3355,9 @@ const LEAD_WHATSAPP = {
   'Lead - Follow up': 'Hi {first}, this is {me} from Apex Homes, following up on your search for a {property}. Let me know a good time to catch up.',
   'Lead - Replied': 'Hi {first}, this is {me} from Apex Homes. Thanks for getting back to me about the {property}. When is a good time for a quick call?',
   'Lead - Already found': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now, and glad you found a place. If you ever need help renting, buying or selling in Dubai, save my number and message me here any time.',
+  'Lead - Agent': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. If you don\'t find the right {property} with your agent, save my number. I\'m happy to send options any time.',
+  'Lead - Not interested': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. If you start looking again, renting, buying or selling, save my number and message me here any time.',
+  'Lead - Other': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time on the phone just now about the {property}. Save my number and message me here any time.',
   'Lead - Not looking anymore': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time just now. If you start looking again, renting, buying or selling, save my number and message me here any time.',
   'Lead - default': 'Hi {first}, this is {me} from Apex Homes. Thanks for your time on the phone just now about the {property}. Save my number and message me here any time.',
 };
@@ -3026,13 +3371,15 @@ function leadWhatsappText(f, me) {
   return fillTemplate((f.templates || {})[key] || LEAD_WHATSAPP[key], v);
 }
 // The messages someone can make their own, in the order the editor shows them
+const waKeys = (lead, tone) => resultsFor(lead).filter((g) => g.tone === tone).flatMap((g) => g.items).filter((x) => x.wa !== false).map((x) => (lead ? 'Lead - ' : '') + x.k);
 const MESSAGE_GROUPS = [
-  ['Cold', ['Called, no reply', 'Called, unreachable', 'Called, line busy, call again later', 'Phone off', 'End user', 'Rented', 'Sold', 'No answer']],
-  ['Hot', ['Unit available, send WhatsApp', 'In discussion', 'Replied', 'Follow up', 'Send report', 'Wants to sell', 'Wants to rent', 'Wants to buy', 'Call back']],
+  ['Cold', waKeys(false, 'cold')],
+  ['Hot', waKeys(false, 'hot')],
   ['Anything else', ['default']],
-  ['Lead pool', Object.keys(LEAD_WHATSAPP)],
+  ['Lead pool · cold', waKeys(true, 'cold')],
+  ['Lead pool · hot', waKeys(true, 'hot')],
 ];
-const msgLabel = (k) => (k === 'Lead - default' ? 'Lead · any other outcome' : k.startsWith('Lead - ') ? 'Lead · ' + k.slice(7) : k === 'default' ? 'Any other outcome' : k === 'No answer' || k === 'Call back' ? `${k} (outcome)` : k);
+const msgLabel = (k) => (k === 'default' ? 'Any other outcome' : k.startsWith('Lead - ') ? (findResult(k.slice(7), true)?.label || k.slice(7)) : resultLabel(k));
 
 // Edit your own WhatsApp messages, one per note (admins and directors can open anyone's from the Team page).
 // Every message starts as the standard one; change any of them, and put any back to standard.
@@ -3064,7 +3411,7 @@ function MessagesEditor({ user, onClose }) {
     catch (e) { setErr(e.message); }
     setBusy(false);
   }
-  const cold = MESSAGE_GROUPS[0][1];
+  const cold = resultsFor(false)[0].items.filter((x) => x.wa !== false).map((x) => x.k);   // the didn't-get-through messages
   return (
     <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="box msg-ed" role="dialog" aria-label="WhatsApp messages">
@@ -3131,7 +3478,7 @@ function FollowUp({ f, me, onDone, laptop }) {
   }
   return (
     <div className={laptop ? 'wa-laptop' : 'callcard'}>
-      <span className="muted">Follow up on WhatsApp · {f.outcome || String(f.note || '').split('.')[0]}</span>
+      <span className="muted">Follow up on WhatsApp · {f.note ? resultLabel(String(f.note).split(/[.:]/)[0]) : f.outcome}</span>
       <span className="who">{titleCase(f.owner_name)}</span>
       <span>{phonePlace({ ...f, subcommunity: titleCase(f.subcommunity), building: titleCase(f.building) })}</span>
       {f.wa_last && f.wa_last.missing && <p className="wa-warn">{f.wa_last.by.split(' ')[0]} marked this number &quot;not on WhatsApp&quot; on {fd(f.wa_last.at)}. Worth trying anyway.</p>}
