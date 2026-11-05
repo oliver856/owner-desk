@@ -6,7 +6,7 @@
 // Extension routes (no sign-in, but a run token that only works for that one run, for 12 hours): next, done.
 // For testing it's limited to admins, or to the emails in the setting 'rocket_users' once that's set.
 import crypto from 'node:crypto';
-import { sql, route, query, body, audit, rocketAllowed } from './_lib/core.js';
+import { sql, route, query, body, audit, rocketAllowed, waNumber } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { ensureReports } from './_lib/reports.js';
 
@@ -95,7 +95,7 @@ const deskActions = {
       with u as (
         select id, row_number() over (order by ${sortSql(q.get('sort'))}) as pos
         from desk.v_unit_list
-        where ${whereSql(q, s.listAreas, s.user_id)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}
+        where ${whereSql(q, s.listAreas, s.user_id, s.locked)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}
         order by ${sortSql(q.get('sort'))} limit ${limit * 3})
       select distinct on (ph.phone) u.id as unit_id, uo.owner_id, u.pos
       from u join desk.unit_owners uo on uo.unit_id = u.id and uo.role = 'owner'
@@ -199,7 +199,7 @@ const extActions = {
       return res.json({ skip: true });
     }
     await audit(r.user_id, 'rocket_number', { unitId: it.unit_id, detail: { run_id: r.id, item: it.id, owner_id: it.owner_id }, ip });
-    res.json({ itemId: it.id, pos: it.pos, total: r.total, phone: String(x.phone).replace(/\D/g, ''), text: fill(r.message, x, r.full_name),
+    res.json({ itemId: it.id, pos: it.pos, total: r.total, phone: waNumber(x.phone), text: fill(r.message, x, r.full_name),
       gapMin: r.gap_min, gapMax: r.gap_max });
   },
 
