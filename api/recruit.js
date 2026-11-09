@@ -239,6 +239,14 @@ const moreActions = {
     res.json({ status: r.used_at ? 'dialled' : r.expired ? 'expired' : 'sent' });
   },
 
+  // Undo a remove
+  async restore(req, res, s, ip) {
+    const id = Number(body(req).id);
+    await sql`update desk.rc_candidates set archived = false, updated_at = now() where id = ${id}`;
+    await audit(s.user_id, 'rc_restored', { detail: { id }, ip }).catch(() => {});
+    res.json({ ok: true });
+  },
+
   // Remove from the pipeline (kept in the database, just hidden)
   async archive(req, res, s, ip) {
     const id = Number(body(req).id);
