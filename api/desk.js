@@ -4,7 +4,7 @@ import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout, runningCalloutId, isTest, testsOn } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
-import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed, notLocked } from './_lib/core.js';
+import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed, notLocked, recruitAllowed } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
@@ -81,7 +81,7 @@ const REASONS = [
   ['outcome:Call back', 'Call back', 'hot'], ['outcome:Wants valuation', 'Wants valuation', 'hot'],
   ['outcome:Listing opportunity', 'Listing opportunity', 'hot'], ['outcome:Wants to sell', 'Wants to sell', 'hot'],
   ['End user', 'Lives in it (end user)', 'objection'], ['Rented', 'Already rented', 'objection'], ['Sold', 'Already sold', 'objection'],
-  ['Agent', 'Has an agent', 'objection'], ['Other', 'Other (own words)', 'objection'],
+  ['Agent', 'Agent', 'objection'], ['Other', 'Other (own words)', 'objection'],
   ['Already found', 'Already found (lead)', 'objection'], ['Not looking anymore', 'Not looking anymore (lead)', 'objection'],
   ['Not interested', 'Not interested', 'objection'], ['Not selling yet', 'Not selling yet', 'objection'],
   ['Price too high', 'Price expectations too high', 'objection'], ['Wrong number', 'Wrong number', 'objection'], ['Do not call', 'Do not call', 'objection'],
@@ -153,7 +153,8 @@ const actions = {
       soon(ensurePrefs().then(() => sql`select prefs from desk.staff_prefs where user_id = ${s.user_id}`), 3000, []),
       soon(rocketAllowed(s), 2000, false)]);
     const pr = prRows[0];
-    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: placeRows, prefs: pr?.prefs || null, rocket });
+    const recruit = await recruitAllowed(s).catch(() => false);
+    res.json({ staff: { name: s.full_name, role: s.role, email: s.email }, caps: c, target, places: placeRows, prefs: pr?.prefs || null, rocket, recruit });
   },
 
   // Hot & cold report: why calls went the way they did, from the quick note (or the outcome) on each call.
