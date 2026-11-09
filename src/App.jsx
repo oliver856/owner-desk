@@ -5,6 +5,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+// Recruitment only loads for people allowed to see it (brokers never download it)
+const Recruit = React.lazy(() => import('./Recruit.jsx'));
 
 // ── Settings you might want to change ───────────────────────────────────────
 const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
@@ -30,7 +32,7 @@ const RESULTS = {
       { k: 'End user', label: 'Lives in it', o: 'Not interested' },
       { k: 'Rented', label: 'Already rented', o: 'Not interested' },
       { k: 'Sold', label: 'Already sold', o: 'Not interested' },
-      { k: 'Agent', label: 'Has an agent', o: 'Not interested' },
+      { k: 'Agent', o: 'Not interested' },
       { k: 'Other', label: 'Other (say why)', o: 'Not interested' },
       { k: 'Do not call', o: 'Do not call', wa: false }] },
     { tone: 'hot', title: 'Ready now', items: [
@@ -55,7 +57,7 @@ const RESULTS = {
     { tone: 'cold', title: 'Spoke, not interested', items: [
       { k: 'Already found', o: 'Not interested' },
       { k: 'Not looking anymore', o: 'Not interested' },
-      { k: 'Agent', label: 'Using another agent', o: 'Not interested' },
+      { k: 'Agent', o: 'Not interested' },
       { k: 'Not interested', o: 'Not interested' },
       { k: 'Other', label: 'Other (say why)', o: 'Not interested' },
       { k: 'Do not call', o: 'Do not call', wa: false }] },
@@ -987,6 +989,9 @@ function Desk() {
     return () => ro.disconnect();
   }, []);
 
+  // Someone with recruitment access and no owner areas (the recruiter) starts on Recruitment
+  const landed = useRef(false);
+  useEffect(() => { if (me && !landed.current) { landed.current = true; if (me.recruit && me.staff.role !== 'admin' && !(me.places || []).length) setView('recruit'); } }, [me]);
   const refreshMe = useCallback(() => api('/api/desk?action=me').then(setMe).catch((e) => setToast(e.message)), []);
   // A number was copied: update the counters in the header
   useEffect(() => { const f = () => refreshMe(); window.addEventListener('desk:caps', f); return () => window.removeEventListener('desk:caps', f); }, [refreshMe]);
@@ -1030,7 +1035,7 @@ function Desk() {
   // Copy protection: blocks copying owner data and logs the attempt
   useEffect(() => {
     const onCopy = (e) => {
-      if (e.target?.closest?.('input,textarea')) return;
+      if (e.target?.closest?.('input,textarea,.rc')) return;   // recruitment details can be copied
       e.preventDefault();
       setToast('Copying is turned off. This was logged.');
       api('/api/desk?action=copyBlocked', { method: 'POST' }).catch(() => {});
@@ -1053,6 +1058,7 @@ function Desk() {
             {me && <button className={view === 'dash' ? 'on' : ''} onClick={() => setView('dash')}>Dashboard</button>}
             <button className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>Activity</button>
             {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
+            {me?.recruit && <button className={view === 'recruit' ? 'on' : ''} onClick={() => setView('recruit')}>Recruitment</button>}
             <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
           </nav>
           {boss && (phase === 'live' || phase === 'countdown') && <span className="co-pill"><i />{co?.callout?.test ? 'Test running' : 'Call out running'}</span>}
@@ -1070,7 +1076,8 @@ function Desk() {
         </div>
       </header>
       {view === 'owners' && me && src === 'leads' ? <LeadPool me={me} switcher={<SourceSwitch v={src} onChange={setSrc} />} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} onCaps={refreshMe} />
-        : view === 'owners' ? (me ? <Owners switcher={<SourceSwitch v={src} onChange={setSrc} />} keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : <Activity />}
+        : view === 'owners' ? (me ? <Owners switcher={<SourceSwitch v={src} onChange={setSrc} />} keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : view === 'recruit' ? null : <Activity />}
+      {view === 'recruit' && me?.recruit && <React.Suspense fallback={<main className="gut muted" style={{ padding: 40 }}>Loading…</main>}><Recruit api={api} toast={setToast} /></React.Suspense>}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
       {phase === 'done' && (co?.meIn || boss) && !resultsSeen && <CalloutResults co={co} onClose={closeResults} />}
@@ -1274,7 +1281,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
           onChange={(e) => change({ useries: e.target.value.replace(/\D/g, '') }, true)} /></label>
     </div>
   </div>;
-  const search = () => <input type="search" autoFocus placeholder="Search owner, building or unit" value={f.q} onChange={(e) => change({ q: e.target.value }, true)} />;
+  const search = () => <input type="search" autoFocus placeholder="Search owner, unit or last 4 digits" value={f.q} onChange={(e) => change({ q: e.target.value }, true)} />;
   const HEAD_FILTERS = {
     unit: { on: ['q', 'umin', 'umax', 'useries', 'uletter'], ui: () => <>{search()}{unitNums()}</> },
     place: { on: ['bld'], ui: () => pick('bld', buildings) },
@@ -1323,7 +1330,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
       <main className={'layout gut' + (side ? '' : ' noside')}>
         {side && <aside className="filters">
           <button className="hide-side" onClick={() => setSide(false)} title="Hide filters to see the whole table">‹ Hide filters</button>
-          <div><input id="q" type="search" placeholder="Search owner, building or unit" value={f.q} autoComplete="off" onChange={(e) => change({ q: e.target.value }, true)} /></div>
+          <div><input id="q" type="search" placeholder="Search owner, unit or last 4 digits" value={f.q} autoComplete="off" onChange={(e) => change({ q: e.target.value }, true)} /></div>
           {areas.length > 1 && <MultiSelect label="Area" options={areas} selected={f.area} onChange={(v) => setPlace('area', v)} />}
           <MultiSelect label="Sub-community" options={subcommunities} selected={f.sc} onChange={(v) => setPlace('sc', v)} />
           <MultiSelect label="Building" options={buildings} selected={f.bld} onChange={(v) => setPlace('bld', v)} />
