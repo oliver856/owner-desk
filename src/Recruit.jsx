@@ -16,7 +16,7 @@ const STAGE_COLOR = Object.fromEntries(STAGE_INFO);
 const CLOSED = ['Not interested', 'Rejected'];
 const OPEN = STAGES.filter((s) => !CLOSED.includes(s));
 const FOCUS = ['Sales', 'Leasing', 'Sales & leasing', 'Off-plan'];
-const SOURCES = ['Cold outreach', 'LinkedIn', 'Referral', 'Applied', 'Other'];
+const SOURCES = ['Cold outreach', 'Broker database', 'LinkedIn', 'Referral', 'Applied', 'Other'];
 const TEMPS = [['hot', 'Hot'], ['warm', 'Warm'], ['cold', 'Cold']];
 // One-tap results when logging a call. stage = moves them on, temp = sets hot/warm/cold.
 const CALL_RESULTS = [
@@ -49,7 +49,8 @@ const fmtDay = (v) => {
 const fmtWhen = (v) => { const d = dt(v); return d ? d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; };
 const localInput = (v) => { const d = dt(v); if (!d) return ''; const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 16); };
 const followState = (v) => { const d = dt(v); if (!d) return ''; const end = dayStart(); end.setDate(end.getDate() + 1); return d < dayStart() ? 'late' : d < end ? 'due' : ''; };
-const waLink = (phone) => { let d = String(phone || '').replace(/\D/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = '971' + d.slice(1); return d.length >= 8 ? 'https://wa.me/' + d : null; };
+const waLink = (phone) => { let d = String(phone || '').replace(/\D/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = '971' + d.slice(1); if (/^971[1-46-9]/.test(d)) return null;   // UAE landline: not on WhatsApp
+  return d.length >= 8 ? 'https://wa.me/' + d : null; };
 const initials = (n) => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 const norm = (o) => (Array.isArray(o) ? { v: o[0], l: o[1] } : { v: o, l: o });
 
@@ -75,7 +76,9 @@ function OptionList({ options, value, onPick, search, allowNew, placeholder = 'S
     return options.map(norm).filter((o) => !t || o.l.toLowerCase().includes(t));
   }, [options, q]);
   const exact = items.some((o) => o.l.toLowerCase() === q.trim().toLowerCase());
-  const rows = allowNew && q.trim() && !exact ? [...items, { v: q.trim(), l: `Add "${q.trim()}"`, add: true }] : items;
+  const MAX = 100;   // long lists (17,000 brokerages) only draw the first 100 matches; typing narrows them down
+  const shown = items.length > MAX ? items.slice(0, MAX) : items;
+  const rows = allowNew && q.trim() && !exact ? [...shown, { v: q.trim(), l: `Add "${q.trim()}"`, add: true }] : shown;
   useEffect(() => { setHi(0); }, [q]);
   useEffect(() => { listRef.current?.querySelector('.rc-opt.hi')?.scrollIntoView({ block: 'nearest' }); }, [hi]);
   const key = (e) => {
@@ -92,6 +95,7 @@ function OptionList({ options, value, onPick, search, allowNew, placeholder = 'S
             onMouseEnter={() => setHi(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(o.v)}>
             <span>{o.l}</span>{o.v === value && <i className="rc-tick" />}
           </button>))}
+        {items.length > MAX && <p className="rc-none">{(items.length - MAX).toLocaleString()} more. Type to narrow down.</p>}
         {!rows.length && <p className="rc-none">{q ? 'No matches' : 'Nothing here yet'}</p>}
       </div>
     </div>
@@ -163,18 +167,40 @@ function Segs({ value, onChange, options, tone }) {
 
 // The last board shown, so coming back to Recruitment paints instantly while it refreshes
 let lastBoard = null;
+// Brokerage and area names for the drop-downs: fetched once (17,000+ brokerages), refreshed after adding someone
+let facetsP = null;
+const getFacets = (api, fresh) => { if (fresh || !facetsP) facetsP = api('/api/desk?action=rc&op=facets').catch((e) => { facetsP = null; throw e; }); return facetsP; };
+const NO_FACETS = { brokerages: [], areas: [] };
 export default function Recruit({ api, toast }) {
   const [f, setF] = useState(NO_FILTERS);
   const [view, setView] = useState(() => { try { return localStorage.getItem('rcView') || 'board'; } catch { return 'board'; } });
   const [d, setD] = useState(lastBoard);
   const [err, setErr] = useState('');
+  const [facets, setFacets] = useState(NO_FACETS);
+  const [more, setMore] = useState('');      // column (or 'list') currently loading more
   const [open, setOpen] = useState(null);     // candidate id
   const [adding, setAdding] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   const [dragOver, setDragOver] = useState('');
   const qs = useMemo(() => Object.entries(f).filter(([, v]) => v).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join(''), [f]);
-  const load = useCallback(() => api('/api/desk?action=rc&op=list' + qs).then((j) => { setD(j); setErr(''); if (!qs) lastBoard = j; }).catch((e) => setErr(e.message)), [api, qs]);
+  const load = useCallback(() => api('/api/desk?action=rc&op=list&v=4' + (view === 'list' ? '&view=list' : '') + qs)
+    .then((j) => { setD({ ...j, view }); setErr(''); if (!qs && view === 'board') lastBoard = { ...j, view }; }).catch((e) => setErr(e.message)), [api, qs, view]);
   useEffect(() => { const t = setTimeout(load, f.q ? 250 : 0); return () => clearTimeout(t); }, [load, f.q]);
+  const loadFacets = useCallback((fresh) => getFacets(api, fresh).then(setFacets).catch(() => {}), [api]);
+  useEffect(() => { loadFacets(false); }, [loadFacets]);
+  const changed = useCallback(() => { load(); loadFacets(true); }, [load, loadFacets]);
+  // Next 50 of one board column, or the next 100 rows of the list
+  const loadMore = useCallback(async (col) => {
+    if (more || !d) return;
+    setMore(col);
+    try {
+      const offset = col === 'list' ? d.rows.length : d.rows.filter((r) => r.stage === col).length;
+      const j = await api('/api/desk?action=rc&op=list&v=4' + (col === 'list' ? '&view=list' : '&col=' + encodeURIComponent(col)) + '&offset=' + offset + qs);
+      setD((x) => { const have = new Set(x.rows.map((r) => r.id)); return { ...x, rows: [...x.rows, ...j.rows.filter((r) => !have.has(r.id))] }; });
+    } catch (e) { toast(e.message); }
+    setMore('');
+  }, [api, d, more, qs, toast]);
+  const lists = useMemo(() => ({ ...facets, brokerages: facets.brokerages, areas: facets.areas }), [facets]);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const setV = (v) => { setView(v); try { localStorage.setItem('rcView', v); } catch {} };
   const anyFilter = Object.values(f).some(Boolean);
@@ -182,13 +208,14 @@ export default function Recruit({ api, toast }) {
   const move = async (id, stage) => {
     const c = d.rows.find((r) => r.id === id);
     if (!c || c.stage === stage) return;
-    setD((x) => ({ ...x, rows: x.rows.map((r) => (r.id === id ? { ...r, stage } : r)) }));
+    setD((x) => ({ ...x, rows: x.rows.map((r) => (r.id === id ? { ...r, stage } : r)),
+      colCounts: x.colCounts && { ...x.colCounts, [c.stage]: (x.colCounts[c.stage] || 1) - 1, [stage]: (x.colCounts[stage] || 0) + 1 } }));
     try { await api('/api/desk?action=rc&op=log', { method: 'POST', body: { id, stage } }); load(); }
     catch (e) { toast(e.message); load(); }
   };
 
   if (err && !d) return <main className="gut rc"><style>{CSS}</style><p className="err" style={{ marginTop: 30 }}>{err}</p><button className="rc-btn" onClick={load}>Try again</button></main>;
-  if (!d) return <main className="gut rc"><style>{CSS}</style><p className="muted" style={{ padding: '40px 0' }}>Loading…</p></main>;
+  if (!d || d.view !== view) return <main className="gut rc"><style>{CSS}</style><p className="muted" style={{ padding: '40px 0' }}>Loading…</p></main>;
   const cols = showClosed ? STAGES : OPEN;
   const active = d.total - (d.counts.Placed || 0) - (d.counts['Not interested'] || 0) - (d.counts.Rejected || 0);
   return (
@@ -198,7 +225,7 @@ export default function Recruit({ api, toast }) {
         <div>
           <h1>Recruitment</h1>
           <div className="rc-stats">
-            <span><b>{active}</b> in progress</span>
+            <span><b>{active.toLocaleString()}</b> in progress</span>
             <span><b>{d.counts['Interview booked'] || 0}</b> interviews booked</span>
             <span><b>{d.counts.Offered || 0}</b> offered</span>
             <span className="won"><b>{d.counts.Placed || 0}</b> placed</span>
@@ -215,8 +242,8 @@ export default function Recruit({ api, toast }) {
 
       <div className="rc-filters">
         <div className="rc-search"><i className="rc-mag" /><input type="search" placeholder="Search name, brokerage or number" value={f.q} onChange={(e) => set('q', e.target.value)} /></div>
-        <FilterPill label="Brokerage" value={f.brokerage} onChange={(v) => set('brokerage', v)} options={d.brokerages} search />
-        <FilterPill label="Area" value={f.area} onChange={(v) => set('area', v)} options={d.areas} search />
+        <FilterPill label="Brokerage" value={f.brokerage} onChange={(v) => set('brokerage', v)} options={lists.brokerages} search />
+        <FilterPill label="Area" value={f.area} onChange={(v) => set('area', v)} options={lists.areas} search />
         <FilterPill label="Sales / leasing" value={f.focus} onChange={(v) => set('focus', v)} options={FOCUS} />
         <FilterPill label="Hot / cold" value={f.temp} onChange={(v) => set('temp', v)} options={TEMPS} />
         <FilterPill label="Stage" value={f.stage} onChange={(v) => set('stage', v)} options={STAGES} />
@@ -237,20 +264,24 @@ export default function Recruit({ api, toast }) {
           <div className="rc-board" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(220px, 1fr))` }}>
             {cols.map((st) => {
               const cards = d.rows.filter((r) => r.stage === st);
+              const total = d.colCounts ? (d.colCounts[st] || 0) : cards.length;
               return (
                 <section key={st} className={'rc-col' + (dragOver === st ? ' over' : '') + (CLOSED.includes(st) ? ' closed' : '')}
                   onDragOver={(e) => { e.preventDefault(); if (dragOver !== st) setDragOver(st); }}
                   onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(''); }}
                   onDrop={(e) => { setDragOver(''); move(Number(e.dataTransfer.getData('text/plain')), st); }}>
-                  <h3><i style={{ background: STAGE_COLOR[st] }} />{st}<span>{cards.length}</span></h3>
-                  {cards.map((c) => <Card key={c.id} c={c} onOpen={() => setOpen(c.id)} />)}
-                  {!cards.length && <p className="rc-drop">{anyFilter ? 'None match' : 'Drag a card here'}</p>}
+                  <h3><i style={{ background: STAGE_COLOR[st] }} />{st}<span>{total.toLocaleString()}</span></h3>
+                  <div className="rc-col-in">
+                    {cards.map((c) => <Card key={c.id} c={c} onOpen={() => setOpen(c.id)} />)}
+                    {!cards.length && <p className="rc-drop">{anyFilter ? 'None match' : 'Drag a card here'}</p>}
+                    {cards.length < total && <MoreRow busy={more === st} left={total - cards.length} onMore={() => loadMore(st)} />}
+                  </div>
                 </section>
               );
             })}
           </div>
           <button className="rc-clear rc-closed" onClick={() => setShowClosed(!showClosed)}>
-            {showClosed ? 'Hide Not interested and Rejected' : `Show Not interested (${d.counts['Not interested'] || 0}) and Rejected (${d.counts.Rejected || 0})`}
+            {showClosed ? 'Hide Not interested and Rejected' : `Show Not interested (${(d.counts['Not interested'] || 0).toLocaleString()}) and Rejected (${(d.counts.Rejected || 0).toLocaleString()})`}
           </button>
         </>
       ) : (
@@ -268,13 +299,25 @@ export default function Recruit({ api, toast }) {
               </tr>))}</tbody>
           </table>
           {!d.rows.length && <p className="muted" style={{ padding: 24 }}>{anyFilter ? 'Nobody matches these filters.' : 'No candidates yet.'}</p>}
+          {d.matched > d.rows.length && <div className="rc-list-more"><MoreRow busy={more === 'list'} left={d.matched - d.rows.length} onMore={() => loadMore('list')} /></div>}
         </div>
       )}
 
-      {adding && <AddCandidate api={api} lists={d} onClose={() => setAdding(false)} onSaved={(id) => { setAdding(false); load(); setOpen(id); }} />}
-      {open && <Candidate api={api} id={open} lists={d} toast={toast} onClose={() => setOpen(null)} onChanged={load} />}
+      {adding && <AddCandidate api={api} lists={lists} onClose={() => setAdding(false)} onSaved={(id) => { setAdding(false); changed(); setOpen(id); }} />}
+      {open && <Candidate api={api} id={open} lists={lists} toast={toast} onClose={() => setOpen(null)} onChanged={changed} />}
     </main>
   );
+}
+
+// "47,512 more": loads the next lot by itself when it scrolls into view (or on click)
+function MoreRow({ busy, left, onMore }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current; if (!el || !('IntersectionObserver' in window)) return undefined;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) onMore(); }, { rootMargin: '300px' });
+    io.observe(el); return () => io.disconnect();
+  }, [onMore]);
+  return <button type="button" ref={ref} className="rc-more" disabled={busy} onClick={onMore}>{busy ? 'Loading…' : `${left.toLocaleString()} more`}</button>;
 }
 
 function Card({ c, onOpen }) {
@@ -302,6 +345,7 @@ function Fields({ v, set, lists }) {
     <div className="rc-form">
       <label className="wide"><span>Name</span><input className="rc-in" value={v.name} onChange={(e) => set('name', e.target.value)} autoFocus placeholder="Full name" /></label>
       <label><span>Mobile</span><input className="rc-in" value={v.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+971 50 …" /></label>
+      <label><span>Office line</span><input className="rc-in" value={v.phone2} onChange={(e) => set('phone2', e.target.value)} placeholder="Optional" /></label>
       <label><span>Email</span><input className="rc-in" type="email" value={v.email} onChange={(e) => set('email', e.target.value)} placeholder="Optional" /></label>
       <div className="rc-lab"><span>Brokerage</span><Combo value={v.brokerage} onChange={(x) => set('brokerage', x)} options={brokerages} placeholder="Pick or type a new one" /></div>
       <div className="rc-lab"><span>Area they cover</span><Combo value={v.area} onChange={(x) => set('area', x)} options={lists.areas} placeholder="Pick or type" /></div>
@@ -328,7 +372,7 @@ function FollowPicker({ v, on, current }) {
   );
 }
 
-const blank = { name: '', phone: '', email: '', brokerage: '', area: '', focus: '', source: 'Cold outreach', stage: 'To contact', linkedin: '', temp: '' };
+const blank = { name: '', phone: '', phone2: '', email: '', brokerage: '', area: '', focus: '', source: 'Cold outreach', stage: 'To contact', linkedin: '', temp: '' };
 const followBody = (fu) => (fu.kind === 'custom' ? (fu.at ? { kind: 'custom', at: new Date(fu.at).toISOString() } : {}) : fu);
 
 function Sheet({ onClose, wide, children }) {
@@ -445,9 +489,10 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
         <div className="rc-contact">
           {c.phone && <a className="rc-btn" href={'tel:' + c.phone}>Call {c.phone}</a>}
           {waLink(c.phone) && <a className="rc-btn wa" href={waLink(c.phone)} target="_blank" rel="noreferrer">WhatsApp</a>}
+          {c.phone2 && <a className="rc-btn" href={'tel:' + c.phone2}>Office {c.phone2}</a>}
           {c.email && <a className="rc-btn" href={'mailto:' + c.email}>Email</a>}
           {c.linkedin && <a className="rc-btn" href={/^https?:/.test(c.linkedin) ? c.linkedin : 'https://' + c.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
-          {!c.phone && !c.email && <span className="faint">No number or email yet. Use Edit to add them.</span>}
+          {!c.phone && !c.phone2 && !c.email && <span className="faint">No number or email yet. Use Edit to add them.</span>}
         </div>
 
         <div className="rc-grid2">
@@ -527,6 +572,9 @@ const CSS = `
 .rc-col{background:var(--r-soft);border-radius:14px;padding:10px;min-height:140px;display:flex;flex-direction:column;gap:8px;transition:background .12s,box-shadow .12s}
 .rc-col.over{background:color-mix(in srgb,var(--accent) 8%,var(--bg));box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--accent) 45%,transparent)} .rc-col.closed{opacity:.85}
 .rc-col h3{margin:2px 4px 4px;font-size:13px;font-weight:650;display:flex;align-items:center;gap:8px} .rc-col h3 i{width:8px;height:8px;border-radius:50%;flex:none}
+.rc-col-in{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - var(--toph, 57px) - 250px);min-height:60px;overflow-y:auto;margin:0 -4px;padding:2px 4px 4px;overscroll-behavior:contain}
+.rc-more{border:1.5px dashed var(--line);background:none;border-radius:10px;padding:10px;color:var(--muted);font:inherit;font-size:12.5px;cursor:pointer;flex:none} .rc-more:hover{color:var(--ink);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.rc-list-more{padding:12px;display:flex;justify-content:center} .rc-list-more .rc-more{min-width:200px}
 .rc-col h3 span{margin-left:auto;font-weight:600;font-size:12px;color:var(--muted);background:var(--bg);border-radius:999px;padding:1px 8px}
 .rc-drop{margin:0;padding:18px 8px;text-align:center;color:var(--faint);font-size:12.5px;border:1.5px dashed var(--line);border-radius:10px}
 .rc-card{background:var(--r-card);border:1px solid var(--line);border-radius:11px;padding:11px 12px;cursor:pointer;display:flex;flex-direction:column;gap:9px;box-shadow:var(--r-shadow);transition:transform .12s,box-shadow .12s,border-color .12s}
