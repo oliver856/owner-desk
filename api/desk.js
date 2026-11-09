@@ -4,6 +4,7 @@ import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout, runningCalloutId, isTest, testsOn } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
+import { recruitActions } from './recruit.js';
 import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed, notLocked, recruitAllowed, forgetRecruit } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
@@ -856,13 +857,21 @@ const actions = {
     res.json({ ok: true });
   },
 
+  // Recruitment, through this always-busy server so it never waits for a cold start: /api/desk?action=rc&op=list
+  async rc(req, res, s, ip) {
+    if (!(await recruitAllowed(s))) return res.status(403).json({ error: 'Not allowed.' });
+    const fn = recruitActions[query(req).get('op')];
+    if (!fn) return res.status(404).json({ error: 'Unknown action' });
+    await fn(req, res, s, ip);
+  },
+
   async copyBlocked(req, res, s, ip) {
     await audit(s.user_id, 'copy_blocked', { ip });
     res.json({ ok: true });
   },
 };
 
-const RECRUITER_ACTIONS = new Set(['me', 'copyBlocked', 'savePrefs']);
+const RECRUITER_ACTIONS = new Set(['me', 'copyBlocked', 'savePrefs', 'rc']);
 export default route(async (req, res, s, ip) => {
   const action = query(req).get('action');
   if (s.role === 'recruiter' && !RECRUITER_ACTIONS.has(action)) return res.status(403).json({ error: 'Not allowed.' });
