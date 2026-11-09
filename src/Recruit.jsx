@@ -161,17 +161,19 @@ function Segs({ value, onChange, options, tone }) {
   );
 }
 
+// The last board shown, so coming back to Recruitment paints instantly while it refreshes
+let lastBoard = null;
 export default function Recruit({ api, toast }) {
   const [f, setF] = useState(NO_FILTERS);
   const [view, setView] = useState(() => { try { return localStorage.getItem('rcView') || 'board'; } catch { return 'board'; } });
-  const [d, setD] = useState(null);
+  const [d, setD] = useState(lastBoard);
   const [err, setErr] = useState('');
   const [open, setOpen] = useState(null);     // candidate id
   const [adding, setAdding] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   const [dragOver, setDragOver] = useState('');
   const qs = useMemo(() => Object.entries(f).filter(([, v]) => v).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join(''), [f]);
-  const load = useCallback(() => api('/api/recruit?action=list' + qs).then((j) => { setD(j); setErr(''); }).catch((e) => setErr(e.message)), [api, qs]);
+  const load = useCallback(() => api('/api/desk?action=rc&op=list' + qs).then((j) => { setD(j); setErr(''); if (!qs) lastBoard = j; }).catch((e) => setErr(e.message)), [api, qs]);
   useEffect(() => { const t = setTimeout(load, f.q ? 250 : 0); return () => clearTimeout(t); }, [load, f.q]);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const setV = (v) => { setView(v); try { localStorage.setItem('rcView', v); } catch {} };
@@ -181,7 +183,7 @@ export default function Recruit({ api, toast }) {
     const c = d.rows.find((r) => r.id === id);
     if (!c || c.stage === stage) return;
     setD((x) => ({ ...x, rows: x.rows.map((r) => (r.id === id ? { ...r, stage } : r)) }));
-    try { await api('/api/recruit?action=log', { method: 'POST', body: { id, stage } }); load(); }
+    try { await api('/api/desk?action=rc&op=log', { method: 'POST', body: { id, stage } }); load(); }
     catch (e) { toast(e.message); load(); }
   };
 
@@ -352,7 +354,7 @@ function AddCandidate({ api, lists, onClose, onSaved }) {
   const set = (k, x) => setVal((o) => ({ ...o, [k]: x }));
   const save = async (force = false) => {
     setBusy(true); setErr(''); setDupe(false);
-    try { const j = await api('/api/recruit?action=save', { method: 'POST', body: { ...v, note, followUp: followBody(fu), force } }); onSaved(j.id); }
+    try { const j = await api('/api/desk?action=rc&op=save', { method: 'POST', body: { ...v, note, followUp: followBody(fu), force } }); onSaved(j.id); }
     catch (e) { setErr(e.message); if (/already in the pipeline/.test(e.message)) setDupe(true); }
     setBusy(false);
   };
@@ -382,11 +384,11 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
   const [fu, setFu] = useState({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const load = useCallback(() => api('/api/recruit?action=get&id=' + id).then(setD).catch((e) => setErr(e.message)), [api, id]);
+  const load = useCallback(() => api('/api/desk?action=rc&op=get&id=' + id).then(setD).catch((e) => setErr(e.message)), [api, id]);
   useEffect(() => { load(); }, [load]);
   const c = d?.candidate;
   const quick = async (body) => {
-    try { await api('/api/recruit?action=log', { method: 'POST', body: { id, ...body } }); await load(); onChanged(); }
+    try { await api('/api/desk?action=rc&op=log', { method: 'POST', body: { id, ...body } }); await load(); onChanged(); }
     catch (e) { toast(e.message); }
   };
   const r = CALL_RESULTS.find((x) => x.k === result);
@@ -394,7 +396,7 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
     const text = [result, note.trim()].filter(Boolean).join('. ');
     setBusy(true); setErr('');
     try {
-      await api('/api/recruit?action=log', { method: 'POST', body: {
+      await api('/api/desk?action=rc&op=log', { method: 'POST', body: {
         id, note: text, call: !!result, followUp: followBody(fu),
         ...(r?.stage && r.stage !== c.stage ? { stage: r.stage } : {}), ...(r?.temp ? { temp: r.temp } : {}) } });
       setResult(''); setNote(''); setFu({});
@@ -404,13 +406,13 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
   };
   const saveEdit = async () => {
     setBusy(true); setErr('');
-    try { await api('/api/recruit?action=save', { method: 'POST', body: { id, ...edit, interview_at: edit.interview_at ? new Date(edit.interview_at).toISOString() : null } }); setEdit(null); await load(); onChanged(); }
+    try { await api('/api/desk?action=rc&op=save', { method: 'POST', body: { id, ...edit, interview_at: edit.interview_at ? new Date(edit.interview_at).toISOString() : null } }); setEdit(null); await load(); onChanged(); }
     catch (e) { setErr(e.message); }
     setBusy(false);
   };
   const archive = async () => {
     if (!window.confirm(`Remove ${c.name} from the pipeline?`)) return;
-    try { await api('/api/recruit?action=archive', { method: 'POST', body: { id } }); onChanged(); onClose(); } catch (e) { toast(e.message); }
+    try { await api('/api/desk?action=rc&op=archive', { method: 'POST', body: { id } }); onChanged(); onClose(); } catch (e) { toast(e.message); }
   };
   if (!d) return <Sheet onClose={onClose} wide><div className="rc-sh-body"><p className="muted">{err || 'Loading…'}</p></div></Sheet>;
   if (edit) return (
