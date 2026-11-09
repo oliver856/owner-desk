@@ -129,7 +129,7 @@ export async function staffFor(req) {
 const rcCache = new Map();
 export async function recruitAllowed(s) {
   if (!s) return false;
-  if (s.role === 'admin') return true;
+  if (s.role === 'admin' || s.role === 'recruiter') return true;
   const c = rcCache.get(s.user_id);
   if (c && c.at > Date.now() - 60e3) return c.ok;
   let ok = false;
@@ -137,6 +137,7 @@ export async function recruitAllowed(s) {
   rcCache.set(s.user_id, { at: Date.now(), ok });
   return ok;
 }
+export const forgetRecruit = (userId) => rcCache.delete(userId);
 
 // ── Building locks ──
 // A lock hides some buildings from some people (e.g. Ivan's best Greens buildings from Naythan and Kevin) until they
@@ -198,7 +199,7 @@ const RETRY_READ_MS = 4500;
 // wakes, so if this copy has been idle for a few seconds and nothing else is running on it, it starts with fresh ones.
 const IDLE_RESET_MS = 4000;
 let inflight = 0;
-export function route(fn, { office = true, auth = true } = {}) {
+export function route(fn, { office = true, auth = true, recruiter = false } = {}) {
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     if (inflight === 0 && globalThis.__dbLast && Date.now() - globalThis.__dbLast > IDLE_RESET_MS) resetDb();
@@ -227,6 +228,8 @@ export function route(fn, { office = true, auth = true } = {}) {
         if (auth) {
           staff = await staffFor(req);
           if (!staff) return w.status(401).json({ error: 'Signed out' });
+          // Recruiters only see Recruitment; every other part of the desk turns them away
+          if (staff.role === 'recruiter' && !recruiter) return w.status(403).json({ error: 'Not allowed.' });
         }
         await fn(req, w, staff, ip);
       } catch (e) {
