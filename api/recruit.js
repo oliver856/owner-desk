@@ -26,11 +26,13 @@ function followFrom(f) {
   return d;
 }
 
+const areaCache = { at: 0, rows: [] };
 const CARD = sql`c.id, c.name, c.phone, c.email, c.brokerage, c.area, c.focus, c.source, c.linkedin, c.stage, c.temp,
   c.follow_up_at, c.interview_at, c.last_contact_at, c.created_at, c.updated_at,
   (select body from desk.rc_notes n where n.candidate_id = c.id and n.kind <> 'stage' order by n.id desc limit 1) as last_note`;
 
-const actions = {
+// Also served through /api/desk?action=rc&op=… (that server is always warm, so Recruitment opens instantly)
+export const recruitActions = {
   // Everything for the board/list in one go, with the filters applied on the server
   async list(req, res) {
     const q = query(req);
@@ -60,7 +62,11 @@ const actions = {
                  count(*)::int as total
           from desk.rc_candidates where not archived`,
     ]);
-    const areas = await sql`select name from desk.areas where name not in ('Lookups', 'Lead pool') order by name`.catch(() => []);
+    if (!areaCache.at || areaCache.at < Date.now() - 10 * 60e3) {
+      areaCache.rows = await sql`select name from desk.areas where name not in ('Lookups', 'Lead pool') order by name`.catch(() => areaCache.rows || []);
+      areaCache.at = Date.now();
+    }
+    const areas = areaCache.rows;
     res.json({
       rows, counts: Object.fromEntries(counts.map((r) => [r.stage, r.n])), due: d.due, overdue: d.overdue, total: d.total,
       brokerages: facets.filter((f) => f.k === 'brokerage').map((f) => f.v),
@@ -163,7 +169,7 @@ const actions = {
 
 export default route(async (req, res, s, ip) => {
   if (!(await recruitAllowed(s))) return res.status(403).json({ error: 'Not allowed.' });
-  const fn = actions[query(req).get('action')];
+  const fn = recruitActions[query(req).get('action')];
   if (!fn) return res.status(404).json({ error: 'Unknown action' });
   await fn(req, res, s, ip);
 }, { recruiter: true });
