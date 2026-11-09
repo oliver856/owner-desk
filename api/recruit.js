@@ -166,4 +166,4 @@ export default route(async (req, res, s, ip) => {
   const fn = actions[query(req).get('action')];
   if (!fn) return res.status(404).json({ error: 'Unknown action' });
   await fn(req, res, s, ip);
-});
+}, { recruiter: true });
