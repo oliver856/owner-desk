@@ -124,6 +124,20 @@ export async function staffFor(req) {
   return { ...s, lookupArea, leadArea, locked, listAreas: own, areas: [...own, ...(lookupArea ? [lookupArea] : []), ...(leadArea ? [leadArea] : [])] };
 }
 
+// ── Recruitment access ──
+// Admins, plus anyone listed in desk.rc_access. If that table isn't there yet, only admins.
+const rcCache = new Map();
+export async function recruitAllowed(s) {
+  if (!s) return false;
+  if (s.role === 'admin') return true;
+  const c = rcCache.get(s.user_id);
+  if (c && c.at > Date.now() - 60e3) return c.ok;
+  let ok = false;
+  try { ok = (await sql`select 1 from desk.rc_access where user_id = ${s.user_id}`).length > 0; } catch { ok = false; }
+  rcCache.set(s.user_id, { at: Date.now(), ok });
+  return ok;
+}
+
 // ── Building locks ──
 // A lock hides some buildings from some people (e.g. Ivan's best Greens buildings from Naythan and Kevin) until they
 // have called a share (e.g. 80%) of everything else in that area between them. Then it opens by itself, for good.
