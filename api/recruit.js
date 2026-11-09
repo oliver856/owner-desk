@@ -26,7 +26,6 @@ function followFrom(f) {
   return d;
 }
 
-const areaCache = { at: 0, rows: [] };
 const CARD = sql`c.id, c.name, c.phone, c.email, c.brokerage, c.area, c.focus, c.source, c.linkedin, c.stage, c.temp,
   c.follow_up_at, c.interview_at, c.last_contact_at, c.created_at, c.updated_at,
   (select body from desk.rc_notes n where n.candidate_id = c.id and n.kind <> 'stage' order by n.id desc limit 1) as last_note`;
@@ -50,27 +49,26 @@ export const recruitActions = {
     else if (due === 'week') w.push(sql`c.follow_up_at < ${endToday} + interval '6 days'`);
     else if (due === 'none') w.push(sql`c.follow_up_at is null and c.stage not in ('Placed', 'Not interested', 'Rejected')`);
     const where = w.reduce((a, b) => sql`${a} and ${b}`);
-    const [rows, facets, counts, [d]] = await Promise.all([
-      sql`select ${CARD} from desk.rc_candidates c where ${where}
-          order by c.follow_up_at asc nulls last, c.updated_at desc limit 1500`,
-      sql`select 'brokerage' as k, brokerage as v, count(*)::int as n from desk.rc_candidates where not archived and brokerage is not null group by 2
-          union all select 'area', area, count(*)::int from desk.rc_candidates where not archived and area is not null group by 2
-          order by 1, 3 desc`,
-      sql`select stage, count(*)::int as n from desk.rc_candidates where not archived group by 1`,
-      sql`select count(*) filter (where follow_up_at < ${endToday})::int as due,
-                 count(*) filter (where follow_up_at < date_trunc('day', now() at time zone ${DUBAI}) at time zone ${DUBAI})::int as overdue,
-                 count(*)::int as total
-          from desk.rc_candidates where not archived`,
-    ]);
-    if (!areaCache.at || areaCache.at < Date.now() - 10 * 60e3) {
-      areaCache.rows = await sql`select name from desk.areas where name not in ('Lookups', 'Lead pool') order by name`.catch(() => areaCache.rows || []);
-      areaCache.at = Date.now();
-    }
-    const areas = areaCache.rows;
+    // Two queries, one after the other. Firing several at once made the list hang on the live database
+    // (more queries than the server's 3 connections, so they queued up behind each other in the pooler).
+    const rows = await sql`select ${CARD} from desk.rc_candidates c where ${where}
+        order by c.follow_up_at asc nulls last, c.updated_at desc limit 1500`;
+    const [t] = await sql`select
+        (select coalesce(json_agg(v order by n desc), '[]') from (select brokerage as v, count(*) as n from desk.rc_candidates
+           where not archived and brokerage is not null group by 1) x) as brokerages,
+        (select coalesce(json_agg(v order by n desc), '[]') from (select area as v, count(*) as n from desk.rc_candidates
+           where not archived and area is not null group by 1) x) as rc_areas,
+        (select coalesce(json_object_agg(stage, n), '{}') from (select stage, count(*)::int as n from desk.rc_candidates
+           where not archived group by 1) x) as counts,
+        (select coalesce(json_agg(name order by name), '[]') from desk.areas where name not in ('Lookups', 'Lead pool')) as areas,
+        (select count(*) from desk.rc_candidates where not archived and follow_up_at < ${endToday})::int as due,
+        (select count(*) from desk.rc_candidates where not archived
+           and follow_up_at < date_trunc('day', now() at time zone ${DUBAI}) at time zone ${DUBAI})::int as overdue,
+        (select count(*) from desk.rc_candidates where not archived)::int as total`;
     res.json({
-      rows, counts: Object.fromEntries(counts.map((r) => [r.stage, r.n])), due: d.due, overdue: d.overdue, total: d.total,
-      brokerages: facets.filter((f) => f.k === 'brokerage').map((f) => f.v),
-      areas: [...new Set([...facets.filter((f) => f.k === 'area').map((f) => f.v), ...areas.map((a) => a.name)])],
+      rows, counts: t.counts, due: t.due, overdue: t.overdue, total: t.total,
+      brokerages: t.brokerages,
+      areas: [...new Set([...t.rc_areas, ...t.areas])],
       stages: STAGES, focus: FOCUS, sources: SOURCES,
     });
   },
