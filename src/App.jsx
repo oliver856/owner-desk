@@ -268,6 +268,7 @@ table.grid.fixed{table-layout:fixed;min-width:100%}
 th:hover .rz::after,.col-resizing .rz::after{background:var(--line)} .rz:hover::after{background:var(--accent)!important}
 body.col-resizing{cursor:col-resize;user-select:none}
 .qnotes{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.rc-pill{display:inline-block;margin-left:8px;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--hover);color:var(--muted)}
 .result{display:flex;flex-direction:column;gap:10px;margin-top:6px}
 .res-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px} @media (max-width:640px){.res-cols{grid-template-columns:1fr}}
 .res-col{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:10px}
@@ -991,7 +992,7 @@ function Desk() {
 
   // Someone with recruitment access and no owner areas (the recruiter) starts on Recruitment
   const landed = useRef(false);
-  useEffect(() => { if (me && !landed.current) { landed.current = true; if (me.recruit && me.staff.role !== 'admin' && !(me.places || []).length) setView('recruit'); } }, [me]);
+  useEffect(() => { if (me && !landed.current) { landed.current = true; if (me.staff.role === 'recruiter' || (me.recruit && me.staff.role !== 'admin' && !(me.places || []).length)) setView('recruit'); } }, [me]);
   const refreshMe = useCallback(() => api('/api/desk?action=me').then(setMe).catch((e) => setToast(e.message)), []);
   // A number was copied: update the counters in the header
   useEffect(() => { const f = () => refreshMe(); window.addEventListener('desk:caps', f); return () => window.removeEventListener('desk:caps', f); }, [refreshMe]);
@@ -1028,7 +1029,8 @@ function Desk() {
   const [seenTick, setSeenTick] = useState(0);
   const resultsSeen = co?.callout ? (() => { try { return localStorage.getItem('callout-seen-' + co.callout.id) === '1'; } catch { return false; } })() : true;
   const closeResults = () => { try { localStorage.setItem('callout-seen-' + co.callout.id, '1'); } catch {} setSeenTick(seenTick + 1); };
-  const boss = me && me.staff.role !== 'broker';
+  const boss = me && ['manager', 'director', 'admin'].includes(me.staff.role);
+  const recruiterOnly = me?.staff.role === 'recruiter';
   // Managers, directors and admins always see a running call out (to watch it), even when it's for other teams
   const calloutOn = phase === 'live' && (co?.meIn || boss);
 
@@ -1053,6 +1055,7 @@ function Desk() {
         <div className="bar gut">
           <span className="brand">Apex Owner Desk</span>
           <nav className="nav">
+            {recruiterOnly ? <button className="on">Recruitment</button> : <>
             <button className={view === 'owners' ? 'on' : ''} onClick={() => setView('owners')}>Owners</button>
             <button className={view === 'lookup' ? 'on' : ''} onClick={() => setView('lookup')}>Lookup</button>
             {me && <button className={view === 'dash' ? 'on' : ''} onClick={() => setView('dash')}>Dashboard</button>}
@@ -1060,22 +1063,23 @@ function Desk() {
             {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
             {me?.recruit && <button className={view === 'recruit' ? 'on' : ''} onClick={() => setView('recruit')}>Recruitment</button>}
             <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
+            </>}
           </nav>
           {boss && (phase === 'live' || phase === 'countdown') && <span className="co-pill"><i />{co?.callout?.test ? 'Test running' : 'Call out running'}</span>}
           {boss && <button className="co-start" onClick={() => setStartOpen(true)}>{(phase === 'live' || phase === 'countdown') && !co?.callout?.test ? 'Test mode' : 'Start call out'}</button>}
           {boss && <a className="co-tv" href="/tv" target="apex-tv" title="Open the big screen for the office TV">TV screen</a>}
           <div className="right">
-            {me?.caps && <span title="Owner profiles opened today">Profiles <span className="n">{me.caps.profiles}</span></span>}
-            {me?.caps && <span>Calls <span className="n">{me.caps.calls}</span></span>}
-            {me?.caps && me.caps.copies != null && <span title="Numbers copied today">Numbers <span className="n">{me.caps.copies}</span></span>}
+            {me?.caps && !recruiterOnly && <span title="Owner profiles opened today">Profiles <span className="n">{me.caps.profiles}</span></span>}
+            {me?.caps && !recruiterOnly && <span>Calls <span className="n">{me.caps.calls}</span></span>}
+            {me?.caps && !recruiterOnly && me.caps.copies != null && <span title="Numbers copied today">Numbers <span className="n">{me.caps.copies}</span></span>}
             <ThemeToggle />
-            {me && <button className="link" onClick={() => setMsgFor('me')}>My messages</button>}
+            {me && !recruiterOnly && <button className="link" onClick={() => setMsgFor('me')}>My messages</button>}
             {me && <span>{me.staff.name}</span>}
             <button className="link" onClick={() => getSupa().then((sb) => sb.auth.signOut())}>Sign out</button>
           </div>
         </div>
       </header>
-      {view === 'owners' && me && src === 'leads' ? <LeadPool me={me} switcher={<SourceSwitch v={src} onChange={setSrc} />} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} onCaps={refreshMe} />
+      {recruiterOnly ? null : view === 'owners' && me && src === 'leads' ? <LeadPool me={me} switcher={<SourceSwitch v={src} onChange={setSrc} />} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} onCaps={refreshMe} />
         : view === 'owners' ? (me ? <Owners switcher={<SourceSwitch v={src} onChange={setSrc} />} keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : view === 'recruit' ? null : <Activity />}
       {view === 'recruit' && me?.recruit && <React.Suspense fallback={<main className="gut muted" style={{ padding: 40 }}>Loading…</main>}><Recruit api={api} toast={setToast} /></React.Suspense>}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
@@ -2867,7 +2871,7 @@ function TvScreen() {
 }
 
 // ── Team: add people and choose their areas (admins and directors) ─────────
-const ROLE_LABEL = { broker: 'Broker', manager: 'Manager', director: 'Director', admin: 'Admin' };
+const ROLE_LABEL = { broker: 'Broker', manager: 'Manager', director: 'Director', admin: 'Admin', recruiter: 'Recruiter' };
 function Team({ myRole, onMessages }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
@@ -2892,7 +2896,7 @@ function Team({ myRole, onMessages }) {
         <div><h1>Team</h1><p className="muted">Add someone here, then they go to the sign-in page, click "Set your password" and use their email.</p></div>
         <div className="dash-ctl">
           <input type="search" placeholder="Search people" value={q} onChange={(e) => setQ(e.target.value)} />
-          <button className="btn primary" onClick={() => setEdit({ mode: 'new', full_name: '', email: '', role: 'broker', team: '', areas: [] })}>Add person</button>
+          <button className="btn primary" onClick={() => setEdit({ mode: 'new', full_name: '', email: '', role: 'broker', team: '', areas: [], recruit: false })}>Add person</button>
         </div>
       </div>
       {d.invites.length > 0 && <section className="card">
@@ -2900,7 +2904,7 @@ function Team({ myRole, onMessages }) {
         <table className="mini"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Team</th><th>Areas</th><th>Added</th><th /></tr></thead>
           <tbody>{d.invites.filter(match).map((i) => (
             <tr key={i.email}><td><b>{i.full_name}</b></td><td className="muted">{i.email}</td><td>{ROLE_LABEL[i.role]}</td><td>{i.team || <span className="faint">—</span>}</td>
-              <td className="wrapc">{['admin', 'director'].includes(i.role) ? <span className="faint">All areas</span> : areasOf(i.areas).join(', ') || <span className="faint">None yet</span>}</td>
+              <td className="wrapc">{i.role === 'recruiter' ? <span className="faint">Recruitment only</span> : ['admin', 'director'].includes(i.role) ? <span className="faint">All areas</span> : areasOf(i.areas).join(', ') || <span className="faint">None yet</span>}{i.recruit && i.role !== 'recruiter' ? <span className="rc-pill">Recruitment</span> : null}</td>
               <td className="muted">{fdt(i.created_at)}</td>
               <td className="r"><button className="link" onClick={() => setEdit({ mode: 'new', ...i, areas: (i.areas || []).map(Number) })}>Edit</button>{' · '}
                 <button className="link" onClick={() => api('/api/desk?action=cancelInvite', { method: 'POST', body: { email: i.email } }).then(load)}>Remove</button></td></tr>))}</tbody></table>
@@ -2911,7 +2915,7 @@ function Team({ myRole, onMessages }) {
           <tbody>{d.people.filter(match).map((p) => (
             <tr key={p.user_id} className={p.active ? '' : 'idle'}><td><b>{p.full_name}</b>{!p.active && <span className="faint"> · switched off</span>}</td><td className="muted">{p.email}</td>
               <td>{ROLE_LABEL[p.role] || p.role}</td><td>{p.team || <span className="faint">—</span>}</td>
-              <td className="wrapc">{['admin', 'director'].includes(p.role) ? <span className="faint">All areas</span> : areasOf(p.areas).join(', ') || <span className="faint">None</span>}</td>
+              <td className="wrapc">{p.role === 'recruiter' ? <span className="faint">Recruitment only</span> : ['admin', 'director'].includes(p.role) ? <span className="faint">All areas</span> : areasOf(p.areas).join(', ') || <span className="faint">None</span>}{p.recruit && !['recruiter', 'admin'].includes(p.role) ? <span className="rc-pill">Recruitment</span> : null}</td>
               <td className="muted">{p.last_seen ? fdt(p.last_seen) : 'Never'}</td>
               <td className="r"><button className="link" onClick={() => onMessages(p.user_id)}>Messages</button>{' · '}<button className="link" onClick={() => setEdit({ mode: 'edit', ...p, areas: (p.areas || []).map(Number) })}>Edit</button></td></tr>))}</tbody></table>
       </section>
@@ -2921,7 +2925,7 @@ function Team({ myRole, onMessages }) {
 }
 
 function PersonForm({ p, areas, teams, myRole, isMe, onClose, onSaved }) {
-  const [v, setV] = useState({ full_name: p.full_name || '', email: p.email || '', role: p.role || 'broker', team: p.team || '', areas: p.areas || [], active: p.active !== false });
+  const [v, setV] = useState({ full_name: p.full_name || '', email: p.email || '', role: p.role || 'broker', team: p.team || '', areas: p.areas || [], active: p.active !== false, recruit: !!p.recruit });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const isNew = p.mode === 'new';
@@ -2950,9 +2954,13 @@ function PersonForm({ p, areas, teams, myRole, isMe, onClose, onSaved }) {
           <label>Team<input list="team-names" value={v.team} onChange={set('team')} placeholder="e.g. Mahan's team" />
             <datalist id="team-names">{teams.map((t) => <option key={t} value={t} />)}</datalist></label>
         </div>
+        {v.role === 'recruiter' ? <p className="faint" style={{ margin: 0 }}>Recruiters only see Recruitment. No owner data, calls or dashboards.</p> : <>
         <div className="lbl">Areas</div>
         {allAreas ? <p className="faint" style={{ margin: 0 }}>{ROLE_LABEL[v.role]}s see every area.</p>
           : <CheckList options={names} selected={picked} onChange={pick} />}
+        {v.role === 'admin' ? <p className="faint" style={{ margin: 0 }}>Admins can always open Recruitment.</p>
+          : <label className="cb"><input type="checkbox" checked={v.recruit} onChange={(e) => setV({ ...v, recruit: e.target.checked })} />Can open Recruitment (hidden from everyone else)</label>}
+        </>}
         {!isNew && !isMe && <label className="cb"><input type="checkbox" checked={!v.active} onChange={(e) => setV({ ...v, active: !e.target.checked })} />Switch off their access</label>}
         {err && <p className="err">{err}</p>}
         <div className="acts"><button type="button" className="btn" onClick={onClose}>Cancel</button>
