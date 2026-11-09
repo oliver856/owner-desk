@@ -2,6 +2,7 @@
 // One recruiter's pipeline of brokers. Only people in desk.rc_access (and admins) get anything back;
 // everyone else gets "not allowed", so brokers can't find it even if they guess the address.
 import { sql, route, query, body, audit, recruitAllowed } from './_lib/core.js';
+import { pushToUser } from './_lib/push.js';
 
 export const STAGES = ['To contact', 'Contacted', 'Interested', 'Interview booked', 'Offered', 'Placed', 'Not interested', 'Rejected'];
 const FOCUS = ['Sales', 'Leasing', 'Sales & leasing', 'Off-plan'];
@@ -184,10 +185,17 @@ const moreActions = {
     if (!old) return res.status(404).json({ error: 'Candidate not found.' });
     const note = txt(b.note, 4000);
     const isCall = !!b.call;
-    const stage = pick(b.stage, STAGES);
+    // A call logged on someone still in To contact moves them to Contacted, unless a stage was picked
+    const stage = pick(b.stage, STAGES) || (isCall && old.stage === 'To contact' ? 'Contacted' : null);
     const temp = b.temp === '' ? null : pick(b.temp, TEMPS);
     const follow = followFrom(b.followUp);
     const interview = b.interview_at !== undefined ? when(b.interview_at) : undefined;
+    // Details filled in during a call (only the ones sent are changed)
+    const det = {};
+    if (b.area !== undefined) det.area = txt(b.area, 120);
+    if (b.brokerage !== undefined) det.brokerage = txt(b.brokerage, 120);
+    if (b.focus !== undefined) det.focus = pick(b.focus, FOCUS);
+    if (b.email !== undefined) det.email = txt(b.email, 160);
     await sql.begin(async (tx) => {
       if (note) await tx`insert into desk.rc_notes (candidate_id, user_id, kind, body) values (${id}, ${s.user_id}, ${isCall ? 'call' : 'note'}, ${note})`;
       if (stage && stage !== old.stage) await tx`insert into desk.rc_notes (candidate_id, user_id, kind, body) values (${id}, ${s.user_id}, 'stage', ${old.stage + ' → ' + stage})`;
@@ -197,9 +205,38 @@ const moreActions = {
         ${follow !== undefined ? tx`, follow_up_at = ${follow}` : tx``}
         ${interview !== undefined ? tx`, interview_at = ${interview}` : tx``}
         ${isCall ? tx`, last_contact_at = now()` : tx``}
+        ${Object.entries(det).reduce((acc, [k, v]) => tx`${acc}, ${tx(k)} = ${v}`, tx``)}
         where id = ${id}`;
     });
+    if (det.area !== undefined || det.brokerage !== undefined) forgetFacets();
     res.json({ ok: true });
+  },
+
+  // Send this candidate to the recruiter's phone. The phone (/phone) shows them with a big Call button for 5 minutes.
+  async call(req, res, s, ip) {
+    if (req.method !== 'POST') return res.status(405).end();
+    const b = body(req);
+    const id = Number(b.id);
+    const which = b.which === 'office' ? 'office' : 'main';
+    const [c] = await sql`select name, brokerage, phone, phone2 from desk.rc_candidates where id = ${id} and not archived`;
+    if (!c) return res.status(404).json({ error: 'Candidate not found.' });
+    if (!(which === 'office' ? c.phone2 : c.phone)) return res.status(400).json({ error: 'No number saved for them. Use Edit to add one.' });
+    const minutes = 5;
+    await sql`update desk.rc_call_requests set expires_at = now() where user_id = ${s.user_id} and used_at is null and expires_at > now()`;
+    const [r] = await sql`insert into desk.rc_call_requests (user_id, candidate_id, which, expires_at)
+      values (${s.user_id}, ${id}, ${which}, now() + make_interval(mins => ${minutes})) returning id`;
+    await audit(s.user_id, 'rc_call_sent', { detail: { id, request_id: r.id }, ip }).catch(() => {});
+    let phones = 0;
+    try { phones = await pushToUser(s.user_id, { title: `Call ${c.name}`, body: `${c.brokerage || 'Recruitment'}${which === 'office' ? ' · office line' : ''} · tap to call`, url: '/phone', tag: 'call' }); } catch { phones = 0; }
+    res.json({ requestId: Number(r.id), phones, minutes });
+  },
+
+  // Laptop checks whether the phone tapped Call yet
+  async callStatus(req, res, s) {
+    const [r] = await sql`select used_at, expires_at < now() as expired from desk.rc_call_requests
+      where id = ${Number(query(req).get('id'))} and user_id = ${s.user_id}`;
+    if (!r) return res.status(404).json({ error: 'Not found' });
+    res.json({ status: r.used_at ? 'dialled' : r.expired ? 'expired' : 'sent' });
   },
 
   // Remove from the pipeline (kept in the database, just hidden)
