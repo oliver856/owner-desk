@@ -157,6 +157,19 @@ function Combo({ value, onChange, options, placeholder }) {
   );
 }
 
+// Searchable drop-down for the candidate panel: saves when something is picked, or a moment after typing stops
+function AutoCombo({ value, options, placeholder, onSave }) {
+  const [v, setV] = useState(value);
+  const last = useRef(value);
+  useEffect(() => { setV(value); last.current = value; }, [value]);
+  useEffect(() => {
+    if (v === last.current) return undefined;
+    const t = setTimeout(() => { last.current = v; onSave(v.trim()); }, 900);
+    return () => clearTimeout(t);
+  }, [v, onSave]);
+  return <Combo value={v} onChange={setV} options={options} placeholder={placeholder} />;
+}
+
 // A row of buttons where one (or none) can be picked
 function Segs({ value, onChange, options, tone }) {
   return (
@@ -431,6 +444,24 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
   const load = useCallback(() => api('/api/desk?action=rc&op=get&id=' + id).then(setD).catch((e) => setErr(e.message)), [api, id]);
   useEffect(() => { load(); }, [load]);
   const c = d?.candidate;
+  const noteRef = useRef(null);
+  // Call on phone: send, then watch for the tap on the phone
+  const [calling, setCalling] = useState(null);   // { status: sending|sent|dialled|expired|error, requestId, which, phones }
+  const sendCall = async (which) => {
+    setCalling({ status: 'sending', which });
+    try { const j = await api('/api/desk?action=rc&op=call', { method: 'POST', body: { id, which } }); setCalling({ status: 'sent', which, ...j }); }
+    catch (e) { setCalling({ status: 'error', which, msg: e.message }); }
+  };
+  useEffect(() => {
+    if (calling?.status !== 'sent') return undefined;
+    const t = setInterval(() => {
+      api('/api/desk?action=rc&op=callStatus&id=' + calling.requestId).then((j) => {
+        if (j.status === 'dialled') { setCalling((x) => ({ ...x, status: 'dialled' })); setTimeout(() => noteRef.current?.focus(), 50); }
+        else if (j.status === 'expired') setCalling((x) => ({ ...x, status: 'expired' }));
+      }).catch(() => {});
+    }, 2000);
+    return () => clearInterval(t);
+  }, [api, calling?.status, calling?.requestId]);
   const quick = async (body) => {
     try { await api('/api/desk?action=rc&op=log', { method: 'POST', body: { id, ...body } }); await load(); onChanged(); }
     catch (e) { toast(e.message); }
@@ -441,9 +472,9 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
     setBusy(true); setErr('');
     try {
       await api('/api/desk?action=rc&op=log', { method: 'POST', body: {
-        id, note: text, call: !!result, followUp: followBody(fu),
+        id, note: text, call: !!result || calling?.status === 'dialled', followUp: followBody(fu),
         ...(r?.stage && r.stage !== c.stage ? { stage: r.stage } : {}), ...(r?.temp ? { temp: r.temp } : {}) } });
-      setResult(''); setNote(''); setFu({});
+      setResult(''); setNote(''); setFu({}); setCalling(null);
       await load(); onChanged();
     } catch (e) { setErr(e.message); }
     setBusy(false);
@@ -474,39 +505,66 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
       </div>
     </Sheet>
   );
+  const focusBar = [c.brokerage, c.area, c.focus].filter(Boolean).join(' · ');
   return (
     <Sheet onClose={onClose} wide>
       <div className="rc-sh-head rc-person">
         <span className={'rc-av big' + (c.temp ? ' t-' + c.temp : '')}>{initials(c.name)}</span>
         <div className="rc-person-txt">
           <h2>{c.name}</h2>
-          <p>{[c.brokerage, c.area, c.focus].filter(Boolean).join(' · ') || 'No details yet'}{c.source ? ` · ${c.source}` : ''}</p>
+          <p>{focusBar || 'No details yet'}{c.source ? ` · ${c.source}` : ''}</p>
         </div>
         <button className="rc-btn sm" onClick={() => setEdit({ ...blank, ...Object.fromEntries(Object.entries(c).map(([k, x]) => [k, x ?? ''])), interview_at: localInput(c.interview_at) })}>Edit</button>
         <button className="rc-close" onClick={onClose} aria-label="Close" />
       </div>
       <div className="rc-sh-body">
-        <div className="rc-contact">
-          {c.phone && <a className="rc-btn" href={'tel:' + c.phone}>Call {c.phone}</a>}
-          {waLink(c.phone) && <a className="rc-btn wa" href={waLink(c.phone)} target="_blank" rel="noreferrer">WhatsApp</a>}
-          {c.phone2 && <a className="rc-btn" href={'tel:' + c.phone2}>Office {c.phone2}</a>}
-          {c.email && <a className="rc-btn" href={'mailto:' + c.email}>Email</a>}
-          {c.linkedin && <a className="rc-btn" href={/^https?:/.test(c.linkedin) ? c.linkedin : 'https://' + c.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
-          {!c.phone && !c.phone2 && !c.email && <span className="faint">No number or email yet. Use Edit to add them.</span>}
+        {/* 1. Call */}
+        <div className="rc-callbar">
+          {c.phone ? <button className="rc-btn primary rc-callbtn" disabled={calling?.status === 'sending'} onClick={() => sendCall('main')}>
+            <i className="rc-phone-ico" /><span>Call on phone<small>{c.phone}</small></span></button>
+            : <span className="faint">No mobile saved. Use Edit to add one.</span>}
+          {c.phone2 && <button className="rc-btn rc-callbtn" disabled={calling?.status === 'sending'} onClick={() => sendCall('office')}>
+            <span>Office line<small>{c.phone2}</small></span></button>}
+          <div className="rc-callbar-side">
+            {waLink(c.phone) && <a className="rc-btn sm wa" href={waLink(c.phone)} target="_blank" rel="noreferrer">WhatsApp</a>}
+            {c.email && <a className="rc-btn sm" href={'mailto:' + c.email}>Email</a>}
+            {c.linkedin && <a className="rc-btn sm" href={/^https?:/.test(c.linkedin) ? c.linkedin : 'https://' + c.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>}
+          </div>
         </div>
+        {calling && <div className={'rc-callstate ' + calling.status}>
+          {calling.status === 'sending' && 'Sending to your phone…'}
+          {calling.status === 'sent' && <>{calling.phones > 0 ? 'Sent. Tap the notification on your phone, then the blue Call button.' : 'Sent. Open the Desk on your phone (/phone) and tap the blue Call button.'}<button className="rc-clear" onClick={() => setCalling(null)}>Cancel</button></>}
+          {calling.status === 'dialled' && <><b>On the call</b> · fill in their details and notes below as you talk.<button className="rc-clear" onClick={() => setCalling(null)}>Hide</button></>}
+          {calling.status === 'expired' && <>The call wasn&apos;t tapped on your phone in time.<button className="rc-clear" onClick={() => sendCall(calling.which)}>Send again</button></>}
+          {calling.status === 'error' && <>{calling.msg}<button className="rc-clear" onClick={() => setCalling(null)}>Close</button></>}
+        </div>}
 
-        <div className="rc-grid2">
-          <div className="rc-lab"><span>Stage</span><Select value={c.stage} onChange={(st) => st !== c.stage && quick({ stage: st })} options={STAGES} /></div>
+        {/* 2. Where they stand */}
+        <div className="rc-status">
           <div className="rc-lab"><span>Hot or cold</span><Segs value={c.temp || ''} onChange={(t) => quick({ temp: t })} options={TEMPS} tone /></div>
-          {c.stage === 'Interview booked' && <label className="rc-lab"><span>Interview</span>
-            <input className="rc-in rc-date" type="datetime-local" defaultValue={localInput(c.interview_at)} onBlur={(e) => e.target.value !== localInput(c.interview_at) && quick({ interview_at: e.target.value ? new Date(e.target.value).toISOString() : null })} /></label>}
+          <div className="rc-lab"><span>Stage</span><Select value={c.stage} onChange={(st) => st !== c.stage && quick({ stage: st })} options={STAGES} /></div>
           <div className="rc-lab"><span>Follow-up</span><p className={'rc-fu-now ' + followState(c.follow_up_at)}>{c.follow_up_at ? fmtWhen(c.follow_up_at) : 'None set'}</p></div>
         </div>
 
+        {/* 3. Their details: saved as soon as they're picked, so they can be filled in during the call */}
+        <section className="rc-det">
+          <h4>Their details <span className="faint">saved as you go</span></h4>
+          <div className="rc-det-grid">
+            <div className="rc-lab"><span>Area they cover</span><AutoCombo value={c.area || ''} options={lists.areas} placeholder="Search areas" onSave={(v) => quick({ area: v })} /></div>
+            <div className="rc-lab"><span>Brokerage</span><AutoCombo value={c.brokerage || ''} options={lists.brokerages} placeholder="Search brokerages" onSave={(v) => quick({ brokerage: v })} /></div>
+            <div className="rc-lab wide"><span>Sales or leasing</span><Segs value={c.focus || ''} onChange={(x) => quick({ focus: x })} options={FOCUS} /></div>
+            <label className="rc-lab"><span>Email</span><input className="rc-in" type="email" defaultValue={c.email || ''} key={'em' + (c.email || '')} placeholder="Add email"
+              onBlur={(e) => e.target.value.trim() !== (c.email || '') && quick({ email: e.target.value.trim() })} /></label>
+            {c.stage === 'Interview booked' && <label className="rc-lab"><span>Interview</span>
+              <input className="rc-in rc-date" type="datetime-local" defaultValue={localInput(c.interview_at)} onBlur={(e) => e.target.value !== localInput(c.interview_at) && quick({ interview_at: e.target.value ? new Date(e.target.value).toISOString() : null })} /></label>}
+          </div>
+        </section>
+
+        {/* 4. Notes, quick results, follow-up */}
         <section className="rc-log">
-          <h4>Log a call or note</h4>
+          <h4>{calling?.status === 'dialled' ? 'Notes from this call' : 'Log a call or note'}</h4>
+          <textarea ref={noteRef} className="rc-in" value={note} onChange={(e) => setNote(e.target.value)} placeholder="What was said, what they want, what happens next" />
           <div className="rc-chips">{CALL_RESULTS.map((x) => <button type="button" key={x.k} className={'rc-chip' + (result === x.k ? ' on' : '')} onClick={() => setResult(result === x.k ? '' : x.k)}>{x.k}</button>)}</div>
-          <textarea className="rc-in" value={note} onChange={(e) => setNote(e.target.value)} placeholder={result ? 'Add detail (optional)' : 'What was said, what they want, what happens next'} />
           <FollowPicker v={fu} on={setFu} current={c.follow_up_at} />
           {err && <p className="rc-err">{err}</p>}
           <div className="rc-log-foot">
@@ -632,6 +690,19 @@ textarea.rc-in{min-height:76px;resize:vertical;line-height:1.45} .rc-date{max-wi
 .rc-follow{display:flex;flex-direction:column;gap:8px}
 .rc-err{margin:0;color:var(--bad);font-size:13.5px}
 .rc-contact{display:flex;gap:8px;flex-wrap:wrap}
+.rc-callbar{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+.rc-callbtn{display:inline-flex;align-items:center;gap:10px;padding:9px 16px;text-align:left}
+.rc-callbtn span{display:flex;flex-direction:column;line-height:1.2;font-weight:600} .rc-callbtn small{font-weight:400;font-size:12px;opacity:.8;margin-top:2px}
+.rc-phone-ico{width:16px;height:16px;flex:none;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z'/%3E%3C/svg%3E") center/contain no-repeat}
+.rc-callbar-side{display:flex;gap:6px;align-items:center;margin-left:auto}
+.rc-callstate{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;font-size:13px;background:var(--r-soft)}
+.rc-callstate .rc-clear{margin-left:auto} .rc-callstate.dialled{background:color-mix(in srgb,var(--hot) 12%,var(--bg));color:var(--ink)}
+.rc-callstate.expired,.rc-callstate.error{background:color-mix(in srgb,var(--bad) 8%,var(--bg))}
+.rc-status{display:grid;grid-template-columns:auto 1fr auto;gap:14px 18px;align-items:end;padding:14px;border:1px solid var(--line);border-radius:12px}
+.rc-status .rc-fu-now{margin:0;padding:9px 0;white-space:nowrap}
+.rc-det{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.rc-det h4{margin:0;font-size:14px;display:flex;gap:8px;align-items:baseline} .rc-det h4 .faint{font-weight:400;font-size:12px}
+.rc-det-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px} .rc-det-grid .wide{grid-column:1/-1}
 .rc-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;padding:14px;border:1px solid var(--line);border-radius:12px}
 .rc-fu-now{margin:0;padding:9px 0;font-size:14px} .rc-fu-now.due{color:var(--hot);font-weight:600} .rc-fu-now.late{color:var(--cold);font-weight:600}
 .rc-log{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px;background:var(--r-soft)}
@@ -645,5 +716,5 @@ textarea.rc-in{min-height:76px;resize:vertical;line-height:1.45} .rc-date{max-wi
 .rc-n p{margin:2px 0 0;font-size:13.5px;white-space:pre-wrap;line-height:1.45} .rc-n.stage p{color:var(--muted);font-size:13px}
 .rc-nm{font-size:11.5px;color:var(--faint)} .rc-added{margin:10px 0 0 22px}
 .rc-arch{margin-right:auto;color:var(--cold)}
-@media (max-width:640px){.rc-form,.rc-grid2{grid-template-columns:1fr}.rc-sheet,.rc-sheet.wide{width:100vw}}
+@media (max-width:640px){.rc-form,.rc-grid2,.rc-det-grid,.rc-status{grid-template-columns:1fr} .rc-callbar-side{margin-left:0}.rc-sheet,.rc-sheet.wide{width:100vw}}
 `;
