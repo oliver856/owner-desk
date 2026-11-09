@@ -5,7 +5,7 @@ import { sql, route, query, body, audit, recruitAllowed } from './_lib/core.js';
 
 export const STAGES = ['To contact', 'Contacted', 'Interested', 'Interview booked', 'Offered', 'Placed', 'Not interested', 'Rejected'];
 const FOCUS = ['Sales', 'Leasing', 'Sales & leasing', 'Off-plan'];
-const SOURCES = ['Cold outreach', 'LinkedIn', 'Referral', 'Applied', 'Other'];
+const SOURCES = ['Cold outreach', 'Broker database', 'LinkedIn', 'Referral', 'Applied', 'Other'];
 const TEMPS = ['hot', 'warm', 'cold'];
 const DUBAI = 'Asia/Dubai';
 
@@ -26,19 +26,42 @@ function followFrom(f) {
   return d;
 }
 
-const CARD = sql`c.id, c.name, c.phone, c.email, c.brokerage, c.area, c.focus, c.source, c.linkedin, c.stage, c.temp,
+const PER = 50;      // cards per board column per load
+const PAGE = 100;    // rows per list page
+const facetCache = { at: 0, data: null };
+export const forgetFacets = () => { facetCache.at = 0; };
+// Headline numbers (whole pipeline, ignoring filters). One query: firing several at once made requests hang on the
+// live database (more queries than the server's 3 connections queue up inside the pooler).
+async function totals(endToday) {
+  const [t] = await sql`select
+      (select coalesce(json_object_agg(stage, n), '{}') from (select stage, count(*)::int as n from desk.rc_candidates
+         where not archived group by 1) x) as counts,
+      (select count(*) from desk.rc_candidates where not archived and follow_up_at < ${endToday})::int as due,
+      (select count(*) from desk.rc_candidates where not archived
+         and follow_up_at < date_trunc('day', now() at time zone ${DUBAI}) at time zone ${DUBAI})::int as overdue`;
+  return { counts: t.counts, due: t.due, overdue: t.overdue, total: Object.values(t.counts).reduce((a, b) => a + b, 0) };
+}
+
+const CARD = sql`c.id, c.name, c.phone, c.phone2, c.email, c.brokerage, c.area, c.focus, c.source, c.linkedin, c.stage, c.temp,
   c.follow_up_at, c.interview_at, c.last_contact_at, c.created_at, c.updated_at,
   (select body from desk.rc_notes n where n.candidate_id = c.id and n.kind <> 'stage' order by n.id desc limit 1) as last_note`;
 
 // Also served through /api/desk?action=rc&op=… (that server is always warm, so Recruitment opens instantly)
 export const recruitActions = {
-  // Everything for the board/list in one go, with the filters applied on the server
+  // The board/list. The pipeline can hold 100,000+ people, so it never sends them all:
+  //   board: the first PER cards of each column (plus each column's true total); col=<stage>&offset=n loads more of one column
+  //   list:  view=list&offset=n, PAGE rows at a time
+  // Brokerage and area lists come from op=facets (cached), not with every refresh.
   async list(req, res) {
     const q = query(req);
     const w = [sql`not c.archived`];
     const term = txt(q.get('q'), 80);
-    if (term) w.push(sql`(c.name ilike ${'%' + term + '%'} or c.brokerage ilike ${'%' + term + '%'} or c.area ilike ${'%' + term + '%'}
-      or c.email ilike ${'%' + term + '%'} or regexp_replace(coalesce(c.phone, ''), '\\D', '', 'g') like ${'%' + term.replace(/\D/g, '') + '%'} and ${/\d{3,}/.test(term)})`);
+    if (term) {
+      const digits = term.replace(/\D/g, '');
+      w.push(digits.length >= 3
+        ? sql`(c.name ilike ${'%' + term + '%'} or c.phone_digits like ${'%' + digits + '%'} or c.phone2_digits like ${'%' + digits + '%'})`
+        : sql`(c.name ilike ${'%' + term + '%'} or c.brokerage ilike ${'%' + term + '%'} or c.area ilike ${'%' + term + '%'} or c.email ilike ${'%' + term + '%'})`);
+    }
     for (const [key, col] of [['stage', 'stage'], ['brokerage', 'brokerage'], ['area', 'area'], ['focus', 'focus'], ['temp', 'temp'], ['source', 'source']]) {
       const vals = q.getAll(key).filter(Boolean);
       if (vals.length) w.push(sql`${sql('c.' + col)} = any(${vals})`);
@@ -49,29 +72,50 @@ export const recruitActions = {
     else if (due === 'week') w.push(sql`c.follow_up_at < ${endToday} + interval '6 days'`);
     else if (due === 'none') w.push(sql`c.follow_up_at is null and c.stage not in ('Placed', 'Not interested', 'Rejected')`);
     const where = w.reduce((a, b) => sql`${a} and ${b}`);
-    // Two queries, one after the other. Firing several at once made the list hang on the live database
-    // (more queries than the server's 3 connections, so they queued up behind each other in the pooler).
-    const rows = await sql`select ${CARD} from desk.rc_candidates c where ${where}
-        order by c.follow_up_at asc nulls last, c.updated_at desc limit 1500`;
-    const [t] = await sql`select
-        (select coalesce(json_agg(v order by n desc), '[]') from (select brokerage as v, count(*) as n from desk.rc_candidates
-           where not archived and brokerage is not null group by 1) x) as brokerages,
-        (select coalesce(json_agg(v order by n desc), '[]') from (select area as v, count(*) as n from desk.rc_candidates
-           where not archived and area is not null group by 1) x) as rc_areas,
-        (select coalesce(json_object_agg(stage, n), '{}') from (select stage, count(*)::int as n from desk.rc_candidates
-           where not archived group by 1) x) as counts,
-        (select coalesce(json_agg(name order by name), '[]') from desk.areas where name not in ('Lookups', 'Lead pool')) as areas,
-        (select count(*) from desk.rc_candidates where not archived and follow_up_at < ${endToday})::int as due,
-        (select count(*) from desk.rc_candidates where not archived
-           and follow_up_at < date_trunc('day', now() at time zone ${DUBAI}) at time zone ${DUBAI})::int as overdue,
-        (select count(*) from desk.rc_candidates where not archived)::int as total`;
-    res.json({
-      rows, counts: t.counts, due: t.due, overdue: t.overdue, total: t.total,
-      brokerages: t.brokerages,
-      areas: [...new Set([...t.rc_areas, ...t.areas])],
-      stages: STAGES, focus: FOCUS, sources: SOURCES,
-    });
+    const offset = Math.max(0, Math.min(1e6, Number(q.get('offset')) || 0));
+    const order = sql`order by c.follow_up_at asc nulls last, c.updated_at desc, c.id desc`;
+
+    // More of one board column, or the next page of the list: just the rows
+    const col = pick(q.get('col'), STAGES);
+    if (col) return res.json({ rows: await sql`select ${CARD} from desk.rc_candidates c where ${where} and c.stage = ${col} ${order} limit ${PER} offset ${offset}` });
+    if (q.get('view') === 'list') {
+      const rows = await sql`select ${CARD} from desk.rc_candidates c where ${where} ${order} limit ${PAGE} offset ${offset}`;
+      if (offset) return res.json({ rows });
+      const [{ n }] = await sql`select count(*)::int as n from desk.rc_candidates c where ${where}`;
+      return res.json({ rows, matched: n, ...(await totals(endToday)) });
+    }
+
+    // Board: first PER of each column, one query per column, one after the other (never several at once: see note in totals)
+    const rows = [];
+    const colCounts = await sql`select c.stage, count(*)::int as n from desk.rc_candidates c where ${where} group by 1`;
+    for (const st of STAGES) {
+      if (!colCounts.some((r) => r.stage === st)) continue;
+      rows.push(...await sql`select ${CARD} from desk.rc_candidates c where ${where} and c.stage = ${st} ${order} limit ${PER}`);
+    }
+    // The old screen (before Recruit.v4) expects the drop-down lists in here too
+    const legacy = q.get('v') ? {} : await loadFacets();
+    res.json({ ...legacy, rows, colCounts: Object.fromEntries(colCounts.map((r) => [r.stage, r.n])), ...(await totals(endToday)) });
   },
+
+  // Brokerage and area names for the drop-downs (17,000+ brokerages, so fetched once and cached for 10 minutes)
+  async facets(req, res) { res.json(await loadFacets()); },
+};
+
+async function loadFacets() {
+    if (!facetCache.at || facetCache.at < Date.now() - 10 * 60e3) {
+      const [t] = await sql`select
+        (select coalesce(json_agg(v order by n desc, v), '[]') from (select brokerage as v, count(*) as n from desk.rc_candidates
+           where not archived and brokerage is not null group by 1) x) as brokerages,
+        (select coalesce(json_agg(v order by n desc, v), '[]') from (select area as v, count(*) as n from desk.rc_candidates
+           where not archived and area is not null group by 1) x) as rc_areas,
+        (select coalesce(json_agg(name order by name), '[]') from desk.areas where name not in ('Lookups', 'Lead pool')) as areas`;
+      facetCache.data = { brokerages: t.brokerages, areas: [...new Set([...t.rc_areas, ...t.areas])], stages: STAGES, focus: FOCUS, sources: SOURCES };
+      facetCache.at = Date.now();
+    }
+    return facetCache.data;
+}
+
+const moreActions = {
 
   // Just the number of follow-ups due today (for the badge)
   async due(req, res) {
@@ -96,7 +140,7 @@ export const recruitActions = {
     const name = txt(b.name, 120);
     if (!name) return res.status(400).json({ error: 'Add a name.' });
     const f = {
-      name, phone: txt(b.phone, 40), email: txt(b.email, 160), brokerage: txt(b.brokerage, 120), area: txt(b.area, 120),
+      name, phone: txt(b.phone, 40), phone2: txt(b.phone2, 40), email: txt(b.email, 160), brokerage: txt(b.brokerage, 120), area: txt(b.area, 120),
       focus: pick(b.focus, FOCUS), source: pick(b.source, SOURCES), linkedin: txt(b.linkedin, 300),
       temp: pick(b.temp, TEMPS), interview_at: when(b.interview_at),
     };
@@ -109,13 +153,14 @@ export const recruitActions = {
         await tx`update desk.rc_candidates set ${tx(f)}, stage = ${stage}, updated_at = now() where id = ${id}`;
         if (old.stage !== stage) await tx`insert into desk.rc_notes (candidate_id, user_id, kind, body) values (${id}, ${s.user_id}, 'stage', ${old.stage + ' → ' + stage})`;
       });
+      forgetFacets();
       return res.json({ ok: true, id });
     }
     // Same phone or email already in the pipeline: say so rather than add a duplicate
     const digits = (f.phone || '').replace(/\D/g, '');
     if (!b.force && (digits.length >= 7 || f.email)) {
       const [dupe] = await sql`select id, name, stage from desk.rc_candidates where not archived and (
-        (${digits.length >= 7} and right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 9) = right(${digits}, 9))
+        (${digits.length >= 7} and (right(phone_digits, 9) = right(${digits}, 9) or right(phone2_digits, 9) = right(${digits}, 9)))
         or (${!!f.email} and lower(email) = lower(${f.email || ''})))`;
       if (dupe) return res.status(409).json({ error: `${dupe.name} is already in the pipeline (${dupe.stage}).`, dupe });
     }
@@ -126,6 +171,7 @@ export const recruitActions = {
       if (note) await tx`insert into desk.rc_notes (candidate_id, user_id, kind, body) values (${r.id}, ${s.user_id}, 'note', ${note})`;
       return r.id;
     });
+    forgetFacets();
     await audit(s.user_id, 'rc_added', { detail: { id }, ip }).catch(() => {});
     res.json({ ok: true, id });
   },
@@ -164,6 +210,8 @@ export const recruitActions = {
     res.json({ ok: true });
   },
 };
+
+Object.assign(recruitActions, moreActions);
 
 export default route(async (req, res, s, ip) => {
   if (!(await recruitAllowed(s))) return res.status(403).json({ error: 'Not allowed.' });
