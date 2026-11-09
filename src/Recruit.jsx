@@ -51,6 +51,23 @@ const localInput = (v) => { const d = dt(v); if (!d) return ''; const z = new Da
 const followState = (v) => { const d = dt(v); if (!d) return ''; const end = dayStart(); end.setDate(end.getDate() + 1); return d < dayStart() ? 'late' : d < end ? 'due' : ''; };
 const waLink = (phone) => { let d = String(phone || '').replace(/\D/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = '971' + d.slice(1); if (/^971[1-46-9]/.test(d)) return null;   // UAE landline: not on WhatsApp
   return d.length >= 8 ? 'https://wa.me/' + d : null; };
+// Property Finder's agent search, already searched for this name
+const pfLink = (name) => 'https://www.propertyfinder.ae/en/find-agent/search?text=' + encodeURIComponent(String(name || '').trim());
+const copyText = async (t) => {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch { const a = document.createElement('textarea'); a.value = t; a.className = 'rc'; document.body.appendChild(a); a.select(); const ok = document.execCommand('copy'); a.remove(); return ok; }
+};
+// Name you can click to copy, plus a PF button that opens Property Finder's agent search for that name
+function NameTools({ name, big }) {
+  const [done, setDone] = useState(false);
+  const copy = async (e) => { e.stopPropagation(); e.preventDefault(); if (await copyText(name)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
+  return (
+    <span className={'rc-nt' + (big ? ' big' : '')}>
+      <button type="button" className={'rc-copy' + (done ? ' done' : '')} title="Click to copy the name" onClick={copy} onMouseDown={(e) => e.stopPropagation()}>{done ? 'Copied' : name}</button>
+      <a className="rc-pf" href={pfLink(name)} target="_blank" rel="noreferrer" title="Search Property Finder for this name" onClick={(e) => e.stopPropagation()}>PF</a>
+    </span>
+  );
+}
 const initials = (n) => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 const norm = (o) => (Array.isArray(o) ? { v: o[0], l: o[1] } : { v: o, l: o });
 
@@ -217,6 +234,19 @@ export default function Recruit({ api, toast }) {
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const setV = (v) => { setView(v); try { localStorage.setItem('rcView', v); } catch {} };
   const anyFilter = Object.values(f).some(Boolean);
+  // Quick remove (the x on a card or row), with Undo for a few seconds
+  const [undo, setUndo] = useState(null);
+  const undoT = useRef(null);
+  const remove = useCallback(async (c) => {
+    setD((x) => ({ ...x, rows: x.rows.filter((r) => r.id !== c.id), matched: x.matched && x.matched - 1,
+      colCounts: x.colCounts && { ...x.colCounts, [c.stage]: Math.max(0, (x.colCounts[c.stage] || 1) - 1) } }));
+    clearTimeout(undoT.current); setUndo(c); undoT.current = setTimeout(() => setUndo(null), 7000);
+    try { await api('/api/desk?action=rc&op=archive', { method: 'POST', body: { id: c.id } }); } catch (e) { toast(e.message); load(); }
+  }, [api, load, toast]);
+  const unremove = async () => {
+    const c = undo; setUndo(null); clearTimeout(undoT.current);
+    try { await api('/api/desk?action=rc&op=restore', { method: 'POST', body: { id: c.id } }); load(); } catch (e) { toast(e.message); }
+  };
   // Drag a card to another column to move its stage
   const move = async (id, stage) => {
     const c = d.rows.find((r) => r.id === id);
@@ -285,7 +315,7 @@ export default function Recruit({ api, toast }) {
                   onDrop={(e) => { setDragOver(''); move(Number(e.dataTransfer.getData('text/plain')), st); }}>
                   <h3><i style={{ background: STAGE_COLOR[st] }} />{st}<span>{total.toLocaleString()}</span></h3>
                   <div className="rc-col-in">
-                    {cards.map((c) => <Card key={c.id} c={c} onOpen={() => setOpen(c.id)} />)}
+                    {cards.map((c) => <Card key={c.id} c={c} onOpen={() => setOpen(c.id)} onRemove={remove} />)}
                     {!cards.length && <p className="rc-drop">{anyFilter ? 'None match' : 'Drag a card here'}</p>}
                     {cards.length < total && <MoreRow busy={more === st} left={total - cards.length} onMore={() => loadMore(st)} />}
                   </div>
@@ -300,15 +330,16 @@ export default function Recruit({ api, toast }) {
       ) : (
         <div className="rc-tw">
           <table className="rc-t">
-            <thead><tr><th>Name</th><th>Brokerage</th><th>Area</th><th>Focus</th><th>Stage</th><th>Follow up</th><th>Last spoke</th><th>Latest note</th></tr></thead>
+            <thead><tr><th>Name</th><th>Brokerage</th><th>Area</th><th>Focus</th><th>Stage</th><th>Follow up</th><th>Last spoke</th><th>Latest note</th><th aria-label="Remove" /></tr></thead>
             <tbody>{d.rows.map((c) => (
               <tr key={c.id} onClick={() => setOpen(c.id)}>
-                <td><div className="rc-nm-cell"><span className={'rc-av' + (c.temp ? ' t-' + c.temp : '')}>{initials(c.name)}</span><b>{c.name}</b></div></td>
+                <td><div className="rc-nm-cell"><span className={'rc-av' + (c.temp ? ' t-' + c.temp : '')}>{initials(c.name)}</span><b><NameTools name={c.name} /></b></div></td>
                 <td>{c.brokerage || <span className="faint">—</span>}</td><td>{c.area || <span className="faint">—</span>}</td><td>{c.focus || <span className="faint">—</span>}</td>
                 <td><span className="rc-stage"><i style={{ background: STAGE_COLOR[c.stage] }} />{c.stage}</span></td>
                 <td className={'rc-fu ' + followState(c.follow_up_at)}>{fmtDay(c.follow_up_at) || <span className="faint">—</span>}</td>
                 <td className="muted">{fmtDay(c.last_contact_at) || 'Never'}</td>
                 <td className="rc-ln">{c.last_note || ''}</td>
+                <td className="rc-rm-cell"><button type="button" className="rc-rm" title="Remove from the pipeline" aria-label="Remove" onClick={(e) => { e.stopPropagation(); remove(c); }} /></td>
               </tr>))}</tbody>
           </table>
           {!d.rows.length && <p className="muted" style={{ padding: 24 }}>{anyFilter ? 'Nobody matches these filters.' : 'No candidates yet.'}</p>}
@@ -316,6 +347,7 @@ export default function Recruit({ api, toast }) {
         </div>
       )}
 
+      {undo && <div className="rc-undo"><span>Removed <b>{undo.name}</b></span><button type="button" onClick={unremove}>Undo</button></div>}
       {adding && <AddCandidate api={api} lists={lists} onClose={() => setAdding(false)} onSaved={(id) => { setAdding(false); changed(); setOpen(id); }} />}
       {open && <Candidate api={api} id={open} lists={lists} toast={toast} onClose={() => setOpen(null)} onChanged={changed} />}
     </main>
@@ -333,14 +365,15 @@ function MoreRow({ busy, left, onMore }) {
   return <button type="button" ref={ref} className="rc-more" disabled={busy} onClick={onMore}>{busy ? 'Loading…' : `${left.toLocaleString()} more`}</button>;
 }
 
-function Card({ c, onOpen }) {
+function Card({ c, onOpen, onRemove }) {
   const fs = followState(c.follow_up_at);
   return (
     <article className="rc-card" draggable onDragStart={(e) => { e.dataTransfer.setData('text/plain', String(c.id)); e.dataTransfer.effectAllowed = 'move'; }} onClick={onOpen}>
       <div className="rc-card-top">
         <span className={'rc-av' + (c.temp ? ' t-' + c.temp : '')}>{initials(c.name)}</span>
-        <div className="rc-card-name"><b>{c.name}</b><span>{[c.brokerage, c.area].filter(Boolean).join(' · ') || 'No details yet'}</span></div>
+        <div className="rc-card-name"><b><NameTools name={c.name} /></b><span>{[c.brokerage, c.area].filter(Boolean).join(' · ') || 'No details yet'}</span></div>
       </div>
+      <button type="button" className="rc-rm" title="Remove from the pipeline" aria-label="Remove" onClick={(e) => { e.stopPropagation(); onRemove(c); }} />
       <div className="rc-card-foot">
         {c.temp && <span className={'rc-temp ' + c.temp}>{c.temp}</span>}
         {c.focus && <span className="rc-tag">{c.focus}</span>}
@@ -511,7 +544,7 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
       <div className="rc-sh-head rc-person">
         <span className={'rc-av big' + (c.temp ? ' t-' + c.temp : '')}>{initials(c.name)}</span>
         <div className="rc-person-txt">
-          <h2>{c.name}</h2>
+          <h2><NameTools name={c.name} big /></h2>
           <p>{focusBar || 'No details yet'}{c.source ? ` · ${c.source}` : ''}</p>
         </div>
         <button className="rc-btn sm" onClick={() => setEdit({ ...blank, ...Object.fromEntries(Object.entries(c).map(([k, x]) => [k, x ?? ''])), interview_at: localInput(c.interview_at) })}>Edit</button>
@@ -583,6 +616,7 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
             </div>)) : <p className="muted">Nothing yet.</p>}
           <p className="rc-nm rc-added">Added {fmtWhen(c.created_at)}</p>
         </section>
+        <div className="rc-remove"><button className="rc-btn sm danger" onClick={archive}>Remove {c.name.split(' ')[0]} from the pipeline</button></div>
       </div>
     </Sheet>
   );
@@ -700,6 +734,22 @@ textarea.rc-in{min-height:76px;resize:vertical;line-height:1.45} .rc-date{max-wi
 .rc-callstate.expired,.rc-callstate.error{background:color-mix(in srgb,var(--bad) 8%,var(--bg))}
 .rc-status{display:grid;grid-template-columns:auto 1fr auto;gap:14px 18px;align-items:end;padding:14px;border:1px solid var(--line);border-radius:12px}
 .rc-status .rc-fu-now{margin:0;padding:9px 0;white-space:nowrap}
+.rc-nt{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%}
+.rc-copy{font:inherit;font-weight:inherit;color:inherit;background:none;border:0;padding:0 2px;margin:0 -2px;border-radius:4px;cursor:copy;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.rc-copy:hover{background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent)} .rc-copy.done{color:var(--hot)}
+.rc-pf{flex:none;font-size:10.5px;font-weight:700;letter-spacing:.02em;color:#e0263b;border:1px solid color-mix(in srgb,#e0263b 35%,var(--line));border-radius:5px;padding:1px 5px;text-decoration:none;line-height:1.4;opacity:.75}
+.rc-pf:hover{opacity:1;background:color-mix(in srgb,#e0263b 8%,var(--bg))}
+.rc-nt.big .rc-pf{font-size:11.5px;padding:2px 7px}
+.rc-card{position:relative}
+.rc-rm{width:22px;height:22px;border-radius:6px;border:0;background:none;color:var(--faint);cursor:pointer;flex:none;position:relative}
+.rc-rm::before,.rc-rm::after{content:'';position:absolute;left:6px;right:6px;top:10px;height:1.6px;background:currentColor;border-radius:1px;transform:rotate(45deg)} .rc-rm::after{transform:rotate(-45deg)}
+.rc-rm:hover{background:color-mix(in srgb,var(--bad) 10%,var(--bg));color:var(--bad)}
+.rc-card .rc-rm{position:absolute;top:6px;right:6px;opacity:0;transition:opacity .12s} .rc-card:hover .rc-rm{opacity:1}
+.rc-rm-cell{width:34px;text-align:right} .rc-t tr .rc-rm{opacity:.35} .rc-t tr:hover .rc-rm{opacity:1}
+.rc-undo{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:95;display:flex;align-items:center;gap:16px;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.2);font-size:13px}
+.rc-undo button{font:inherit;font-weight:600;background:none;border:0;color:color-mix(in srgb,var(--accent) 60%,#fff);cursor:pointer;padding:4px 8px;border-radius:6px} .rc-undo button:hover{background:rgba(255,255,255,.1)}
+.rc-remove{display:flex;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--line)}
+.rc-btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 30%,var(--line))} .rc-btn.danger:hover{background:color-mix(in srgb,var(--bad) 7%,var(--bg))}
 .rc-det{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
 .rc-det h4{margin:0;font-size:14px;display:flex;gap:8px;align-items:baseline} .rc-det h4 .faint{font-weight:400;font-size:12px}
 .rc-det-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px} .rc-det-grid .wide{grid-column:1/-1}
