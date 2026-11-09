@@ -1,7 +1,7 @@
 // Phone actions: /api/phone?action=...
 // These work from anywhere, but a phone only ever sees a call that the same broker
 // started on a laptop inside the office, and only until it expires.
-import { sql, ensureOnce, route, query, body, audit, waNumber } from './_lib/core.js';
+import { sql, ensureOnce, route, query, body, audit, waNumber, recruitAllowed } from './_lib/core.js';
 import { vapidKeys, pushToUser } from './_lib/push.js';
 import { OUTCOMES, saveOutcome } from './_lib/outcome.js';
 import { getTemplates } from './_lib/templates.js';
@@ -60,13 +60,36 @@ const actions = {
       join desk.call_requests cr on cr.id = c.request_id join desk.owners o on o.id = c.owner_id
       where c.user_id = ${s.user_id} and c.followup_at > now() - interval '30 minutes' and c.note ~* 'whatsapp sent$'
       order by c.followup_at desc limit 1`;
-    res.json({ name: s.full_name, pending: pending || null, awaiting: awaiting || null, followup: followup ? { ...followup, templates } : null, lastWa: lastWa || null });
+    // A recruitment candidate sent from the Recruitment page (only for people with recruitment access)
+    let rcPending = null;
+    if (s.role === 'recruiter' || s.role === 'admin' || await recruitAllowed(s)) {
+      [rcPending] = await sql`select r.id, c.name, c.brokerage, r.which,
+          '•••• ' || right(case when r.which = 'office' then c.phone2_digits else c.phone_digits end, 4) as masked,
+          extract(epoch from (r.expires_at - now()))::int as seconds_left
+        from desk.rc_call_requests r join desk.rc_candidates c on c.id = r.candidate_id
+        where r.user_id = ${s.user_id} and r.used_at is null and r.expires_at > now()
+        order by r.created_at desc limit 1`.catch(() => []);
+    }
+    res.json({ name: s.full_name, rcPending: rcPending || null, pending: pending || null, awaiting: awaiting || null, followup: followup ? { ...followup, templates } : null, lastWa: lastWa || null });
   },
 
   // The blue button. Releases the number once, for this broker's own unexpired request, and records the call.
   async dial(req, res, s, ip) {
     if (req.method !== 'POST') return res.status(405).end();
     const id = Number(body(req).id);
+    // Recruitment call: release the candidate's number once, for this recruiter's own unexpired request
+    if (body(req).rc) {
+      const [r] = await sql`update desk.rc_call_requests set used_at = now()
+        where id = ${id} and user_id = ${s.user_id} and used_at is null and expires_at > now() returning candidate_id, which`;
+      if (!r) return res.status(410).json({ error: 'This call has expired or was already used. Press Call on the laptop again.' });
+      const [c] = await sql`update desk.rc_candidates set last_contact_at = now() where id = ${r.candidate_id}
+        returning case when ${r.which} = 'office' then phone2_digits else phone_digits end as d`;
+      await audit(s.user_id, 'rc_call_dialled', { detail: { request_id: id, id: r.candidate_id }, ip }).catch(() => {});
+      // Typed numbers may be local (050…) or start 00: make them dialable from any phone
+      let d = String(c.d || '');
+      if (d.startsWith('00')) d = d.slice(2); else if (d.startsWith('0')) d = '971' + d.slice(1);
+      return res.json({ tel: '+' + d });
+    }
     const [r] = await sql`
       update desk.call_requests set used_at = now()
       where id = ${id} and user_id = ${s.user_id} and used_at is null and expires_at > now()
@@ -171,4 +194,4 @@ export default route(async (req, res, s, ip) => {
   const fn = actions[query(req).get('action')];
   if (!fn) return res.status(404).json({ error: 'Unknown action' });
   await fn(req, res, s, ip);
-}, { office: false });
+}, { office: false, recruiter: true });   // recruiters use the phone screen for Recruitment calls
