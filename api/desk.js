@@ -4,7 +4,7 @@ import { getTemplates, saveTemplates } from './_lib/templates.js';
 import { ensureCallouts, currentCallout, runningCalloutId, isTest, testsOn } from './_lib/callout.js';
 import { ensureInvites, cleanEmail, validEmail, ROLES, setAreas } from './_lib/team.js';
 import crypto from 'node:crypto';
-import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed, notLocked, recruitAllowed } from './_lib/core.js';
+import { sql, ensureOnce, route, query, body, audit, caps, setting, callTarget, ensureTargets, baseTarget, goalFor, rocketAllowed, notLocked, recruitAllowed, forgetRecruit } from './_lib/core.js';
 import { whereSql, tabSql, sortSql, TABS } from './_lib/filters.js';
 import { pushToUser } from './_lib/push.js';
 import { ensureHolds, holdFor } from './_lib/holds.js';
@@ -39,9 +39,9 @@ const ensureStaffUi = ensureOnce((q) => q`select to_regclass('desk.staff_ui') is
 
 // Adds the 'director' role (sees every team, like an admin, but can't change settings)
 const ensureRoles = ensureOnce((q) => q`select exists (select 1 from pg_constraint where conname = 'staff_role_check'
-    and pg_get_constraintdef(oid) like '%director%') as ok`, async (tx) => {
+    and pg_get_constraintdef(oid) like '%recruiter%') as ok`, async (tx) => {
   await tx`alter table desk.staff drop constraint if exists staff_role_check`;
-  await tx`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin'))`;
+  await tx`alter table desk.staff add constraint staff_role_check check (role in ('broker', 'manager', 'director', 'admin', 'recruiter'))`;
 });
 
 // One-off set-up steps. Each only runs if its own table/column is missing, and never waits on a busy table.
@@ -788,9 +788,11 @@ const actions = {
     const [people, invites, areas] = await Promise.all([
       sql`select s.user_id, s.full_name, s.email, s.role, s.team, s.active, s.created_at,
             coalesce((select array_agg(sa.area_id order by sa.area_id) from desk.staff_areas sa where sa.user_id = s.user_id and sa.kind = 'core'), '{}') as areas,
-            (select max(a.at) from desk.audit_log a where a.user_id = s.user_id) as last_seen
+            (select max(a.at) from desk.audit_log a where a.user_id = s.user_id) as last_seen,
+            (s.role in ('admin', 'recruiter') or s.user_id in (select user_id from desk.rc_access)) as recruit
           from desk.staff s order by s.active desc, s.full_name`,
-      sql`select email, full_name, role, team, areas, created_at from desk.staff_invites where claimed_at is null order by created_at desc`,
+      sql`select email, full_name, role, team, areas, created_at, coalesce(recruit, false) or role = 'recruiter' as recruit
+          from desk.staff_invites where claimed_at is null order by created_at desc`,
       sql`select id, name from desk.areas where name <> 'Lookups' order by name`,
     ]);
     res.json({ people, invites, areas, me: s.user_id });
@@ -811,10 +813,11 @@ const actions = {
     if (!validEmail(email)) return res.status(400).json({ error: 'That email doesn\'t look right.' });
     const [has] = await sql`select 1 from desk.staff where lower(email) = ${email}`;
     if (has) return res.status(409).json({ error: 'That person is already on the desk. Edit them in the list instead.' });
-    await sql`insert into desk.staff_invites (email, full_name, role, team, areas, created_by)
-              values (${email}, ${name}, ${role}, ${team}, ${areas}::bigint[], ${s.user_id})
+    const recruit = role === 'recruiter' || !!b.recruit;
+    await sql`insert into desk.staff_invites (email, full_name, role, team, areas, created_by, recruit)
+              values (${email}, ${name}, ${role}, ${team}, ${role === 'recruiter' ? [] : areas}::bigint[], ${s.user_id}, ${recruit})
               on conflict (email) do update set full_name = excluded.full_name, role = excluded.role, team = excluded.team,
-                areas = excluded.areas, created_by = excluded.created_by, created_at = now(), claimed_at = null, user_id = null`;
+                areas = excluded.areas, created_by = excluded.created_by, recruit = excluded.recruit, created_at = now(), claimed_at = null, user_id = null`;
     await audit(s.user_id, 'person_added', { detail: { email, role, team }, ip });
     res.json({ ok: true });
   },
@@ -843,8 +846,12 @@ const actions = {
     await sql.begin(async (tx) => {
       await tx`update desk.staff set role = ${role}, team = ${team}, active = ${b.active !== false}
                ${name ? tx`, full_name = ${name}` : tx``} where user_id = ${p.user_id}`;
-      await setAreas(tx, p.user_id, areas, s.user_id);
+      await setAreas(tx, p.user_id, role === 'recruiter' ? [] : areas, s.user_id);
+      // Recruitment access (recruiters and admins always have it)
+      if (role === 'recruiter' || b.recruit) await tx`insert into desk.rc_access (user_id) values (${p.user_id}) on conflict do nothing`;
+      else await tx`delete from desk.rc_access where user_id = ${p.user_id}`;
     });
+    forgetRecruit(p.user_id);
     await audit(s.user_id, 'person_changed', { detail: { user: p.user_id, role, team, active: b.active !== false }, ip });
     res.json({ ok: true });
   },
@@ -855,8 +862,11 @@ const actions = {
   },
 };
 
+const RECRUITER_ACTIONS = new Set(['me', 'copyBlocked', 'savePrefs']);
 export default route(async (req, res, s, ip) => {
-  const fn = actions[query(req).get('action')];
+  const action = query(req).get('action');
+  if (s.role === 'recruiter' && !RECRUITER_ACTIONS.has(action)) return res.status(403).json({ error: 'Not allowed.' });
+  const fn = actions[action];
   if (!fn) return res.status(404).json({ error: 'Unknown action' });
   await fn(req, res, s, ip);
-});
+}, { recruiter: true });
