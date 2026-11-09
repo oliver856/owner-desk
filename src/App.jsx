@@ -6,7 +6,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 // Recruitment only loads for people allowed to see it (brokers never download it)
-const Recruit = React.lazy(() => import('./Recruit.jsx'));
+const loadRecruit = () => import('./Recruit.jsx');
+const Recruit = React.lazy(loadRecruit);
 
 // ── Settings you might want to change ───────────────────────────────────────
 const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
@@ -991,6 +992,7 @@ function Desk() {
   }, []);
 
   // Someone with recruitment access and no owner areas (the recruiter) starts on Recruitment
+  useEffect(() => { if (me?.recruit) loadRecruit(); }, [me?.recruit]);   // fetch the Recruitment code in the background
   const landed = useRef(false);
   useEffect(() => { if (me && !landed.current) { landed.current = true; if (me.staff.role === 'recruiter' || (me.recruit && me.staff.role !== 'admin' && !(me.places || []).length)) setView('recruit'); } }, [me]);
   const refreshMe = useCallback(() => api('/api/desk?action=me').then(setMe).catch((e) => setToast(e.message)), []);
