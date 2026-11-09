@@ -2,7 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { sql } from './core.js';
 
-export const ROLES = ['broker', 'manager', 'director', 'admin'];
+export const ROLES = ['broker', 'manager', 'director', 'admin', 'recruiter'];
 
 let invitesReady = null;
 // Only creates the invites table if it's missing. It never alters the staff table here: that needs a lock on every
