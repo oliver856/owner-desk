@@ -3611,17 +3611,17 @@ function PhoneScreen() {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', vis); };
   }, [load]);
 
-  async function dial(id) {
+  async function dial(id, rc) {
     setErr('');
     try {
-      const j = await api('/api/phone?action=dial', { method: 'POST', body: { id } });
-      setSt((s) => ({ ...s, pending: null }));
+      const j = await api('/api/phone?action=dial', { method: 'POST', body: { id, rc: !!rc } });
+      setSt((s) => ({ ...s, pending: null, rcPending: null }));
       window.location.href = 'tel:' + j.tel;
       setTimeout(load, 1500);
     } catch (e) { setErr(e.message); load(); }
   }
 
-  const { name, pending, awaiting, followup } = st;
+  const { name, pending, awaiting, followup, rcPending } = st;
   return (
     <main className="phone">
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'start' }}>
@@ -3637,6 +3637,16 @@ function PhoneScreen() {
           <button className="bigcall" onClick={() => dial(pending.id)}>Call</button>
         </div>
       )}
+      {!pending && rcPending && (
+        <div className="callcard">
+          <span className="muted">Recruitment call</span>
+          <span className="who">{rcPending.name}</span>
+          <span>{[rcPending.brokerage, rcPending.which === 'office' ? 'Office line' : ''].filter(Boolean).join(' · ')}</span>
+          <span className="n muted">{rcPending.masked}</span>
+          <button className="bigcall" onClick={() => dial(rcPending.id, true)}>Call</button>
+          <span className="faint">Notes go in on the laptop while you talk.</span>
+        </div>
+      )}
       {!pending && awaiting && !saved && (
         <div className="callcard">
           <span className="muted">How did the call go?</span>
@@ -3649,7 +3659,7 @@ function PhoneScreen() {
       {!pending && !awaiting && !saved && !followup && st.lastWa && <NotOnWhatsApp key={st.lastWa.id} requestId={st.lastWa.id} name={st.lastWa.owner_name} />}
       {saved && <div className="waiting">Saved{saved.status && <KendalLine k={saved} />}</div>}
       <PhoneAlerts onCall={load} />
-      {!pending && !awaiting && !saved && !followup && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner or a lead and it appears here.</div>}
+      {!pending && !rcPending && !awaiting && !saved && !followup && <div className="waiting">Waiting for a call from your laptop.<br />Press Call next to an owner or a lead and it appears here.</div>}
       {err && <p className="err">{err}</p>}
       <button className="link" style={{ alignSelf: 'center' }} onClick={() => getSupa().then((sb) => sb.auth.signOut())}>Sign out</button>
     </main>
