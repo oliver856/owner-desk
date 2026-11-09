@@ -210,11 +210,33 @@ button,input,select,textarea{font:inherit;color:inherit} button{cursor:pointer}
 .gut{padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
 .link{background:none;border:none;padding:0;color:var(--accent);text-decoration:none;cursor:pointer} .link:hover{text-decoration:underline}
 .sub{display:block;color:var(--muted);font-size:12px} .soon{color:var(--warn)} .gone{color:var(--bad)} .err{color:var(--bad)}
-header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
-.bar{display:flex;align-items:center;gap:8px 22px;flex-wrap:wrap;padding-block:11px}
-.brand{font-weight:600;font-size:14px}
-.nav{display:flex;gap:16px} .nav button{background:none;border:none;padding:0;color:var(--muted)} .nav button.on,.nav button:hover{color:var(--ink)}
-.right{margin-left:auto;display:flex;gap:18px;color:var(--muted);flex-wrap:wrap;align-items:center}
+header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:8px 20px;flex-wrap:wrap;min-height:56px;padding-block:8px}
+.brand{display:inline-flex;align-items:center;gap:9px;font-weight:600;font-size:14px;letter-spacing:-.01em;white-space:nowrap}
+.brand i{width:26px;height:26px;border-radius:7px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-style:normal;font-size:13px;font-weight:700}
+.nav{display:flex;gap:2px;padding:3px;border-radius:10px;background:color-mix(in srgb,var(--ink) 4%,var(--bg))}
+.nav button,.nav a{background:none;border:none;padding:6px 12px;border-radius:7px;color:var(--muted);font:inherit;font-weight:500;text-decoration:none;line-height:1.2;cursor:pointer;white-space:nowrap}
+.nav button:hover,.nav a:hover{color:var(--ink)}
+.nav button.on{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(16,24,22,.08),0 0 0 1px var(--line)}
+.co{display:flex;align-items:center;gap:8px}
+.right{margin-left:auto;display:flex;gap:12px;color:var(--muted);align-items:center}
+.stats{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:4px 4px 4px 12px;gap:10px;font-size:12px;white-space:nowrap}
+.stats span{display:inline-flex;align-items:center;gap:5px} .stats .n{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--hover);color:var(--ink);font-weight:600;font-size:11.5px}
+.stats span+span{padding-left:10px;border-left:1px solid var(--line)}
+.um{position:relative}
+.um-btn{display:inline-flex;align-items:center;gap:8px;background:none;border:1px solid transparent;border-radius:999px;padding:3px 8px 3px 3px;color:var(--ink);font:inherit;font-weight:500;cursor:pointer}
+.um-btn:hover,.um-btn.open{background:var(--hover);border-color:var(--line)}
+.um-av{width:28px;height:28px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,var(--bg));color:var(--accent);display:grid;place-items:center;font-size:11.5px;font-weight:700;letter-spacing:.02em}
+.um-btn svg{color:var(--faint)}
+.um-pop{position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:250px;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(16,24,22,.14),0 2px 6px rgba(16,24,22,.08);padding:6px;animation:umIn .12s ease-out}
+@keyframes umIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.um-who{padding:10px 10px 12px;border-bottom:1px solid var(--line);margin-bottom:6px} .um-who b{display:block;color:var(--ink);font-weight:600} .um-who small{color:var(--muted);font-size:12px}
+.um-row{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;color:var(--muted);font-size:12.5px}
+.um-item{display:block;width:100%;text-align:left;background:none;border:none;border-radius:8px;padding:8px 10px;color:var(--ink);font:inherit;cursor:pointer}
+.um-item:hover{background:var(--hover)} .um-item.bad{color:var(--bad)}
+.um-sep{height:1px;background:var(--line);margin:6px 0}
+@media (max-width:1560px){.um-name,.um-btn svg{display:none} .um-btn{padding:3px} .bar{gap:8px 14px}}
+@media (max-width:1180px){.stats{display:none}}
 .theme{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .theme button{background:none;border:none;padding:3px 8px;color:var(--muted);font-size:12px}
 .theme button[aria-pressed="true"]{background:var(--hover);color:var(--ink)}
@@ -404,8 +426,8 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .r-dot .crown{position:absolute;top:-15px;font-style:normal;font-size:13px}
 .r-podium{display:flex;gap:10px;font-size:12px;white-space:nowrap} .r-podium b{font-variant-numeric:tabular-nums}
 .r-podium .mine{color:var(--accent);font-weight:600}
-.co-start{font:inherit;font-weight:600;background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:6px 14px;margin-left:14px;cursor:pointer}
-.co-pill{display:inline-flex;align-items:center;gap:6px;margin-left:14px;font-weight:600;color:var(--accent)} .co-pill i{width:8px;height:8px;border-radius:50%;background:#ff6b5f;animation:copulse 1.2s infinite}
+.co-start{font:inherit;font-weight:600;background:var(--accent);color:var(--accent-ink);border:none;border-radius:8px;padding:7px 14px;cursor:pointer;white-space:nowrap} .co-start:hover{filter:brightness(1.08)}
+.co-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:color-mix(in srgb,#ff6b5f 10%,var(--bg));font-weight:600;font-size:12px;color:var(--ink);white-space:nowrap} .co-pill i{width:8px;height:8px;border-radius:50%;background:#ff6b5f;animation:copulse 1.2s infinite}
 @keyframes copulse{50%{opacity:.3}}
 .cbk{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 14px} .cbk .lbl{font-size:12px;color:var(--muted);font-weight:600;width:100%}
 .cbk-chips{display:flex;gap:6px;flex-wrap:wrap} .cbk-chips button{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);cursor:pointer}
@@ -435,7 +457,7 @@ tr.held-row td:not(.callcol){color:var(--muted)}
 .lp-tw{max-height:calc(100vh - var(--toph, 60px) - 230px)} .lp-tw .more .btn{margin:6px auto}
 
 .co-testmode{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px;color:var(--muted);cursor:pointer} .co-testnote{display:block;font-style:normal;margin-top:4px;color:var(--ink)} .co-testmode b{color:var(--ink);margin-right:6px} .co-testmode.on{border-style:solid;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--bg))}
-.co-tv{margin-left:10px;font-weight:600;color:var(--accent);text-decoration:none;font-size:14px} .co-tv:hover{text-decoration:underline}
+.co-tv{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--line);border-radius:8px;font-weight:500;color:var(--ink);text-decoration:none;white-space:nowrap} .co-tv:hover{background:var(--hover)}
 .tv{--logo-bg:#fff;--gold:#b08a3e;--gold2:#d9b86a;--goldbg:#faf5ea;--ink:#0b0b0b;--card:#f6f5f2;--line2:#e8e5df;--grey:#8a8a8a;position:fixed;inset:0;background:#fff;color:var(--ink);display:flex;flex-direction:column;padding:2.6vh 3vw 2.4vh;gap:1.8vh;overflow:hidden;font-size:1.6vh;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
 .tv.nomouse{cursor:none} .tv .n{font-variant-numeric:tabular-nums}
 .tv-top{display:flex;justify-content:space-between;align-items:center;gap:2vw;flex-shrink:0} .tv-logo{display:block;height:7vh;color:var(--ink)} .tv-logo svg{height:100%;width:auto;display:block}
@@ -932,6 +954,36 @@ function Login() {
   );
 }
 
+function UserMenu({ name, email, onMessages }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', off); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', off); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const initials = String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  return (
+    <div className="um" ref={ref}>
+      <button type="button" className={'um-btn' + (open ? ' open' : '')} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="um-av">{initials}</span><span className="um-name">{name}</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      {open && (
+        <div className="um-pop" role="menu">
+          <div className="um-who"><b>{name}</b>{email && <small>{email}</small>}</div>
+          <div className="um-row">Theme <ThemeToggle /></div>
+          {onMessages && <><div className="um-sep" /><button type="button" className="um-item" onClick={() => { setOpen(false); onMessages(); }}>My messages</button></>}
+          <div className="um-sep" />
+          <button type="button" className="um-item bad" onClick={() => getSupa().then((sb) => sb.auth.signOut())}>Sign out</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ThemeToggle() {
   const [mode, setMode] = useState(() => { try { return localStorage.getItem('theme') || 'system'; } catch { return 'system'; } });
   const pick = (m) => {
@@ -1055,7 +1107,7 @@ function Desk() {
     <>
       <header className="top" ref={headerRef}>
         <div className="bar gut">
-          <span className="brand">Apex Owner Desk</span>
+          <span className="brand"><i>A</i>Owner Desk</span>
           <nav className="nav">
             {recruiterOnly ? <button className="on">Recruitment</button> : <>
             <button className={view === 'owners' ? 'on' : ''} onClick={() => setView('owners')}>Owners</button>
@@ -1064,20 +1116,24 @@ function Desk() {
             <button className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>Activity</button>
             {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
             {me?.recruit && <button className={view === 'recruit' ? 'on' : ''} onClick={() => setView('recruit')}>Recruitment</button>}
-            <a className="link" style={{ color: 'var(--muted)' }} href="/phone">Phone</a>
+            <a href="/phone">Phone</a>
             </>}
           </nav>
-          {boss && (phase === 'live' || phase === 'countdown') && <span className="co-pill"><i />{co?.callout?.test ? 'Test running' : 'Call out running'}</span>}
-          {boss && <button className="co-start" onClick={() => setStartOpen(true)}>{(phase === 'live' || phase === 'countdown') && !co?.callout?.test ? 'Test mode' : 'Start call out'}</button>}
-          {boss && <a className="co-tv" href="/tv" target="apex-tv" title="Open the big screen for the office TV">TV screen</a>}
+          {boss && <div className="co">
+            {(phase === 'live' || phase === 'countdown') && <span className="co-pill"><i />{co?.callout?.test ? 'Test running' : 'Call out running'}</span>}
+            <button className="co-start" onClick={() => setStartOpen(true)}>{(phase === 'live' || phase === 'countdown') && !co?.callout?.test ? 'Test mode' : 'Start call out'}</button>
+            <a className="co-tv" href="/tv" target="apex-tv" title="Open the big screen for the office TV">
+              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M5.5 14h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>TV
+            </a>
+          </div>}
           <div className="right">
-            {me?.caps && !recruiterOnly && <span title="Owner profiles opened today">Profiles <span className="n">{me.caps.profiles}</span></span>}
-            {me?.caps && !recruiterOnly && <span>Calls <span className="n">{me.caps.calls}</span></span>}
-            {me?.caps && !recruiterOnly && me.caps.copies != null && <span title="Numbers copied today">Numbers <span className="n">{me.caps.copies}</span></span>}
-            <ThemeToggle />
-            {me && !recruiterOnly && <button className="link" onClick={() => setMsgFor('me')}>My messages</button>}
-            {me && <span>{me.staff.name}</span>}
-            <button className="link" onClick={() => getSupa().then((sb) => sb.auth.signOut())}>Sign out</button>
+            {me?.caps && !recruiterOnly && <span className="stats" title="Your activity today">
+              <span title="Owner profiles opened today">Profiles <span className="n">{me.caps.profiles}</span></span>
+              <span title="Calls made today">Calls <span className="n">{me.caps.calls}</span></span>
+              {me.caps.copies != null && <span title="Numbers copied today">Numbers <span className="n">{me.caps.copies}</span></span>}
+            </span>}
+            {me ? <UserMenu name={me.staff.name} email={me.staff.email} onMessages={recruiterOnly ? null : () => setMsgFor('me')} />
+              : <button className="link" onClick={() => getSupa().then((sb) => sb.auth.signOut())}>Sign out</button>}
           </div>
         </div>
       </header>
