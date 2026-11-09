@@ -49,6 +49,7 @@ export default route(async (req, res, _s, ip) => {
                role = excluded.role, team = excluded.team, active = true`;
     await setAreas(tx, userId, (inv.areas || []).map(Number), inv.created_by);
     await tx`update desk.staff_invites set claimed_at = now(), user_id = ${userId} where email = ${email}`;
+    if (inv.recruit || inv.role === 'recruiter') await tx`insert into desk.rc_access (user_id) values (${userId}) on conflict do nothing`;
   });
   await audit(userId, 'account_set_up', { ip }).catch(() => {});
   res.json({ ok: true });
