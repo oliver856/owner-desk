@@ -7,7 +7,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // Board columns, in order, with a colour each. The last two are "closed" and sit folded at the end.
 const STAGE_INFO = [
-  ['To contact', '#8a948f'], ['Contacted', '#4f78a3'], ['Interested', '#c08a1e'],
+  ['To contact', '#8a948f'], ['Contacted', '#4f78a3'],
+  ['Follow up later', '#2f8f8a'],   // spoken to, not right now: comes back round on their follow-up date
+  ['Interested', '#c08a1e'],
   ['Interview booked', '#7a5bc4'], ['Offered', '#d0702c'], ['Placed', '#1e8a4c'],
   ['Not interested', '#a0a7a4'], ['Rejected', '#c62f26'],
 ];
@@ -23,7 +25,7 @@ const CALL_RESULTS = [
   { k: 'No answer' },
   { k: 'Left a message' },
   { k: 'Spoke, interested', stage: 'Interested', temp: 'hot' },
-  { k: 'Spoke, open to chat later', temp: 'warm' },
+  { k: 'Spoke, open to chat later', stage: 'Follow up later', temp: 'warm', follow: 'month' },   // a month unless another date is picked
   { k: 'Spoke, not interested', stage: 'Not interested', temp: 'cold' },
   { k: 'Interview booked', stage: 'Interview booked', temp: 'hot' },
   { k: 'Sent details on WhatsApp' },
@@ -52,7 +54,9 @@ const followState = (v) => { const d = dt(v); if (!d) return ''; const end = day
 const waLink = (phone) => { let d = String(phone || '').replace(/\D/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = '971' + d.slice(1); if (/^971[1-46-9]/.test(d)) return null;   // UAE landline: not on WhatsApp
   return d.length >= 8 ? 'https://wa.me/' + d : null; };
 // Property Finder's agent search, already searched for this name
-const pfLink = (name) => 'https://www.propertyfinder.ae/en/find-agent/search?text=' + encodeURIComponent(String(name || '').trim());
+// PF only finds an exact name, and DLD names are long legal names, so search first + last name ("Abdulla Juma Abdulla Alfalasi" -> "Abdulla Alfalasi")
+const pfName = (name) => { const w = String(name || '').trim().split(/\s+/).filter(Boolean); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); };
+const pfLink = (name) => 'https://www.propertyfinder.ae/en/find-agent/search?text=' + encodeURIComponent(pfName(name));
 const copyText = async (t) => {
   try { await navigator.clipboard.writeText(t); return true; }
   catch { const a = document.createElement('textarea'); a.value = t; a.className = 'rc'; document.body.appendChild(a); a.select(); const ok = document.execCommand('copy'); a.remove(); return ok; }
@@ -253,7 +257,8 @@ export default function Recruit({ api, toast }) {
     if (!c || c.stage === stage) return;
     setD((x) => ({ ...x, rows: x.rows.map((r) => (r.id === id ? { ...r, stage } : r)),
       colCounts: x.colCounts && { ...x.colCounts, [c.stage]: (x.colCounts[c.stage] || 1) - 1, [stage]: (x.colCounts[stage] || 0) + 1 } }));
-    try { await api('/api/desk?action=rc&op=log', { method: 'POST', body: { id, stage } }); load(); }
+    const later = stage === 'Follow up later' && !c.follow_up_at ? { followUp: { kind: 'month' } } : {};
+    try { await api('/api/desk?action=rc&op=log', { method: 'POST', body: { id, stage, ...later } }); load(); }
     catch (e) { toast(e.message); load(); }
   };
 
@@ -505,7 +510,7 @@ function Candidate({ api, id, lists, toast, onClose, onChanged }) {
     setBusy(true); setErr('');
     try {
       await api('/api/desk?action=rc&op=log', { method: 'POST', body: {
-        id, note: text, call: !!result || calling?.status === 'dialled', followUp: followBody(fu),
+        id, note: text, call: !!result || calling?.status === 'dialled', followUp: followBody(fu.kind || !r?.follow ? fu : { kind: r.follow }),
         ...(r?.stage && r.stage !== c.stage ? { stage: r.stage } : {}), ...(r?.temp ? { temp: r.temp } : {}) } });
       setResult(''); setNote(''); setFu({}); setCalling(null);
       await load(); onChanged();
@@ -744,7 +749,8 @@ textarea.rc-in{min-height:76px;resize:vertical;line-height:1.45} .rc-date{max-wi
 .rc-rm{width:22px;height:22px;border-radius:6px;border:0;background:none;color:var(--faint);cursor:pointer;flex:none;position:relative}
 .rc-rm::before,.rc-rm::after{content:'';position:absolute;left:6px;right:6px;top:10px;height:1.6px;background:currentColor;border-radius:1px;transform:rotate(45deg)} .rc-rm::after{transform:rotate(-45deg)}
 .rc-rm:hover{background:color-mix(in srgb,var(--bad) 10%,var(--bg));color:var(--bad)}
-.rc-card .rc-rm{position:absolute;top:6px;right:6px;opacity:0;transition:opacity .12s} .rc-card:hover .rc-rm{opacity:1}
+.rc-card .rc-rm{position:absolute;top:8px;right:6px;opacity:0;transition:opacity .12s} .rc-card:hover .rc-rm{opacity:1}
+.rc-card-top{padding-right:22px}   /* room for the remove x so it never sits on the PF button */
 .rc-rm-cell{width:34px;text-align:right} .rc-t tr .rc-rm{opacity:.35} .rc-t tr:hover .rc-rm{opacity:1}
 .rc-undo{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:95;display:flex;align-items:center;gap:16px;background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.2);font-size:13px}
 .rc-undo button{font:inherit;font-weight:600;background:none;border:0;color:color-mix(in srgb,var(--accent) 60%,#fff);cursor:pointer;padding:4px 8px;border-radius:6px} .rc-undo button:hover{background:rgba(255,255,255,.1)}
