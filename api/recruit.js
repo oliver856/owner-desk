@@ -4,7 +4,7 @@
 import { sql, route, query, body, audit, recruitAllowed } from './_lib/core.js';
 import { pushToUser } from './_lib/push.js';
 
-export const STAGES = ['To contact', 'Contacted', 'Interested', 'Interview booked', 'Offered', 'Placed', 'Not interested', 'Rejected'];
+export const STAGES = ['To contact', 'Contacted', 'Follow up later', 'Interested', 'Interview booked', 'Offered', 'Placed', 'Not interested', 'Rejected'];
 const FOCUS = ['Sales', 'Leasing', 'Sales & leasing', 'Off-plan'];
 const SOURCES = ['Cold outreach', 'Broker database', 'LinkedIn', 'Referral', 'Applied', 'Other'];
 const TEMPS = ['hot', 'warm', 'cold'];
@@ -117,6 +117,19 @@ async function loadFacets() {
 }
 
 const moreActions = {
+
+  // The morning list: everyone due today or overdue, with the last thing said, plus how many are coming this week
+  async today(req, res) {
+    const endToday = sql`(date_trunc('day', now() at time zone ${DUBAI}) + interval '1 day') at time zone ${DUBAI}`;
+    const rows = await sql`select ${CARD}, (c.follow_up_at < now()) as overdue,
+        (c.follow_up_at < date_trunc('day', now() at time zone ${DUBAI}) at time zone ${DUBAI}) as before_today,
+        (select n.kind from desk.rc_notes n where n.candidate_id = c.id and n.kind in ('call', 'note') order by n.created_at desc limit 1) as last_kind
+      from desk.rc_candidates c where not c.archived and c.follow_up_at < ${endToday}
+      order by c.follow_up_at limit 200`;
+    const [w] = await sql`select count(*)::int as n from desk.rc_candidates where not archived
+      and follow_up_at >= ${endToday} and follow_up_at < ${endToday} + interval '7 days'`;
+    res.json({ rows, comingWeek: w.n });
+  },
 
   // Just the number of follow-ups due today (for the badge)
   async due(req, res) {
