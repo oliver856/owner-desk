@@ -8,6 +8,10 @@ import { createClient } from '@supabase/supabase-js';
 // Recruitment only loads for people allowed to see it (brokers never download it)
 const loadRecruit = () => import('./Recruit.jsx');
 const Recruit = React.lazy(loadRecruit);
+// Management pages only load for admins, directors and managers (brokers never download them)
+const loadOps = () => import('./Ops.jsx');
+const Ops = React.lazy(loadOps);
+const OPS_ROLES = ['admin', 'director', 'manager'];
 
 // ── Settings you might want to change ───────────────────────────────────────
 const OUTCOMES = ['No answer', 'Not interested', 'Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell', 'Wrong number', 'Do not call'];
@@ -1115,6 +1119,7 @@ function Desk() {
             {me && <button className={view === 'dash' ? 'on' : ''} onClick={() => setView('dash')}>Dashboard</button>}
             <button className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>Activity</button>
             {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
+            {me && OPS_ROLES.includes(me.staff.role) && <button className={view === 'ops' ? 'on' : ''} onClick={() => setView('ops')}>Management</button>}
             {me?.recruit && <button className={view === 'recruit' ? 'on' : ''} onClick={() => setView('recruit')}>Recruitment</button>}
             <a href="/phone">Phone</a>
             </>}
@@ -1138,7 +1143,8 @@ function Desk() {
         </div>
       </header>
       {recruiterOnly ? null : view === 'owners' && me && src === 'leads' ? <LeadPool me={me} switcher={<SourceSwitch v={src} onChange={setSrc} />} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} onCaps={refreshMe} />
-        : view === 'owners' ? (me ? <Owners switcher={<SourceSwitch v={src} onChange={setSrc} />} keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : view === 'recruit' ? null : <Activity />}
+        : view === 'owners' ? (me ? <Owners switcher={<SourceSwitch v={src} onChange={setSrc} />} keepKey={'ownersNow:' + me.staff.email} rocket={!!me.rocket} banner={calloutOn ? <CalloutBar co={co} boss={boss} onChange={loadCo} /> : null} places={me.places || []} target={me.target} prefs={me.prefs} onSavePrefs={savePrefs} canOverride={me.staff.role !== 'broker'} onCaps={refreshMe} onOpen={setUnitId} /> : <div className="gut muted" style={{ padding: 40 }}>Loading…</div>) : view === 'lookup' ? <Lookup onOpen={setUnitId} /> : view === 'dash' ? <DashPage role={me?.staff.role} /> : view === 'team' ? <Team myRole={me?.staff.role} onMessages={setMsgFor} /> : view === 'recruit' || view === 'ops' ? null : <Activity />}
+      {view === 'ops' && me && OPS_ROLES.includes(me.staff.role) && <React.Suspense fallback={<main className="gut muted" style={{ padding: 40 }}>Loading…</main>}><Ops api={api} /></React.Suspense>}
       {view === 'recruit' && me?.recruit && <React.Suspense fallback={<main className="gut muted" style={{ padding: 40 }}>Loading…</main>}><Recruit api={api} toast={setToast} /></React.Suspense>}
       {unitId && <UnitPanel id={unitId} canOverride={me && me.staff.role !== 'broker'} onClose={() => setUnitId(null)} onOpen={setUnitId} onCaps={refreshMe} />}
       {phase === 'countdown' && co?.meIn && <CalloutCountdown co={co} />}
