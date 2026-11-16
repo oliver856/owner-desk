@@ -199,7 +199,7 @@ const RETRY_READ_MS = 4500;
 // wakes, so if this copy has been idle for a few seconds and nothing else is running on it, it starts with fresh ones.
 const IDLE_RESET_MS = 4000;
 let inflight = 0;
-export function route(fn, { office = true, auth = true, recruiter = false } = {}) {
+export function route(fn, { office = true, auth = true, recruiter = false, limitMs = REQUEST_LIMIT_MS } = {}) {
   return async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     if (inflight === 0 && globalThis.__dbLast && Date.now() - globalThis.__dbLast > IDLE_RESET_MS) resetDb();
@@ -253,7 +253,7 @@ export function route(fn, { office = true, auth = true, recruiter = false } = {}
         console.error('Request took too long:', req.url);
         resetDb();
         if (!res.headersSent) res.status(503).json({ error: 'The Owner Desk is busy. Trying again…', retry: true });
-      }, REQUEST_LIMIT_MS));
+      }, typeof limitMs === 'function' ? limitMs(req) : limitMs));
       // Finish as soon as an answer has gone out (or every attempt has ended)
       await new Promise((resolve) => {
         let left = done.length;

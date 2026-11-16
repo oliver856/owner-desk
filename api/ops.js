@@ -1,6 +1,7 @@
 // Management: /api/ops
 //   GET  ?action=access|today|listings|leads|people|deals|money     read a page
 //   POST { action: deal-add|deal-change|deal-remove|deal-restore }  change the deal log
+//   POST { action: ask, question }  and  GET ?action=ask              the Ask page (see _lib/ask.js)
 // This file only checks who is asking and hands over to:
 //   _lib/ops-access.js   who may see and do what
 //   _lib/ops-pages.js    the page queries (read only)
@@ -10,6 +11,7 @@ import { sql, route, query, body } from './_lib/core.js';
 import { scopeFor } from './_lib/ops-access.js';
 import * as pages from './_lib/ops-pages.js';
 import { dealsPage, dealsWrite, dealsVersion } from './_lib/ops-deals.js';
+import { ask, askPage } from './_lib/ask.js';
 
 const cache = new Map();   // short memory so flicking between pages doesn't re-run the same query
 const TTL_MS = 60e3;
@@ -34,8 +36,13 @@ export default route(async (req, res, staff) => {
   if (!sc) return res.status(403).json({ error: 'Not allowed.' });
 
   if (isPost) {
+    const b = body(req);
+    if (b.action === 'ask') {   // managers too: the answer only ever uses their own team's figures
+      const [code, j] = await ask(staff, sc, b.question);
+      return res.status(code).json(j);
+    }
     if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });
-    const [code, j] = await dealsWrite(sc.email, body(req));
+    const [code, j] = await dealsWrite(sc.email, b);
     cache.clear();
     return res.status(code).json(j);
   }
@@ -45,6 +52,7 @@ export default route(async (req, res, staff) => {
     const teams = sc.all ? (await sql`select name from ops.teams where active order by sort, name`).map((t) => t.name) : [sc.team];
     return res.json({ all: sc.all, team: sc.team, teams, money: sc.all, deals: sc.all });
   }
+  if (action === 'ask') return res.json(await askPage(staff, sc));
   if (action === 'deals') {   // always fresh: this is the page deals are entered on
     if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });
     return res.json(await dealsPage(monthOf(q)));
@@ -65,4 +73,4 @@ export default route(async (req, res, staff) => {
     return res.json(await cached(key(v, m), () => pages.money(m)));
   }
   res.status(400).json({ error: 'Unknown action' });
-});
+}, { limitMs: (req) => (req.method === 'POST' ? 55000 : 12000) });   // a question to Claude can take up to a minute

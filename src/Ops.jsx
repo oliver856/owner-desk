@@ -17,10 +17,12 @@ import Leads from './ops/Leads.jsx';
 import People from './ops/People.jsx';
 import Deals from './ops/Deals.jsx';
 import Money from './ops/Money.jsx';
+import Ask from './ops/Ask.jsx';
 
 // key, label, the page, whether it follows the team picker, and the access flag it needs (from /api/ops?action=access)
 const TABS = [
   ['today', 'Today', Today, true],
+  ['ask', 'Ask', Ask, true],
   ['listings', 'Listings', Listings, true],
   ['leads', 'Leads', Leads, true],
   ['people', 'People', People, true],

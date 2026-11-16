@@ -13,6 +13,7 @@ import { ensureReports, setReportOptin } from './_lib/reports.js';
 import { ensureKendal } from './_lib/kendal.js';
 import { ensureLeads, leadAllowed, LEAD_RETRY } from './_lib/leads.js';
 import { ensureFollowups } from './_lib/followups.js';
+import { REASONS } from './_lib/reasons.js';
 
 const PAGE = 100;
 const COLS = ['id', 'subcommunity', 'building', 'unit_no', 'unit_type', 'beds', 'size_sqft', 'lease_status', 'end_date', 'annual_rent',
@@ -72,26 +73,7 @@ const ensureNotes = ensureOnce((q) => q`select to_regclass('desk.notes') is not 
 const DASH_HOT = sql`(c.outcome in ('Call back', 'Wants valuation', 'Listing opportunity', 'Wants to sell') or c.note ~* '^(unit available|in discussion|replied|follow up|wants to|wants valuation|send report|still looking|viewing booked|send options)')`;
 const DASH_COLD = sql`(c.outcome in ('No answer', 'Not interested', 'Wrong number', 'Do not call') or c.note ~* '^(called, no reply|called, unreachable|called, line busy|phone off|end user|rented|other|sold|agent|cold|already found|not looking|not interested|not selling|price too high|wrong number|do not call)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
 
-// The reason behind each call, for the Hot & cold report: [note starts with / 'outcome:' + outcome, label, group]
-// group: hot, objection (spoke to them, not interested), nocontact (didn't get through)
-const REASONS = [
-  ['Unit available, send WhatsApp', 'Unit available', 'hot'], ['In discussion', 'In discussion', 'hot'], ['Replied', 'Replied', 'hot'],
-  ['Follow up', 'Call back', 'hot'], ['Send report', 'Wants a report', 'hot'], ['Wants to sell', 'Wants to sell', 'hot'],
-  ['Wants to rent', 'Wants to rent', 'hot'], ['Wants to buy', 'Wants to buy', 'hot'], ['Still looking', 'Still looking (lead)', 'hot'],
-  ['Viewing booked', 'Viewing booked (lead)', 'hot'], ['Send options', 'Send options (lead)', 'hot'],
-  ['outcome:Call back', 'Call back', 'hot'], ['outcome:Wants valuation', 'Wants valuation', 'hot'],
-  ['outcome:Listing opportunity', 'Listing opportunity', 'hot'], ['outcome:Wants to sell', 'Wants to sell', 'hot'],
-  ['End user', 'Lives in it (end user)', 'objection'], ['Rented', 'Already rented', 'objection'], ['Sold', 'Already sold', 'objection'],
-  ['Agent', 'Agent', 'objection'], ['Other', 'Other (own words)', 'objection'],
-  ['Already found', 'Already found (lead)', 'objection'], ['Not looking anymore', 'Not looking anymore (lead)', 'objection'],
-  ['Not interested', 'Not interested', 'objection'], ['Not selling yet', 'Not selling yet', 'objection'],
-  ['Price too high', 'Price expectations too high', 'objection'], ['Wrong number', 'Wrong number', 'objection'], ['Do not call', 'Do not call', 'objection'],
-  ['Wants valuation', 'Wants valuation', 'hot'],
-  ['outcome:Not interested', 'Not interested', 'objection'], ['outcome:Wrong number', 'Wrong number', 'objection'],
-  ['outcome:Do not call', 'Do not call', 'objection'],
-  ['Called, no reply', 'No reply', 'nocontact'], ['Called, unreachable', 'Unreachable', 'nocontact'],
-  ['Called, line busy', 'Line busy', 'nocontact'], ['Phone off', 'Phone off', 'nocontact'], ['outcome:No answer', 'No reply', 'nocontact'],
-];
+// The reason behind each call: see _lib/reasons.js
 
 // The time window for the dashboards (Dubai time): today, this week, this month, last month, or any from/to dates.
 // end is exclusive. workdays = Mon-Fri in the window up to today, for the call target.
