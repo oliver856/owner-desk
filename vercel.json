@@ -51,7 +51,7 @@
   ],
   "functions": {
     "api/ops.js": {
-      "maxDuration": 60
+      "maxDuration": 180
     }
   }
 }

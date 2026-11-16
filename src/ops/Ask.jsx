@@ -52,6 +52,7 @@ function Answer({ text }) {
         <tbody>{body.map((r, j) => <tr key={j} className={isTotal(r) ? 'tot' : ''}>{head.map((_, k) => <td key={k} className={right[k] ? 'r' : ''}>{inline(r[k] || '')}</td>)}</tr>)}</tbody></table></div>);
       continue;
     }
+    if (/^#{1,4}\s+/.test(l)) { blocks.push(<h3 key={i}>{inline(l.replace(/^#+\s*/, ''))}</h3>); i++; continue; }
     if (/^\s*([-*•]|\d+[.)])\s+/.test(l)) {
       const ordered = /^\s*\d/.test(l); const items = [];
       while (i < lines.length && /^\s*([-*•]|\d+[.)])\s+/.test(lines[i])) { items.push(lines[i].replace(/^\s*([-*•]|\d+[.)])\s+/, '')); i++; }
@@ -61,7 +62,7 @@ function Answer({ text }) {
     }
     if (l.trim()) {
       const para = [];
-      while (i < lines.length && lines[i].trim() && !/^\s*(\||[-*•]\s|\d+[.)]\s)/.test(lines[i])) { para.push(lines[i].replace(/^#+\s*/, '')); i++; }
+      while (i < lines.length && lines[i].trim() && !/^\s*(\||[-*•]\s|\d+[.)]\s|#)/.test(lines[i])) { para.push(lines[i].replace(/^#+\s*/, '')); i++; }
       blocks.push(<p key={i}>{inline(para.join(' '))}</p>);
       continue;
     }
@@ -107,6 +108,7 @@ const CSS = `
 .ask-q b{font-weight:650;font-size:15px}
 .ask-ans{line-height:1.6;font-size:14.5px}
 .ask-ans p{margin:0 0 10px} .ask-ans ul,.ask-ans ol{margin:0 0 10px;padding-left:20px} .ask-ans li{margin:3px 0}
+.ask-ans h3{font-size:15.5px;font-weight:650;margin:18px 0 8px;padding-top:12px;border-top:1px solid var(--line)} .ask-ans h3:first-child{margin-top:0;padding-top:0;border-top:none}
 .ask-tbl{margin:6px 0 12px} .ask-tbl tr.tot td{font-weight:650;border-top:2px solid var(--line)}
 .ask-foot{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin-top:6px;font-size:12.5px}
 .ask-foot .grow{flex:1}
@@ -121,6 +123,10 @@ const CSS = `
 .ask-bar textarea{flex:1;font:inherit;font-size:14.5px;line-height:1.5;color:var(--ink);background:none;border:none;outline:none;resize:none;padding:6px 0;max-height:120px}
 .ask-bar .ops-btn{flex:none}
 .ask-left{font-size:12px;margin:6px 2px 0}
+.ask-rep{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:18px}
+.ask-rep p{margin:4px 0 10px;font-size:12.5px} .ask-rep .ops-btn{width:100%;margin-top:6px}
+.ask-brand{display:none}
+@media print{body.ask-print .ask-printing .ask-brand{display:flex!important;justify-content:space-between;font-size:12px;border-bottom:2px solid #1f5d4f;padding-bottom:8px;margin-bottom:14px}}
 .ask-side{position:sticky;top:16px}
 .ask-side h2{margin-bottom:8px}
 .ask-hist{display:flex;flex-direction:column;max-height:calc(100vh - 200px);overflow:auto}
@@ -148,18 +154,19 @@ export default function Ask({ api, team }) {
     t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px';
   }, [q]);
 
-  const send = async (text) => {
-    const question = (text ?? q).trim();
+  const send = async (text, week) => {
+    const question = week ? (week === 'this' ? 'Weekly report: this week so far' : 'Weekly report: last week') : (text ?? q).trim();
     if (!question || busy) return;
     const key = Date.now();
-    setBusy(true); setErr(''); setQ('');
-    setThread((t) => [...t, { key, question, answer: null }]);
+    setBusy(true); setErr(''); if (!week) setQ('');
+    setThread((t) => [...t, { key, question, answer: null, report: !!week }]);
     try {
-      const j = await api('/api/ops' + (team ? '?team=' + encodeURIComponent(team) : ''), { method: 'POST', body: { action: 'ask', question } });
+      const body = week ? { action: 'report', week } : { action: 'ask', question };
+      const j = await api('/api/ops' + (team ? '?team=' + encodeURIComponent(team) : ''), { method: 'POST', body });
       setThread((t) => t.map((x) => (x.key === key ? { ...x, answer: j.answer, used: j.used, at: new Date().toISOString() } : x)));
       load();
     } catch (e) {
-      setErr(e.message); setQ(question);
+      setErr(e.message); if (!week) setQ(question);
       setThread((t) => t.filter((x) => x.key !== key));
     }
     setBusy(false);
@@ -191,8 +198,9 @@ export default function Ask({ api, team }) {
               )}
               {thread.map((x) => (
                 <div className="ask-card" key={x.key} ref={(el) => { cards.current[x.key] = el; }}>
+                  <div className="ask-brand"><b>Apex Homes DXB</b><span>Management report</span></div>
                   <div className="ask-q"><b>{x.question}</b></div>
-                  {x.answer == null ? <span className="muted"><span className="ask-dots"><i /><i /><i /></span>Looking through the figures…</span> : <>
+                  {x.answer == null ? <span className="muted"><span className="ask-dots"><i /><i /><i /></span>{x.report ? 'Putting the report together. This takes a minute or two…' : 'Looking through the figures…'}</span> : <>
                     <Answer text={x.answer} />
                     <div className="ask-foot muted">
                       {x.used?.length ? <span>Based on: {x.used.join(', ')}</span> : null}{x.at && <span>{clock(x.at)}</span>}
@@ -218,6 +226,12 @@ export default function Ask({ api, team }) {
             </div>
           </div>
           <aside className="ask-side">
+            <div className="ask-rep" style={{ marginTop: 0, marginBottom: 18 }}>
+              <h2>Weekly report</h2>
+              <p className="muted">Performance, call targets, deals and progress to target{page.all && !team ? ', commission and recruitment' : ''}, written up for the management meeting.</p>
+              <Btn primary disabled={busy} onClick={() => send(null, 'last')}>Last week</Btn>
+              <Btn disabled={busy} onClick={() => send(null, 'this')}>This week so far</Btn>
+            </div>
             <h2>Recent questions</h2>
             {page.history.length === 0 ? <span className="muted">Your questions will show here.</span> : (
               <div className="ask-hist">{page.history.map((h) => (

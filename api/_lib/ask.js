@@ -19,7 +19,7 @@ const LIMITS = { enabled: true, perPersonDay: 20, companyDay: 200, monthlyUsd: 6
 const PRICE = { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.1 };
 const MAX_ROUNDS = 5;
 const MAX_TOKENS = 1500;
-const MAX_TOOL_CHARS = 14000;
+const MAX_TOOL_CHARS = 16000;
 
 export const limitsNow = async () => ({ ...LIMITS, ...((await setting('ask', {})) || {}) });
 
@@ -35,12 +35,15 @@ const TOOLS = [
   { name: 'leads', description: 'Portal leads by broker, source and listing, recent weeks.', input_schema: { type: 'object', properties: {} } },
   { name: 'calls', description: 'Owner Desk calls between two days (at most 366 days; first_call says when Desk calls start), grouped one way. Each group has: calls; owners (distinct owners called); reached (owner answered); no_answer; listing_opps (owner wants to list for rent or sale: "Listing opportunity", "Wants to sell", "Wants to rent", "Unit available"); valuations (owner wants a valuation); call_backs (owner asked to be called back or is in discussion); hot (all hot results together, including the three before). group_by "result" lists every result with the same labels as the Hot & cold report, and which group it is in (hot, objection = spoke but no, nocontact = didn\'t get through).', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'First day, YYYY-MM-DD (Dubai time)' }, to: { type: 'string', description: 'Last day, YYYY-MM-DD' }, group_by: { type: 'string', enum: ['broker', 'team', 'day', 'area', 'result'] } }, required: ['from', 'to', 'group_by'] } },
   { name: 'listings_off', description: 'Listings that came off the portals between two days (at most 186 days), with the reason recorded when they came off. group_by reason (counts per reason), broker (counts per broker, with their top reasons) or week. Records only start on the day in "since".', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' }, group_by: { type: 'string', enum: ['reason', 'broker', 'week'] } }, required: ['from', 'to', 'group_by'] } },
-  { name: 'billing', description: 'Every active broker and manager (one row each, including those who billed nothing) with: billed and deals between two months inclusive (at most 24 months), months in that range with any billing, their last deal date ever and first deal date ever (null = no deal on record). Use it for "who hasn\'t billed" questions. Sorted lowest billed first.', input_schema: { type: 'object', properties: { from_month: { type: 'string', description: 'YYYY-MM' }, to_month: { type: 'string', description: 'YYYY-MM' } }, required: ['from_month', 'to_month'] } },
+  { name: 'billing', description: 'Every active broker and manager (one row each, including those who billed nothing) with: billed and deals between two months inclusive (at most 24 months), months in that range with any billing, their start date, last deal date ever and first deal date ever (null = no deal on record). Use it for "who hasn\'t billed" questions. Sorted lowest billed first.', input_schema: { type: 'object', properties: { from_month: { type: 'string', description: 'YYYY-MM' }, to_month: { type: 'string', description: 'YYYY-MM' } }, required: ['from_month', 'to_month'] } },
   { name: 'followups', description: 'Owner call-backs each broker has booked: overdue, due today, due in the next 7 days.', input_schema: { type: 'object', properties: {} } },
+  { name: 'commission', description: 'Commission split and what the company keeps, from the deal log by close date, between two months inclusive (at most 12). Per broker per month: billed, deals, role, team, the rate they get that month (from their role\'s sliding scale on that month\'s billing, or their personal deal), payout to the broker, and retained = billed minus payout, BEFORE manager overrides. Also returns the sliding-scale brackets per role. group_by broker (one row per broker per month), team or month (totals). Admins and directors only.', input_schema: { type: 'object', properties: { from_month: { type: 'string', description: 'YYYY-MM' }, to_month: { type: 'string', description: 'YYYY-MM' }, group_by: { type: 'string', enum: ['broker', 'team', 'month'] } }, required: ['from_month', 'to_month', 'group_by'] }, allOnly: true },
+  { name: 'activity', description: 'One row per active broker and manager for any two days (at most 93): team, role, start date, Desk calls, owners reached, listing opportunities from calls, daily call target and the target for the period (target x weekdays), new listings, portal leads, viewings, deals and billed in the period. Use it for KPI and performance questions over a set week or period.', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['from', 'to'] } },
+  { name: 'recruitment', description: 'Broker recruitment pipeline. Candidates in each stage now; between two days: candidates added, stage moves (from and to), interviews booked, offers and placements, by recruiter and by source. Admins and directors only.', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['from', 'to'] }, allOnly: true },
   { name: 'money', description: 'Billing (commission due to the company, excluding VAT, by close date) and deal counts month by month since records began, and by broker for one month. Admins and directors only.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'] }, allOnly: true },
   { name: 'deals', description: 'Every deal in one month: date, broker, commission, sale or rental, who it was split with, company lead or not, property, deal value. Admins and directors only.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'] }, allOnly: true },
 ];
-export const TOOL_LABELS = { overview: 'This week', people: 'People', listings: 'Listings', leads: 'Leads', calls: 'Calls', followups: 'Call-backs', money: 'Money', deals: 'Deals', listings_off: 'Listings off', billing: 'Billing' };
+export const TOOL_LABELS = { overview: 'This week', people: 'People', listings: 'Listings', leads: 'Leads', calls: 'Calls', followups: 'Call-backs', money: 'Money', deals: 'Deals', commission: 'Commission', activity: 'Activity', recruitment: 'Recruitment', listings_off: 'Listings off', billing: 'Billing' };
 
 // Each call's result, the same way the Hot & cold report reads it: the longest quick note its note starts with, else its outcome
 const reasonRows = sql`(values ${sql(REASONS.map((x) => [x[0], x[1], x[2]]))}) as r(prefix, label, grp)`;
@@ -100,17 +103,84 @@ async function billing(team, { from_month, to_month }) {
   const [y1, m1] = from_month.split('-').map(Number); const [y2, m2] = to_month.split('-').map(Number);
   if ((y2 - y1) * 12 + (m2 - m1) > 23) return { error: 'At most 24 months at a time' };
   const rows = await sql`
-    with ppl as (select p.email, p.full_name, ops.team_at(p.email, ops.dubai_day(now())) as team, ops.role_at(p.email, ops.dubai_day(now())) as role
+    with ppl as (select p.email, p.full_name, p.start_date, ops.team_at(p.email, ops.dubai_day(now())) as team, ops.role_at(p.email, ops.dubai_day(now())) as role
                  from ops.people p where p.status = 'active' and p.kind in ('broker', 'manager') and not p.hide_from_kpi
                    and (${team}::text is null or ops.team_at(p.email, ops.dubai_day(now())) = ${team}))
-    select p.full_name as name, p.team, p.role,
+    select p.full_name as name, p.team, p.role, p.start_date::text as started,
       coalesce(sum(x.amount) filter (where x.month between ${from_month + '-01'}::date and ${to_month + '-01'}::date), 0)::float as billed,
       (count(*) filter (where x.counts_as_deal and x.month between ${from_month + '-01'}::date and ${to_month + '-01'}::date))::int as deals,
       (count(distinct x.month) filter (where x.month between ${from_month + '-01'}::date and ${to_month + '-01'}::date and x.amount > 0))::int as months_billed,
       max(x.deal_date)::text as last_deal, min(x.deal_date)::text as first_deal
     from ppl p left join ops.deals x on x.email = p.email and x.deleted_at is null
-    group by 1, 2, 3 order by 4, 1`;
+    group by 1, 2, 3, 4 order by 5, 1`;
   return { from_month, to_month, team: team || 'all teams', rows };
+}
+
+async function commission({ from_month, to_month, group_by }) {
+  if (!isMonth(from_month) || !isMonth(to_month) || from_month > to_month) return { error: 'from_month and to_month must be YYYY-MM, from first' };
+  const [y1, m1] = from_month.split('-').map(Number); const [y2, m2] = to_month.split('-').map(Number);
+  if ((y2 - y1) * 12 + (m2 - m1) > 11) return { error: 'At most 12 months at a time' };
+  if (!['broker', 'team', 'month'].includes(group_by)) return { error: 'Unknown group_by' };
+  const f = from_month + '-01'; const t = to_month + '-01';
+  const rows = group_by === 'broker'
+    ? await sql`select to_char(b.month, 'YYYY-MM') as month, coalesce(p.full_name, b.email) as broker, b.team, b.role, b.billed::float, b.deals,
+                  round(b.rate * 100, 1)::float as rate_pct, b.payout::float, b.retained_before_overrides::float as retained
+                from ops.v_broker_month b left join ops.people p on p.email = b.email
+                where b.month between ${f}::date and ${t}::date order by b.month, b.billed desc limit 400`
+    : await sql`select ${group_by === 'team' ? sql`coalesce(b.team, 'No team')` : sql`to_char(b.month, 'YYYY-MM')`} as "group",
+                  sum(b.billed)::float as billed, sum(b.deals)::int as deals, sum(b.payout)::float as payout, sum(b.retained_before_overrides)::float as retained
+                from ops.v_broker_month b where b.month between ${f}::date and ${t}::date group by 1 order by 1`;
+  const brackets = await sql`select role, valid_from::text, bounds, rates from ops.commission_brackets order by role, valid_from`;
+  return { from_month, to_month, group_by, note: 'retained is before manager overrides', rows, brackets };
+}
+
+const LISTING_SQL = sql`(c.outcome in ('Listing opportunity', 'Wants to sell') or coalesce(c.note, '') ~* '^(wants to rent|wants to sell|unit available)')`;
+const NOANSWER_SQL = sql`(coalesce(c.outcome, '') = 'No answer' or coalesce(c.note, '') ~* '^(called, no reply|called, unreachable|called, line busy|phone off|no answer)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
+async function activity(team, { from, to }) {
+  if (!isDay(from) || !isDay(to) || from > to) return { error: 'from and to must be days, YYYY-MM-DD, from first' };
+  if ((Date.parse(to) - Date.parse(from)) / 864e5 > 93) return { error: 'At most 93 days at a time' };
+  const base = Number(await setting('daily_call_target', 50)) || 50;
+  const rows = await sql`
+    with w as (select ${from}::date as fr, ${to}::date as tt,
+                 (select count(*) from generate_series(${from}::date, least(${to}::date, ops.dubai_day(now())), '1 day') g where extract(isodow from g) < 6)::int as weekdays),
+    ppl as (select p.email, p.full_name, p.start_date, ops.team_at(p.email, w.tt) as team, ops.role_at(p.email, w.tt) as role
+            from ops.people p, w where p.status = 'active' and p.kind in ('broker', 'manager') and not p.hide_from_kpi
+              and (${team}::text is null or ops.team_at(p.email, w.tt) = ${team})),
+    cl as (select lower(s.email) as email, count(*)::int as calls, count(*) filter (where not ${NOANSWER_SQL})::int as reached,
+                  count(*) filter (where ${LISTING_SQL})::int as listing_opps, greatest(${base}, max(t.target)) as daily_target
+           from desk.calls c join desk.staff s on s.user_id = c.user_id left join desk.staff_targets t on t.user_id = s.user_id, w
+           where c.called_at >= (w.fr::timestamp at time zone 'Asia/Dubai') and c.called_at < ((w.tt + 1)::timestamp at time zone 'Asia/Dubai')
+           group by 1)
+    select p.full_name as name, p.team, p.role, p.start_date::text as started,
+      coalesce(cl.calls, 0) as calls, coalesce(cl.reached, 0) as reached, coalesce(cl.listing_opps, 0) as listing_opps,
+      coalesce(cl.daily_target, ${base})::int as daily_call_target, (coalesce(cl.daily_target, ${base}) * w.weekdays)::int as call_target_for_period,
+      (select count(*) from ops.kendal_listings n where n.agent_email = p.email and n.live_since is not null and ops.dubai_day(n.created_at) between w.fr and w.tt)::int as new_listings,
+      (select count(*) from ops.v_portal_leads i where i.agent_email = p.email and i.lead_day between w.fr and w.tt)::int as leads,
+      (select count(*) from ops.kendal_appointments a where a.appointment_type ilike '%view%' and a.start_day between w.fr and w.tt and p.email = any(a.team_members))::int as viewings,
+      (select count(*) from ops.deals x where x.email = p.email and x.deleted_at is null and x.counts_as_deal and x.deal_date between w.fr and w.tt)::int as deals,
+      (select coalesce(sum(amount), 0) from ops.deals x where x.email = p.email and x.deleted_at is null and x.deal_date between w.fr and w.tt)::float as billed
+    from ppl p cross join w left join cl on cl.email = p.email
+    order by p.team nulls last, p.full_name`;
+  return { from, to, team: team || 'all teams', note: 'billed and deals here go by deal date within the period', rows };
+}
+
+async function recruitment({ from, to }) {
+  if (!isDay(from) || !isDay(to) || from > to) return { error: 'from and to must be days, YYYY-MM-DD, from first' };
+  const [r] = await sql`
+    with w as (select (${from}::date::timestamp at time zone 'Asia/Dubai') as fr, ((${to}::date + 1)::timestamp at time zone 'Asia/Dubai') as tt),
+    mv as (select n.candidate_id, split_part(n.body, ' → ', 1) as from_stage, split_part(n.body, ' → ', 2) as to_stage, coalesce(st.full_name, 'Unknown') as by
+           from desk.rc_notes n left join desk.staff st on st.user_id = n.user_id, w where n.kind = 'stage' and n.created_at >= w.fr and n.created_at < w.tt)
+    select json_build_object(
+      'in_each_stage_now', (select coalesce(json_object_agg(stage, n), '{}') from (select stage, count(*)::int as n from desk.rc_candidates group by 1) x),
+      'added', (select count(*)::int from desk.rc_candidates c, w where c.created_at >= w.fr and c.created_at < w.tt),
+      'added_by_source', (select coalesce(json_object_agg(src, n), '{}') from (select coalesce(nullif(c.source, ''), 'Not given') as src, count(*)::int as n from desk.rc_candidates c, w where c.created_at >= w.fr and c.created_at < w.tt group by 1) x),
+      'moves_to_stage', (select coalesce(json_object_agg(to_stage, n), '{}') from (select to_stage, count(*)::int as n from mv group by 1) x),
+      'by_recruiter', (select coalesce(json_agg(x), '[]') from (select by, count(*)::int as stage_moves,
+                         count(*) filter (where to_stage = 'Interview booked')::int as interviews, count(*) filter (where to_stage = 'Offered')::int as offers,
+                         count(*) filter (where to_stage = 'Placed')::int as placed from mv group by 1 order by 2 desc) x),
+      'placed', (select coalesce(json_agg(json_build_object('name', c.name, 'brokerage', c.brokerage, 'area', c.area)), '[]') from mv join desk.rc_candidates c on c.id = mv.candidate_id where mv.to_stage = 'Placed')
+    ) as j`;
+  return { from, to, ...r.j };
 }
 
 async function followups(team) {
@@ -139,6 +209,9 @@ async function runTool(name, input, sc) {
     case 'followups': return followups(team);
     case 'listings_off': return listingsOff(team, input);
     case 'billing': return billing(team, input);
+    case 'commission': return commission(input);
+    case 'activity': return activity(team, input);
+    case 'recruitment': return recruitment(input);
     case 'money': return isMonth(input.month) ? pages.money(input.month + '-01') : { error: 'month must be YYYY-MM' };
     case 'deals': {
       if (!isMonth(input.month)) return { error: 'month must be YYYY-MM' };
@@ -163,15 +236,16 @@ Rules:
 - Write in plain UK English, short and direct, like a sharp operations manager. Lead with the answer. Use a small table when comparing more than three people or teams. No headings for short answers, no closing summaries or offers.
 - Calls are Owner Desk calls. "Reached" means the owner answered. A listing opportunity is a call where the owner wants to list for rent or sale (listing opportunity, wants to sell, wants to rent, unit available). Valuations and call-backs are counted separately. Call these "listing opportunities from calls", not listings won.
 - For "all calls" or "so far" questions, start from the first Desk call day given above, so nothing is missed. "No team" means calls by people not on a team that day (for example managers, leavers or admin).
+- Commission: "retained" from the commission tool is what the company keeps after the broker's split and BEFORE manager overrides. Always say "before overrides". Overrides aren't in the data yet; if asked for retained after overrides, say that isn't available yet.
 - Listings off: give the reasons exactly as recorded. If many say "No reason recorded", say so rather than guessing why.
-- "Who hasn't billed": use the billing tool, name everyone at zero for the period asked, and give their last deal date (or say there is no deal on record). Don't call someone new because they have no deals; you don't know start dates.
+- "Who hasn't billed": use the billing tool, name everyone at zero for the period asked, and give their last deal date (or say there is no deal on record). Use their start date to say how long they've been here.
 - If a question is not about the business data, say you can only answer questions about the Desk's figures.`;
 
 async function claude(key, model, body) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model, max_tokens: MAX_TOKENS, ...body }),
+    body: JSON.stringify({ model, max_tokens: MAX_TOKENS, ...body }),   // body.max_tokens overrides
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j?.error?.message || 'Claude did not answer'), { status: r.status });
@@ -182,8 +256,8 @@ const usd = (u) => ((u.input_tokens || 0) * PRICE.in + (u.output_tokens || 0) * 
   + (u.cache_creation_input_tokens || 0) * PRICE.cacheWrite + (u.cache_read_input_tokens || 0) * PRICE.cacheRead) / 1e6;
 
 // Returns [httpStatus, json]
-export async function ask(staff, sc, question) {
-  const q = String(question || '').trim().slice(0, 600);
+export async function ask(staff, sc, question, opts = {}) {
+  const q = opts.prompt ? String(opts.prompt) : String(question || '').trim().slice(0, 600);
   if (q.length < 3) return [400, { error: 'Type a question first.' }];
   const L = await limitsNow();
   const key = process.env.ANTHROPIC_API_KEY;
@@ -197,7 +271,7 @@ export async function ask(staff, sc, question) {
       (select count(*) from desk.ask_log, day where at >= day.start)::int as everyone,
       (select coalesce(sum(usd), 0) from desk.ask_log where at >= date_trunc('month', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai')::float as month_usd,
       (select extract(epoch from now() - max(at)) from desk.ask_log where user_id = ${staff.user_id})::float as since_last,
-      exists (select 1 from desk.ask_log where user_id = ${staff.user_id} and status = 'running' and at > now() - interval '90 seconds') as busy,
+      exists (select 1 from desk.ask_log where user_id = ${staff.user_id} and status = 'running' and at > now() - interval '200 seconds') as busy,
       (select ops.dubai_day(min(called_at))::text from desk.calls) as first_call`;
   if (u.busy) return [429, { error: 'Your last question is still being answered.' }];
   if (u.since_last != null && u.since_last < L.cooldownSec) return [429, { error: 'Give it a few seconds between questions.' }];
@@ -205,7 +279,11 @@ export async function ask(staff, sc, question) {
   if (u.everyone >= L.companyDay) return [429, { error: 'The company limit for today has been reached. It resets at midnight.' }];
   if (u.month_usd >= L.monthlyUsd) return [429, { error: 'This month\'s budget for Ask has been used. Ollie can raise it.' }];
 
-  const [row] = await sql`insert into desk.ask_log (user_id, question, team, status) values (${staff.user_id}, ${q}, ${sc.team || null}, 'running') returning id`;
+    if (opts.report) {
+    const [rp] = await sql`select count(*)::int as n from desk.ask_log where question like 'Weekly report%' and at > now() - interval '1 day'`;
+    if (rp.n >= (L.reportsDay ?? 6)) return [429, { error: 'That\'s enough reports for today. Open one from Recent questions instead.' }];
+  }
+  const [row] = await sql`insert into desk.ask_log (user_id, question, team, status) values (${staff.user_id}, ${opts.title || q}, ${sc.team || null}, 'running') returning id`;
   const tools = TOOLS.filter((t) => sc.all || !t.allOnly).map(({ allOnly, ...t }) => t);
   tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } };
   const sys = [{ type: 'text', text: system(sc, dubaiToday(), u.first_call), cache_control: { type: 'ephemeral' } }];
@@ -213,9 +291,10 @@ export async function ask(staff, sc, question) {
   const used = []; const total = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
   try {
     let answer = '';
-    for (let round = 0; round <= MAX_ROUNDS; round++) {
-      const last = round === MAX_ROUNDS;
-      const r = await claude(key, L.model, { system: sys, tools, messages, ...(last ? { tool_choice: { type: 'none' } } : {}) });
+    const rounds = opts.rounds || MAX_ROUNDS;
+    for (let round = 0; round <= rounds; round++) {
+      const last = round === rounds;
+      const r = await claude(key, L.model, { system: sys, tools, messages, max_tokens: opts.maxTokens || MAX_TOKENS, ...(last ? { tool_choice: { type: 'none' } } : {}) });
       for (const k of Object.keys(total)) total[k] += r.usage?.[k] || 0;
       const calls = (r.content || []).filter((b) => b.type === 'tool_use');
       answer = (r.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
@@ -241,6 +320,27 @@ export async function ask(staff, sc, question) {
     await sql`update desk.ask_log set status = 'error', answer = ${String(e.message).slice(0, 500)}, tools = ${sql.json(used)}, usd = ${cost} where id = ${row.id}`;
     return [502, { error: e.status === 429 || e.status === 529 ? 'Claude is busy right now. Try again in a minute.' : 'Something went wrong getting the answer. Try again.' }];
   }
+}
+
+// The weekly management report: one fixed brief, more room to look things up and a longer answer (about 10 to 20 US cents)
+const fmt = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+export async function report(staff, sc, which) {
+  const today = dubaiToday(); const t = new Date(today + 'T12:00:00Z'); const dow = (t.getUTCDay() + 6) % 7;
+  const mon = new Date(t - dow * 864e5); const thisMon = mon.toISOString().slice(0, 10);
+  const lastMon = new Date(mon - 7 * 864e5).toISOString().slice(0, 10); const lastSun = new Date(mon - 864e5).toISOString().slice(0, 10);
+  const [from, to] = which === 'this' ? [thisMon, today] : [lastMon, lastSun];
+  const prevFrom = new Date(Date.parse(from) - 7 * 864e5).toISOString().slice(0, 10); const prevTo = new Date(Date.parse(to) - 7 * 864e5).toISOString().slice(0, 10);
+  const title = `Weekly report: ${fmt(from)} to ${fmt(to)}${sc.team ? ' · ' + sc.team : ''}`;
+  const prompt = `Write the weekly management report for ${from} to ${to}${which === 'this' ? ' (this week so far)' : ''}, comparing with ${prevFrom} to ${prevTo}. It is for the management meeting.
+Use the tools to get the figures (activity for both weeks, money and commission for this month${sc.all ? '' : ' if available'}, listings and listings_off, followups, ${sc.all ? 'recruitment, ' : ''}and deals for the month). Then write these sections, each starting with a "## " heading:
+## Headline: 3 or 4 short lines: billed and deals this week against the week before, month to date against target, and the one thing that most needs attention.
+## Billing and deals: week and month to date by team, the team targets and how far along each is${sc.all ? ', and retained this month before overrides' : ''}. List the week's deals in a small table (broker, property, sale or rental, commission).
+## Brokers: a table of every broker with calls against their call target, reached, listing opportunities, new listings, leads, viewings, deals and billed for the week. Then name the top performers, and anyone behind: under their call target, or no billing in the last 60 days (give their start date and last deal).
+## Calls and call-backs: totals by team, listing opportunities and valuations, overdue call-backs by broker.
+## Listings: live now, new, gained and lost this week, and the reasons listings came off.
+${sc.all ? '## Recruitment: pipeline by stage, candidates added, interviews, offers and placements this week.\n' : ''}## To discuss: 3 to 6 points for the meeting, each based on a figure above.
+Keep it factual and plain. Only figures from the tools; if something isn't in the data, say so in that section. No closing summary or sign-off.`;
+  return ask(staff, sc, null, { prompt, title, report: true, rounds: 10, maxTokens: 5000 });
 }
 
 // The person's own recent questions, and (for admins) how much Ask has used
