@@ -284,20 +284,21 @@ export async function ask(staff, sc, question, opts = {}) {
     if (rp.n >= (L.reportsDay ?? 6)) return [429, { error: 'That\'s enough reports for today. Open one from Recent questions instead.' }];
   }
   const [row] = await sql`insert into desk.ask_log (user_id, question, team, status) values (${staff.user_id}, ${opts.title || q}, ${sc.team || null}, 'running') returning id`;
-  const tools = TOOLS.filter((t) => sc.all || !t.allOnly).map(({ allOnly, ...t }) => t);
-  tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } };
+  const tools = opts.data ? [] : TOOLS.filter((t) => sc.all || !t.allOnly).map(({ allOnly, ...t }) => t);
+  if (tools.length) tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } };
   const sys = [{ type: 'text', text: system(sc, dubaiToday(), u.first_call), cache_control: { type: 'ephemeral' } }];
-  const messages = [{ role: 'user', content: q }];
+  const messages = [{ role: 'user', content: opts.data ? q + '\n\nThe figures (JSON):\n' + JSON.stringify(opts.data) : q }];
   const used = []; const total = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
   try {
-    let answer = '';
-    const rounds = opts.rounds || MAX_ROUNDS;
+    let answer = ''; let stop = '';
+    const rounds = opts.data ? 0 : (opts.rounds || MAX_ROUNDS);
     for (let round = 0; round <= rounds; round++) {
       const last = round === rounds;
-      const r = await claude(key, L.model, { system: sys, tools, messages, max_tokens: opts.maxTokens || MAX_TOKENS, ...(last ? { tool_choice: { type: 'none' } } : {}) });
+      const r = await claude(key, L.model, { system: sys, messages, max_tokens: opts.maxTokens || MAX_TOKENS, ...(tools.length ? { tools, ...(last ? { tool_choice: { type: 'none' } } : {}) } : {}) });
       for (const k of Object.keys(total)) total[k] += r.usage?.[k] || 0;
       const calls = (r.content || []).filter((b) => b.type === 'tool_use');
       answer = (r.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+      stop = r.stop_reason;
       if (r.stop_reason !== 'tool_use' || !calls.length) break;
       messages.push({ role: 'assistant', content: r.content });
       const results = [];
@@ -309,7 +310,8 @@ export async function ask(staff, sc, question, opts = {}) {
       }
       messages.push({ role: 'user', content: results });
     }
-    if (!answer) answer = 'I couldn\'t find an answer to that in the Desk\'s figures.';
+    if (!answer) { console.error('ask: no text', stop); answer = 'I couldn\'t find an answer to that in the Desk\'s figures.'; }
+    if (stop === 'max_tokens') answer += '\n\n(The answer was cut short. Ask for a narrower period or one team.)';
     const cost = usd(total);
     await sql`update desk.ask_log set status = 'ok', answer = ${answer}, tools = ${sql.json(used)}, tokens_in = ${total.input_tokens + total.cache_creation_input_tokens + total.cache_read_input_tokens},
       tokens_out = ${total.output_tokens}, usd = ${cost} where id = ${row.id}`;
@@ -325,22 +327,46 @@ export async function ask(staff, sc, question, opts = {}) {
 // The weekly management report: one fixed brief, more room to look things up and a longer answer (about 10 to 20 US cents)
 const fmt = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
 export async function report(staff, sc, which) {
+  const team = sc.team || null;
   const today = dubaiToday(); const t = new Date(today + 'T12:00:00Z'); const dow = (t.getUTCDay() + 6) % 7;
   const mon = new Date(t - dow * 864e5); const thisMon = mon.toISOString().slice(0, 10);
   const lastMon = new Date(mon - 7 * 864e5).toISOString().slice(0, 10); const lastSun = new Date(mon - 864e5).toISOString().slice(0, 10);
   const [from, to] = which === 'this' ? [thisMon, today] : [lastMon, lastSun];
   const prevFrom = new Date(Date.parse(from) - 7 * 864e5).toISOString().slice(0, 10); const prevTo = new Date(Date.parse(to) - 7 * 864e5).toISOString().slice(0, 10);
+  const month = to.slice(0, 7); const months = [...new Set([from.slice(0, 7), month])];
   const title = `Weekly report: ${fmt(from)} to ${fmt(to)}${sc.team ? ' · ' + sc.team : ''}`;
-  const prompt = `Write the weekly management report for ${from} to ${to}${which === 'this' ? ' (this week so far)' : ''}, comparing with ${prevFrom} to ${prevTo}. It is for the management meeting.
-Use the tools to get the figures (activity for both weeks, money and commission for this month${sc.all ? '' : ' if available'}, listings and listings_off, followups, ${sc.all ? 'recruitment, ' : ''}and deals for the month). Then write these sections, each starting with a "## " heading:
+
+  // Every figure the report needs, gathered here in one go (one query at a time: the connection pool is small)
+  const data = {};
+  const get = async (k, fn) => { try { data[k] = await fn(); } catch (e) { console.error('report', k, e.message); data[k] = { error: 'not available' }; } };
+  await get('this_week_by_broker', () => activity(team, { from, to }));
+  await get('week_before_by_broker', () => activity(team, { from: prevFrom, to: prevTo }));
+  await get('calls_by_team', () => calls(team, { from, to, group_by: 'team' }));
+  await get('calls_by_result', () => calls(team, { from, to, group_by: 'result' }));
+  await get('callbacks_now', () => followups(team));
+  await get('month_to_date_and_targets', async () => { const o = await pages.today(team); delete o.feeds; return o; });
+  await get('listings', async () => { const l = await pages.listings(team); delete l.recent; return l; });
+  await get('listings_off_this_week', () => listingsOff(team, { from, to, group_by: 'reason' }));
+  if (sc.all) {
+    await get('commission_this_month_by_team', () => commission({ from_month: month, to_month: month, group_by: 'team' }).then(({ brackets, ...r }) => r));
+    await get('deals_this_week', async () => {
+      const out = [];
+      for (const m of months) { const d = await dealsPage(m + '-01'); out.push(...d.deals.filter((x) => String(x.date).slice(0, 10) >= from && String(x.date).slice(0, 10) <= to)); }
+      return out.map(({ id, email, ...x }) => x);
+    });
+    await get('recruitment_this_week', () => recruitment({ from, to }));
+  }
+
+  const prompt = `Write the weekly management report for ${from} to ${to}${which === 'this' ? ' (this week so far)' : ''}, compared with ${prevFrom} to ${prevTo}. It is for the management meeting. All the figures are below; use only these.
+Sections, each starting with a "## " heading:
 ## Headline: 3 or 4 short lines: billed and deals this week against the week before, month to date against target, and the one thing that most needs attention.
-## Billing and deals: week and month to date by team, the team targets and how far along each is${sc.all ? ', and retained this month before overrides' : ''}. List the week's deals in a small table (broker, property, sale or rental, commission).
-## Brokers: a table of every broker with calls against their call target, reached, listing opportunities, new listings, leads, viewings, deals and billed for the week. Then name the top performers, and anyone behind: under their call target, or no billing in the last 60 days (give their start date and last deal).
-## Calls and call-backs: totals by team, listing opportunities and valuations, overdue call-backs by broker.
-## Listings: live now, new, gained and lost this week, and the reasons listings came off.
-${sc.all ? '## Recruitment: pipeline by stage, candidates added, interviews, offers and placements this week.\n' : ''}## To discuss: 3 to 6 points for the meeting, each based on a figure above.
-Keep it factual and plain. Only figures from the tools; if something isn't in the data, say so in that section. No closing summary or sign-off.`;
-  return ask(staff, sc, null, { prompt, title, report: true, rounds: 10, maxTokens: 5000 });
+## Billing and deals: week and month to date by team, team targets and progress${sc.all ? ', retained this month before overrides, and a small table of this week\'s deals (broker, property, sale or rental, commission). For a split deal, list each broker\'s share as its own row but count it as one deal' : ''}.
+## Brokers: one table of every broker for the week: calls, call target, reached, listing opportunities, new listings, leads, viewings, deals, billed. Then the top performers, and anyone behind (under call target, or no deals this week and the week before).
+## Calls and call-backs: totals by team, listing opportunities and valuations, the most common results, and overdue call-backs by broker.
+## Listings: live now, new, gained and lost, and the reasons listings came off.
+${sc.all ? '## Recruitment: pipeline by stage, candidates added, interviews, offers and placements.\n' : ''}## To discuss: 3 to 6 points for the meeting, each tied to a figure above.
+Plain and factual. Whole numbers for deals. If a section's figures say "not available", say so in one line. No closing summary or sign-off.`;
+  return ask(staff, sc, null, { prompt, title, report: true, data, maxTokens: 6000 });
 }
 
 // The person's own recent questions, and (for admins) how much Ask has used
