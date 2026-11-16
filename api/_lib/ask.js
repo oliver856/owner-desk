@@ -33,7 +33,7 @@ const TOOLS = [
   { name: 'people', description: 'One row per active broker and manager: team, role, new listings, live stock, portal leads, viewings, deals and Desk calls for the period, plus billed this month.', input_schema: { type: 'object', properties: { period: { type: 'string', enum: ['week', 'month'], description: 'This week so far, or this month so far' } }, required: ['period'] } },
   { name: 'listings', description: 'Live listings now, new, gained and lost listings, by broker and community.', input_schema: { type: 'object', properties: {} } },
   { name: 'leads', description: 'Portal leads by broker, source and listing, recent weeks.', input_schema: { type: 'object', properties: {} } },
-  { name: 'calls', description: 'Owner Desk calls between two days (at most 93 days), grouped one way. Each group has: calls; owners (distinct owners called); reached (owner answered); no_answer; listing_opps (owner wants to list for rent or sale: "Listing opportunity", "Wants to sell", "Wants to rent", "Unit available"); valuations (owner wants a valuation); call_backs (owner asked to be called back or is in discussion); hot (all hot results together, including the three before). group_by "result" lists every result with the same labels as the Hot & cold report, and which group it is in (hot, objection = spoke but no, nocontact = didn\'t get through).', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'First day, YYYY-MM-DD (Dubai time)' }, to: { type: 'string', description: 'Last day, YYYY-MM-DD' }, group_by: { type: 'string', enum: ['broker', 'team', 'day', 'area', 'result'] } }, required: ['from', 'to', 'group_by'] } },
+  { name: 'calls', description: 'Owner Desk calls between two days (at most 366 days; first_call says when Desk calls start), grouped one way. Each group has: calls; owners (distinct owners called); reached (owner answered); no_answer; listing_opps (owner wants to list for rent or sale: "Listing opportunity", "Wants to sell", "Wants to rent", "Unit available"); valuations (owner wants a valuation); call_backs (owner asked to be called back or is in discussion); hot (all hot results together, including the three before). group_by "result" lists every result with the same labels as the Hot & cold report, and which group it is in (hot, objection = spoke but no, nocontact = didn\'t get through).', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'First day, YYYY-MM-DD (Dubai time)' }, to: { type: 'string', description: 'Last day, YYYY-MM-DD' }, group_by: { type: 'string', enum: ['broker', 'team', 'day', 'area', 'result'] } }, required: ['from', 'to', 'group_by'] } },
   { name: 'listings_off', description: 'Listings that came off the portals between two days (at most 186 days), with the reason recorded when they came off. group_by reason (counts per reason), broker (counts per broker, with their top reasons) or week. Records only start on the day in "since".', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' }, group_by: { type: 'string', enum: ['reason', 'broker', 'week'] } }, required: ['from', 'to', 'group_by'] } },
   { name: 'billing', description: 'Every active broker and manager (one row each, including those who billed nothing) with: billed and deals between two months inclusive (at most 24 months), months in that range with any billing, their last deal date ever and first deal date ever (null = no deal on record). Use it for "who hasn\'t billed" questions. Sorted lowest billed first.', input_schema: { type: 'object', properties: { from_month: { type: 'string', description: 'YYYY-MM' }, to_month: { type: 'string', description: 'YYYY-MM' } }, required: ['from_month', 'to_month'] } },
   { name: 'followups', description: 'Owner call-backs each broker has booked: overdue, due today, due in the next 7 days.', input_schema: { type: 'object', properties: {} } },
@@ -49,7 +49,7 @@ const CALLBACK = ['Call back', 'In discussion', 'Replied'];
 
 async function calls(team, { from, to, group_by }) {
   if (!isDay(from) || !isDay(to) || from > to) return { error: 'from and to must be days, YYYY-MM-DD, from first' };
-  if ((Date.parse(to) - Date.parse(from)) / 864e5 > 93) return { error: 'At most 93 days at a time' };
+  if ((Date.parse(to) - Date.parse(from)) / 864e5 > 366) return { error: 'At most 366 days at a time' };
   const key = { broker: sql`broker`, team: sql`team`, day: sql`day`, area: sql`area`, result: sql`reason` }[group_by];
   if (!key) return { error: 'Unknown group_by' };
   const rows = await sql`
@@ -72,7 +72,8 @@ async function calls(team, { from, to, group_by }) {
       count(*) filter (where reason = any(${LISTING}))::int as listing_opps, count(*) filter (where reason = 'Wants valuation')::int as valuations,
       count(*) filter (where reason = any(${CALLBACK}))::int as call_backs, count(*) filter (where grp = 'hot')::int as hot
     from c group by 1 order by 3 desc limit 200`;
-  return { from, to, group_by, team: team || 'all teams', rows: rows.map(({ kind, ...r }) => (group_by === 'result' ? { ...r, kind } : r)) };
+  const [f] = await sql`select ops.dubai_day(min(called_at))::text as first_call from desk.calls`;
+  return { from, to, group_by, team: team || 'all teams', first_call: f?.first_call || null, rows: rows.map(({ kind, ...r }) => (group_by === 'result' ? { ...r, kind } : r)) };
 }
 
 async function listingsOff(team, { from, to, group_by }) {
@@ -153,14 +154,15 @@ function fit(v) {
   return s.length <= MAX_TOOL_CHARS ? s : s.slice(0, MAX_TOOL_CHARS) + ' …[cut short: ask for a narrower period or one team]';
 }
 
-const system = (sc, today) => `You answer questions from Apex Homes Dubai's management about their brokers, using only figures from the tools.
-Today is ${today} (Dubai). ${sc.team ? `This person manages the ${sc.team} team and only sees that team.` : 'This person can see every team.'}
+const system = (sc, today, firstCall) => `You answer questions from Apex Homes Dubai's management about their brokers, using only figures from the tools.
+Today is ${today} (Dubai). The first Owner Desk call was on ${firstCall || 'an unknown day'}. ${sc.team ? `This person manages the ${sc.team} team and only sees that team.` : 'This person can see every team.'}
 Rules:
 - Every number you give must come from a tool result. Never estimate, extrapolate or fill a gap. If the data isn't there, say plainly what is missing.
 - Say which period your figures cover (for example "1 to 16 November").
 - Deal counts are whole numbers. Billed is commission due to the company, excluding VAT, by close date. Money is AED, written like AED 1,234,567.
 - Write in plain UK English, short and direct, like a sharp operations manager. Lead with the answer. Use a small table when comparing more than three people or teams. No headings for short answers, no closing summaries or offers.
 - Calls are Owner Desk calls. "Reached" means the owner answered. A listing opportunity is a call where the owner wants to list for rent or sale (listing opportunity, wants to sell, wants to rent, unit available). Valuations and call-backs are counted separately. Call these "listing opportunities from calls", not listings won.
+- For "all calls" or "so far" questions, start from the first Desk call day given above, so nothing is missed. "No team" means calls by people not on a team that day (for example managers, leavers or admin).
 - Listings off: give the reasons exactly as recorded. If many say "No reason recorded", say so rather than guessing why.
 - "Who hasn't billed": use the billing tool, name everyone at zero for the period asked, and give their last deal date (or say there is no deal on record). Don't call someone new because they have no deals; you don't know start dates.
 - If a question is not about the business data, say you can only answer questions about the Desk's figures.`;
@@ -195,7 +197,8 @@ export async function ask(staff, sc, question) {
       (select count(*) from desk.ask_log, day where at >= day.start)::int as everyone,
       (select coalesce(sum(usd), 0) from desk.ask_log where at >= date_trunc('month', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai')::float as month_usd,
       (select extract(epoch from now() - max(at)) from desk.ask_log where user_id = ${staff.user_id})::float as since_last,
-      exists (select 1 from desk.ask_log where user_id = ${staff.user_id} and status = 'running' and at > now() - interval '90 seconds') as busy`;
+      exists (select 1 from desk.ask_log where user_id = ${staff.user_id} and status = 'running' and at > now() - interval '90 seconds') as busy,
+      (select ops.dubai_day(min(called_at))::text from desk.calls) as first_call`;
   if (u.busy) return [429, { error: 'Your last question is still being answered.' }];
   if (u.since_last != null && u.since_last < L.cooldownSec) return [429, { error: 'Give it a few seconds between questions.' }];
   if (u.mine >= L.perPersonDay) return [429, { error: `That's your ${L.perPersonDay} questions for today. It resets at midnight.` }];
@@ -205,7 +208,7 @@ export async function ask(staff, sc, question) {
   const [row] = await sql`insert into desk.ask_log (user_id, question, team, status) values (${staff.user_id}, ${q}, ${sc.team || null}, 'running') returning id`;
   const tools = TOOLS.filter((t) => sc.all || !t.allOnly).map(({ allOnly, ...t }) => t);
   tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } };
-  const sys = [{ type: 'text', text: system(sc, dubaiToday()), cache_control: { type: 'ephemeral' } }];
+  const sys = [{ type: 'text', text: system(sc, dubaiToday(), u.first_call), cache_control: { type: 'ephemeral' } }];
   const messages = [{ role: 'user', content: q }];
   const used = []; const total = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
   try {
