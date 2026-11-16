@@ -16,9 +16,9 @@ import { REASONS } from './reasons.js';
 
 const LIMITS = { enabled: true, perPersonDay: 20, companyDay: 200, monthlyUsd: 60, cooldownSec: 8, model: 'claude-sonnet-5-5' };
 // US dollars per million tokens (Sonnet 5.5): input, output, cache write, cache read
-const PRICE = { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.1 };
+const PRICE = { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.2 };
 const MAX_ROUNDS = 5;
-const MAX_TOKENS = 1500;
+const MAX_TOKENS = 2500;
 const MAX_TOOL_CHARS = 16000;
 
 export const limitsNow = async () => ({ ...LIMITS, ...((await setting('ask', {})) || {}) });
@@ -245,7 +245,9 @@ async function claude(key, model, body) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model, max_tokens: MAX_TOKENS, ...body }),   // body.max_tokens overrides
+    // Sonnet 5.5 thinks before answering unless told not to, and that thinking counts against max_tokens (it left the
+    // weekly report with no room to write). between_tools: no thinking up front, only a little between data lookups.
+    body: JSON.stringify({ model, max_tokens: MAX_TOKENS, thinking: { type: 'between_tools' }, output_config: { effort: 'medium' }, ...body }),   // body.max_tokens overrides
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j?.error?.message || 'Claude did not answer'), { status: r.status });
