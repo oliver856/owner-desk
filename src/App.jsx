@@ -224,6 +224,7 @@ header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--b
 .nav button.on{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(16,24,22,.08),0 0 0 1px var(--line)}
 .co{display:flex;align-items:center;gap:8px}
 .mm{margin-left:6px}
+.lp-sub{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 .mm-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-weight:500;background:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px 6px 12px;color:var(--ink);cursor:pointer;white-space:nowrap}
 .mm-btn:hover,.mm-btn.open{background:var(--hover)} .mm-btn.on{border-color:var(--accent);color:var(--accent);font-weight:600}
 .um-pop.mm-pop{left:0;right:auto;width:auto;min-width:200px} .mm-pop .um-item{display:block;text-decoration:none;color:var(--ink)} .mm-pop .um-item.on{color:var(--accent);font-weight:600}
@@ -1596,7 +1597,7 @@ function SourceSwitch({ v, onChange }) {
 // Buyer and tenant enquiries, split evenly and at random so everyone has their own to call. Fixed columns.
 const LEAD_TABS_UI = [['todo', 'To call', 'Not called yet'], ['retry', 'Try again', 'No reply, unreachable, line busy or phone off last time'],
   ['hot', 'Hot', 'Still looking, viewing booked, send options, follow up or call back'], ['called', 'Called', 'Called at least once'], ['all', 'All', '']];
-const LEAD_SORTS = [['', 'Shuffled'], ['budget_hi', 'Budget, high to low'], ['budget_lo', 'Budget, low to high'], ['recent', 'Last called']];
+const LEAD_SORTS = [['', 'Shuffled'], ['budget_hi', 'Budget, high to low'], ['budget_lo', 'Budget, low to high'], ['recent', 'Last called'], ['enquired', 'Enquired most recently']];
 function LeadPool({ me, switcher, banner, onCaps }) {
   const boss = me.staff.role !== 'broker';
   const keep = 'leadsNow:' + me.staff.email;
@@ -1683,7 +1684,8 @@ function LeadPool({ me, switcher, banner, onCaps }) {
                   const canCall = r.has_phone && !r.dnc && (mineLead || boss);
                   return (
                     <tr key={r.id} className={r.hold ? 'held-row' : ''}>
-                      <td><span className="clip strong" title={r.name || ''}>{r.name ? titleCase(r.name) : <span className="faint">No name given</span>}</span></td>
+                      <td><span className="clip strong" title={r.name || ''}>{r.name ? titleCase(r.name) : <span className="faint">No name given</span>}</span>
+                        {(r.intent || r.enquired_on) && <span className="clip lp-sub">{[r.intent, r.enquired_on ? 'enquired ' + fd(r.enquired_on) : ''].filter(Boolean).join(' · ')}</span>}</td>
                       <td><span className="clip" title={`${r.beds || ''} ${r.location}`}>{[r.beds ? (/^\d+$/.test(r.beds) ? `${r.beds} bed` : r.beds) : '', r.location].filter(Boolean).join(' · ')}</span></td>
                       <td className="r n">{r.budget ? String(r.budget).split(' - ').map((x) => (Number(x) ? fmt(Number(x)) : x)).join(' – ') : dash}</td>
                       <td>{r.dnc ? <span className="faint">Do not call</span> : r.masked && (mineLead || boss) ? <CopyNumber unitId={r.id} owner={{ id: r.owner_id, masked: r.masked }} /> : <span className="ph">{r.masked || <span className="faint">none</span>}</span>}</td>

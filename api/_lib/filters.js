@@ -59,7 +59,8 @@ export function sortSql(k) {
   }
 }
 
-export function whereSql(q, areas, me, locked = []) {
+// broker: brokers always have owners others are working hidden; only managers and up can choose to see them
+export function whereSql(q, areas, me, locked = [], broker = false) {
   const one = (k) => (q.get(k) || '').trim();
   const many = (k) => q.getAll(k).filter(Boolean);
   const num = (k) => { const v = one(k).replace(/,/g, ''); return v === '' || isNaN(Number(v)) ? null : Number(v); };
@@ -109,7 +110,7 @@ export function whereSql(q, areas, me, locked = []) {
   if (one('ncall')) w.push(sql`last_called is null`);
   // Hide owners another broker is holding (called recently, or calling right now)
   // Only owners other brokers have touched recently are checked, so this stays fast on big lists.
-  if (one('free') && me) w.push(sql`(owner_id is null or owner_id not in (
+  if ((one('free') || broker) && me) w.push(sql`(owner_id is null or owner_id not in (
       select x.owner_id from (
         select owner_id from desk.calls where user_id <> ${me} and called_at > now() - interval '180 days'
         union select owner_id from desk.call_requests where user_id <> ${me} and created_at > now() - interval '1 day') x

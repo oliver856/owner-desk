@@ -95,7 +95,7 @@ const deskActions = {
       with u as (
         select id, row_number() over (order by ${sortSql(q.get('sort'))}) as pos
         from desk.v_unit_list
-        where ${whereSql(q, s.listAreas, s.user_id, s.locked)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}
+        where ${whereSql(q, s.listAreas, s.user_id, s.locked, s.role === 'broker')} and ${tabSql(tab, s.user_id, s.role !== 'broker')}
         order by ${sortSql(q.get('sort'))} limit ${limit * 3})
       select distinct on (ph.phone) u.id as unit_id, uo.owner_id, u.pos
       from u join desk.unit_owners uo on uo.unit_id = u.id and uo.role = 'owner'

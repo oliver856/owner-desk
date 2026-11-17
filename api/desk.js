@@ -317,7 +317,7 @@ const actions = {
     const only = Number(q.get('only')) || 0;
     const rowWhere = only
       ? sql`${whereSql(new URLSearchParams(), s.listAreas, s.user_id, s.locked)} and v_unit_list.id = ${only}`
-      : sql`${whereSql(q, s.listAreas, s.user_id, s.locked)} and ${tabSql(tab, s.user_id, s.role !== 'broker')}`;
+      : sql`${whereSql(q, s.listAreas, s.user_id, s.locked, s.role === 'broker')} and ${tabSql(tab, s.user_id, s.role !== 'broker')}`;
     const [rows, [counts]] = await Promise.all([
       sql`select ${sql(COLS)},
             (select x.body from (
@@ -360,7 +360,7 @@ const actions = {
             count(*) filter (where ${tabSql('callbacks', s.user_id, s.role !== 'broker')})::int as callbacks,
             count(*) filter (where ${tabSql('reports', s.user_id, s.role !== 'broker')})::int as reports,
             count(*) filter (where ${tabSql('monthly', s.user_id, s.role !== 'broker')})::int as monthly
-          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id, s.locked)}`,
+          from desk.v_unit_list where ${whereSql(q, s.listAreas, s.user_id, s.locked, s.role === 'broker')}`,
     ]);
     const filtered = [...q.keys()].some((k) => !['action', 'tab', 'sort', 'page', 'free', 'more', 'only'].includes(k));
     // Awaited on purpose: anything still running after the reply is sent gets frozen mid-query by Vercel and
@@ -634,7 +634,7 @@ const actions = {
       : /^[0-9a-f-]{36}$/.test(who) ? sql`l.assigned_to = ${who}` : sql`false`;
     const base = sql`${whose}
       ${locs.length ? sql`and l.location = any(${locs})` : sql``}
-      ${text ? sql`and lower(concat_ws(' ', l.name, l.location, l.beds, l.budget)) like ${'%' + text + '%'}` : sql``}`;
+      ${text ? sql`and lower(concat_ws(' ', l.name, l.location, l.beds, l.budget, l.intent)) like ${'%' + text + '%'}` : sql``}`;
     // The latest call on each lead, worked out once
     const last = sql`(select c.called_at, c.outcome, c.note from desk.calls c where c.owner_id = l.owner_id order by c.called_at desc limit 1)`;
     const tabSqlL = (t) => (t === 'todo' ? sql`lc.called_at is null`
@@ -642,13 +642,14 @@ const actions = {
       : t === 'hot' ? sql`(lc.outcome = 'Call back' or lc.note ~* ${LEAD_HOT})`
       : t === 'called' ? sql`lc.called_at is not null` : sql`true`);
     const sort = q.get('sort');
-    const order = sort === 'budget_hi' ? sql`l.budget_num desc nulls last, l.unit_id`
+    const order = sort === 'enquired' ? sql`l.enquired_on desc nulls last, l.unit_id`
+      : sort === 'budget_hi' ? sql`l.budget_num desc nulls last, l.unit_id`
       : sort === 'budget_lo' ? sql`l.budget_num asc nulls last, l.unit_id`
       : sort === 'recent' ? sql`lc.called_at desc nulls last, l.unit_id`
       // Default: shuffled, but the same shuffle every time for this person, so the list doesn't jump about
       : sql`md5(l.unit_id::text || ${s.user_id}::text)`;
     const [rows, [counts], locations] = await Promise.all([
-      sql`select l.unit_id as id, l.owner_id, l.name, l.location, l.beds, l.budget, l.budget_num, (l.assigned_to = ${s.user_id}) as mine,
+      sql`select l.unit_id as id, l.owner_id, l.name, l.location, l.beds, l.budget, l.budget_num, l.intent, l.enquired_on, (l.assigned_to = ${s.user_id}) as mine,
             st.full_name as assigned_name, ph.masked, (ph.owner_id is not null) as has_phone,
             exists (select 1 from desk.do_not_call d where d.owner_id = l.owner_id) as dnc,
             lc.called_at as last_called, lc.outcome as last_outcome,
