@@ -140,7 +140,7 @@ export const CSS = `
 .ops-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));gap:0 22px}
 .ops-tbl{border:1px solid var(--line);border-radius:10px;overflow-x:auto}
 .ops-scroll{max-height:330px;overflow-y:auto}
-.ops-tbl table{width:100%;border-collapse:collapse}
+.ops-tbl table{width:100%;min-width:0;border-collapse:collapse}
 .ops-tbl th{text-align:left;font-weight:600;padding:9px 12px;background:var(--hover);border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:bottom;position:sticky;top:0}
 .ops-tbl td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
 .ops-tbl tr:last-child td{border-bottom:none}

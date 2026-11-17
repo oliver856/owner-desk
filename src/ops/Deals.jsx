@@ -46,7 +46,7 @@ export default function Deals({ api }) {
         <Table rowKey={(r) => r.id} rows={d.deals} empty="No deals logged for this month." sort={{ key: 'date', dir: 'desc' }} cols={[
           { key: 'date', label: 'Close date', nowrap: true, value: (r) => String(r.date).slice(0, 10) + String(r.id).padStart(9, '0'), render: (r) => day(r.date) },
           { key: 'name', label: 'Broker', render: (r) => <Name main={r.name} sub={[r.splitWith ? 'Split with ' + r.splitWith : '', r.companyLead ? 'Company lead' : ''].filter(Boolean).join(' · ')} /> },
-          { key: 'type', label: 'Type', value: (r) => DEAL_TYPE[r.type] || '' },
+          { key: 'type', label: 'Type', value: (r) => (DEAL_TYPE[r.type] || '') + (r.offPlan ? ' (off-plan)' : '') },
           { key: 'property', label: 'Property', value: (r) => r.property || '' },
           { key: 'transferredOn', label: 'Transferred', nowrap: true, value: (r) => r.transferredOn || '', render: (r) => day(r.transferredOn) },
           { key: 'amount', label: 'Commission', num: true, strong: true, render: (r) => aed(r.amount) },
@@ -68,7 +68,7 @@ export default function Deals({ api }) {
 }
 
 function AddDeal({ people, today, post, onSaved }) {
-  const blank = { email: '', splitWith: '', date: today, type: '', amount: '', companyLead: false, property: '' };
+  const blank = { email: '', splitWith: '', date: today, type: '', amount: '', companyLead: false, offPlan: false, property: '' };
   const [f, setF] = useState(blank);
   const [s, setS] = useState({ saving: false, err: '', dup: null, done: '' });
   const set = (k) => (v) => { setF((x) => ({ ...x, [k]: v })); setS((x) => ({ ...x, err: '', dup: null, done: '' })); };
@@ -80,8 +80,10 @@ function AddDeal({ people, today, post, onSaved }) {
   const save = (allowDuplicate) => {
     if (!ready || s.saving) return;
     setS({ saving: true, err: '', dup: null, done: '' });
-    post({ action: 'deal-add', ...f, amount: total, allowDuplicate }).then((r) => {
+    const { offPlan, ...deal } = f;
+    post({ action: 'deal-add', ...deal, amount: total, allowDuplicate }).then(async (r) => {
       if (r.duplicate) return setS({ saving: false, err: '', dup: r.existing?.[0] || {}, done: '' });
+      if (offPlan && f.type === 'sale' && r.ids?.length) await post({ action: 'deal-offplan', id: r.ids[0], on: true });
       setS({ saving: false, err: '', dup: null, done: `Added: ${name(f.email)}${split ? ' and ' + name(f.splitWith) : ''}, ${aed(total)}, ${day(f.date)}.` });
       setF({ ...blank, date: f.date, type: f.type });
       onSaved(f.date);
@@ -105,7 +107,8 @@ function AddDeal({ people, today, post, onSaved }) {
       <div className="ops-acts">
         {s.dup ? <><Btn primary disabled={s.saving} onClick={() => save(true)}>Yes, add it as a separate deal</Btn><Btn onClick={() => setS((x) => ({ ...x, dup: null }))}>No, don't add</Btn></>
           : <><button type="submit" className="ops-btn primary" disabled={!ready || s.saving}>{s.saving ? 'Adding…' : 'Add deal'}</button>
-            <label className="ops-field ops-check"><input type="checkbox" checked={f.companyLead} onChange={(e) => set('companyLead')(e.target.checked)} /><span>Company lead</span></label></>}
+            <label className="ops-field ops-check"><input type="checkbox" checked={f.companyLead} onChange={(e) => set('companyLead')(e.target.checked)} /><span>Company lead</span></label>
+            {f.type === 'sale' && <label className="ops-field ops-check"><input type="checkbox" checked={f.offPlan} onChange={(e) => set('offPlan')(e.target.checked)} /><span>Off-plan</span></label>}</>}
       </div>
     </form>);
 }
@@ -118,11 +121,22 @@ function EditDeal({ deal, people, today, post, onClose, onSaved }) {
   const set = (k) => (v) => { setF((x) => ({ ...x, [k]: v })); setS((x) => ({ ...x, err: '' })); };
   const patch = {};
   for (const k of Object.keys(start)) if (f[k] !== start[k]) patch[k] = ['amount', 'dealValue'].includes(k) ? (f[k] === '' ? null : toNum(f[k])) : f[k] === '' && k !== 'property' ? null : f[k];
-  const changed = Object.keys(patch).length > 0;
+  const [offPlan, setOffPlan] = useState(!!deal.offPlan);
+  const offPlanNow = f.type === 'sale' && offPlan;
+  const offPlanChanged = offPlanNow !== !!deal.offPlan;
+  const changed = Object.keys(patch).length > 0 || offPlanChanged;
   const run = (body) => { setS((x) => ({ ...x, saving: true, err: '' })); post(body).then(onSaved).catch((e) => setS((x) => ({ ...x, saving: false, err: e.message }))); };
+  const save = async () => {
+    setS((x) => ({ ...x, saving: true, err: '' }));
+    try {
+      if (Object.keys(patch).length) await post({ action: 'deal-change', id: deal.id, patch: { ...patch, type: f.type } });
+      if (offPlanChanged) await post({ action: 'deal-offplan', id: deal.id, on: offPlanNow });
+      onSaved();
+    } catch (e) { setS((x) => ({ ...x, saving: false, err: e.message })); }
+  };
   return (
     <Dialog title={`${deal.name}, ${day(deal.date)}`} onClose={onClose}>
-      <form className="ops-form" onSubmit={(e) => { e.preventDefault(); if (changed && f.type) run({ action: 'deal-change', id: deal.id, patch: { ...patch, type: f.type } }); }}>
+      <form className="ops-form" onSubmit={(e) => { e.preventDefault(); if (changed && f.type) save(); }}>
         {deal.splitWith ? <div className="ops-msg">Split with {deal.splitWith}. The date, type, property and transfer date change for both brokers. The broker, commission and company lead change for {first(deal.name)} only.</div> : null}
         <Field label="Broker"><BrokerSelect people={people} value={f.email} onChange={set('email')} none="Choose a broker" /></Field>
         <Field label={deal.splitWith ? `${first(deal.name)}'s commission, AED` : 'Commission, AED'}><input className="amt" inputMode="numeric" value={f.amount} onChange={(e) => set('amount')(e.target.value)} /></Field>
@@ -132,6 +146,7 @@ function EditDeal({ deal, people, today, post, onClose, onSaved }) {
         <Field label="Property price, AED"><input className="amt" inputMode="numeric" value={f.dealValue} onChange={(e) => set('dealValue')(e.target.value)} /></Field>
         <Field label="Transferred on" hint="Leave empty until it has transferred"><input type="date" value={f.transferredOn} max={today} onChange={(e) => set('transferredOn')(e.target.value)} /></Field>
         <label className="ops-field ops-check"><input type="checkbox" checked={f.companyLead} onChange={(e) => set('companyLead')(e.target.checked)} /><span>Company lead</span></label>
+        {f.type === 'sale' && <label className="ops-field ops-check"><input type="checkbox" checked={offPlan} onChange={(e) => { setOffPlan(e.target.checked); setS((x) => ({ ...x, err: '' })); }} /><span>Off-plan{deal.splitWith ? ' (both brokers)' : ''}</span></label>}
         {f.date && monthKey(f.date) !== monthKey(start.date) ? <div className="ops-msg warn">This moves the deal from {monthName(start.date)} to {monthName(f.date)}.</div> : null}
         {!f.type ? <div className="ops-msg warn">Choose sale or rental to save a change to this deal.</div> : null}
         {s.err ? <div className="ops-msg err">{s.err}</div> : null}

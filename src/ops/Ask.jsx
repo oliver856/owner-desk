@@ -23,7 +23,7 @@ const EXAMPLES_TEAM = [
 // Pipe tables in an answer, as rows of cells (used by the renderer and the spreadsheet download)
 const plain = (c) => c.replace(/\*\*/g, '').trim();
 const isNum = (c) => /^[-+]?(AED\s*)?[\d,.]+%?$/.test(plain(c));
-function tablesIn(text) {
+export function tablesIn(text) {
   const out = []; let cur = null;
   for (const l of String(text || '').split('\n')) {
     if (/^\s*\|/.test(l)) {
@@ -36,7 +36,7 @@ function tablesIn(text) {
 
 // A small, safe renderer for the answer: paragraphs, bullet and numbered lists, **bold** and pipe tables
 const inline = (t) => t.split(/(\*\*[^*]+\*\*)/g).map((p, i) => (p.startsWith('**') && p.endsWith('**') ? <b key={i}>{p.slice(2, -2)}</b> : p));
-function Answer({ text }) {
+export function Answer({ text }) {
   const blocks = []; const lines = String(text || '').split('\n'); let i = 0;
   while (i < lines.length) {
     const l = lines[i];
@@ -72,7 +72,7 @@ function Answer({ text }) {
 }
 
 // Download every table in an answer as one spreadsheet (CSV, opens in Excel or Google Sheets)
-function downloadTables(item) {
+export function downloadTables(item) {
   const csv = tablesIn(item.answer).map((t) => t.map((r) => r.map((c) => {
     const v = plain(c); const n = v.replace(/^AED\s*/, '').replace(/,/g, '');
     const out = isNum(v) && !v.endsWith('%') ? n : v;
@@ -84,7 +84,7 @@ function downloadTables(item) {
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 // Print one answer (or save it as a PDF from the print window), with nothing else on the page
-function printAnswer(el) {
+export function printAnswer(el) {
   el.classList.add('ask-printing'); document.body.classList.add('ask-print');
   const done = () => { el.classList.remove('ask-printing'); document.body.classList.remove('ask-print'); window.removeEventListener('afterprint', done); };
   window.addEventListener('afterprint', done);
@@ -92,7 +92,7 @@ function printAnswer(el) {
   setTimeout(done, 1000);
 }
 
-const CSS = `
+export const ASK_CSS = `
 .ask{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:28px;margin-top:16px;align-items:start}
 @media (max-width:900px){.ask{grid-template-columns:1fr}.ask-side{order:2}}
 .ask-main{display:flex;flex-direction:column}
@@ -139,7 +139,7 @@ const CSS = `
   body.ask-print .ask-printing .ask-actions{display:none}}
 `;
 
-export default function Ask({ api, team }) {
+export default function Ask({ api, team, initial, onInitialUsed }) {
   const [page, setPage] = useState(null);
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
@@ -148,6 +148,8 @@ export default function Ask({ api, team }) {
   const box = useRef(null); const end = useRef(null); const cards = useRef({});
   const load = () => api('/api/ops?action=ask' + (team ? '&team=' + encodeURIComponent(team) : '')).then(setPage).catch((e) => setErr(e.message));
   useEffect(() => { load(); setThread([]); }, [team]);
+  // A question typed in the bar at the top of Management: asked as soon as the page is ready
+  useEffect(() => { if (initial && page?.on) { send(initial); onInitialUsed?.(); } }, [initial, page?.on]);
   useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [thread.length]);
   useEffect(() => {   // the box grows with the question, up to a few lines
     const t = box.current; if (!t) return;
@@ -181,7 +183,7 @@ export default function Ask({ api, team }) {
   const examples = page.all && !team ? EXAMPLES_ALL : EXAMPLES_TEAM;
   return (
     <>
-      <style>{CSS}</style>
+      <style>{ASK_CSS}</style>
       <Bar note={`Ask about calls, listings, leads, people and billing${page.all ? ', and every deal' : ''}. Answers come only from the Desk's own figures${page.team ? ` for ${page.team}` : ''}.`}>
         {page.usage && <span className="muted">Today {page.usage.today} of {page.usage.companyDay} questions · this month ${page.usage.monthUsd.toFixed(2)} of ${page.usage.monthlyUsd}</span>}
       </Bar>
@@ -226,12 +228,6 @@ export default function Ask({ api, team }) {
             </div>
           </div>
           <aside className="ask-side">
-            <div className="ask-rep" style={{ marginTop: 0, marginBottom: 18 }}>
-              <h2>Weekly report</h2>
-              <p className="muted">Performance, call targets, deals and progress to target{page.all && !team ? ', commission and recruitment' : ''}, written up for the management meeting.</p>
-              <Btn primary disabled={busy} onClick={() => send(null, 'last')}>Last week</Btn>
-              <Btn disabled={busy} onClick={() => send(null, 'this')}>This week so far</Btn>
-            </div>
             <h2>Recent questions</h2>
             {page.history.length === 0 ? <span className="muted">Your questions will show here.</span> : (
               <div className="ask-hist">{page.history.map((h) => (

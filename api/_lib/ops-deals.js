@@ -16,7 +16,7 @@ export const dealsPage = (month) => one(sql`
                from ops.deals, m where deleted_at is null and month = m.mo),
     'deals', (select coalesce(json_agg(x order by x.date desc, x.id desc), '[]') from (
         select d.id, d.deal_date as date, d.email, coalesce(p.full_name, d.email) as name, d.amount, d.deal_type as type,
-               d.counts_as_deal as counts, d.company_lead as "companyLead", d.property, d.deal_value as "dealValue", d.transferred_on as "transferredOn",
+               d.counts_as_deal as counts, d.company_lead as "companyLead", d.off_plan as "offPlan", d.property, d.deal_value as "dealValue", d.transferred_on as "transferredOn",
                (select coalesce(p2.full_name, o.email) from ops.deals o left join ops.people p2 on p2.email = o.email
                  where d.split_id is not null and o.split_id = d.split_id and o.id <> d.id and o.deleted_at is null limit 1) as "splitWith"
         from ops.deals d left join ops.people p on p.email = d.email, m where d.deleted_at is null and d.month = m.mo) x),

@@ -223,6 +223,10 @@ header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--b
 .nav button:hover,.nav a:hover{color:var(--ink)}
 .nav button.on{background:var(--bg);color:var(--ink);box-shadow:0 1px 2px rgba(16,24,22,.08),0 0 0 1px var(--line)}
 .co{display:flex;align-items:center;gap:8px}
+.mm{margin-left:6px}
+.mm-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-weight:500;background:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px 6px 12px;color:var(--ink);cursor:pointer;white-space:nowrap}
+.mm-btn:hover,.mm-btn.open{background:var(--hover)} .mm-btn.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.um-pop.mm-pop{left:0;right:auto;width:auto;min-width:200px} .mm-pop .um-item{display:block;text-decoration:none;color:var(--ink)} .mm-pop .um-item.on{color:var(--accent);font-weight:600}
 .right{margin-left:auto;display:flex;gap:12px;color:var(--muted);align-items:center}
 .stats{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:4px 4px 4px 12px;gap:10px;font-size:12px;white-space:nowrap}
 .stats span{display:inline-flex;align-items:center;gap:5px} .stats .n{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--hover);color:var(--ink);font-weight:600;font-size:11.5px}
@@ -958,6 +962,36 @@ function Login() {
   );
 }
 
+// Manage: Management, Team and Recruitment for managers, directors and admins, plus the office TV screen.
+// Keeps the top bar to the pages brokers use every day.
+function ManageMenu({ view, setView, items }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', off); document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', off); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const here = items.find(([k]) => k === view);
+  return (
+    <div className="um mm" ref={ref}>
+      <button type="button" className={'mm-btn' + (here ? ' on' : '') + (open ? ' open' : '')} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {here ? here[1] : 'Manage'}
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      {open && (
+        <div className="um-pop mm-pop" role="menu">
+          {items.map(([k, label]) => <button key={k} type="button" role="menuitem" className={'um-item' + (view === k ? ' on' : '')} onClick={() => { setOpen(false); setView(k); }}>{label}</button>)}
+          <div className="um-sep" />
+          <a className="um-item" role="menuitem" href="/tv" target="apex-tv" onClick={() => setOpen(false)}>Office TV screen</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserMenu({ name, email, onMessages }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -1118,18 +1152,16 @@ function Desk() {
             <button className={view === 'lookup' ? 'on' : ''} onClick={() => setView('lookup')}>Lookup</button>
             {me && <button className={view === 'dash' ? 'on' : ''} onClick={() => setView('dash')}>Dashboard</button>}
             <button className={view === 'activity' ? 'on' : ''} onClick={() => setView('activity')}>Activity</button>
-            {me && ['admin', 'director'].includes(me.staff.role) && <button className={view === 'team' ? 'on' : ''} onClick={() => setView('team')}>Team</button>}
-            {me && OPS_ROLES.includes(me.staff.role) && <button className={view === 'ops' ? 'on' : ''} onClick={() => setView('ops')}>Management</button>}
-            {me?.recruit && <button className={view === 'recruit' ? 'on' : ''} onClick={() => setView('recruit')}>Recruitment</button>}
             <a href="/phone">Phone</a>
+            {/* Brokers without Management but with Recruitment keep it as a tab; everyone else finds it under Manage */}
+            {me?.recruit && !(me && OPS_ROLES.includes(me.staff.role)) && <button className={view === 'recruit' ? 'on' : ''} onClick={() => setView('recruit')}>Recruitment</button>}
             </>}
           </nav>
+          {me && !recruiterOnly && OPS_ROLES.includes(me.staff.role) && <ManageMenu view={view} setView={setView}
+            items={[['ops', 'Management'], ['admin', 'director'].includes(me.staff.role) && ['team', 'Team'], me.recruit && ['recruit', 'Recruitment']].filter(Boolean)} />}
           {boss && <div className="co">
             {(phase === 'live' || phase === 'countdown') && <span className="co-pill"><i />{co?.callout?.test ? 'Test running' : 'Call out running'}</span>}
             <button className="co-start" onClick={() => setStartOpen(true)}>{(phase === 'live' || phase === 'countdown') && !co?.callout?.test ? 'Test mode' : 'Start call out'}</button>
-            <a className="co-tv" href="/tv" target="apex-tv" title="Open the big screen for the office TV">
-              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M5.5 14h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>TV
-            </a>
           </div>}
           <div className="right">
             {me?.caps && !recruiterOnly && <span className="stats" title="Your activity today">

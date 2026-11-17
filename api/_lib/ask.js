@@ -13,6 +13,8 @@ import { sql, setting } from './core.js';
 import * as pages from './ops-pages.js';
 import { dealsPage } from './ops-deals.js';
 import { REASONS } from './reasons.js';
+import { scorecard } from './scorecard.js';
+import { meetingForReport, mondayOf } from './meeting.js';
 
 const LIMITS = { enabled: true, perPersonDay: 20, companyDay: 200, monthlyUsd: 60, cooldownSec: 8, model: 'claude-sonnet-5-5' };
 // US dollars per million tokens (Sonnet 5.5): input, output, cache write, cache read
@@ -40,10 +42,11 @@ const TOOLS = [
   { name: 'commission', description: 'Commission split and what the company keeps, from the deal log by close date, between two months inclusive (at most 12). Per broker per month: billed, deals, role, team, the rate they get that month (from their role\'s sliding scale on that month\'s billing, or their personal deal), payout to the broker, and retained = billed minus payout, BEFORE manager overrides. Also returns the sliding-scale brackets per role. group_by broker (one row per broker per month), team or month (totals). Admins and directors only.', input_schema: { type: 'object', properties: { from_month: { type: 'string', description: 'YYYY-MM' }, to_month: { type: 'string', description: 'YYYY-MM' }, group_by: { type: 'string', enum: ['broker', 'team', 'month'] } }, required: ['from_month', 'to_month', 'group_by'] }, allOnly: true },
   { name: 'activity', description: 'One row per active broker and manager for any two days (at most 93): team, role, start date, Desk calls, owners reached, listing opportunities from calls, daily call target and the target for the period (target x weekdays), new listings, portal leads, viewings, deals and billed in the period. Use it for KPI and performance questions over a set week or period.', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['from', 'to'] } },
   { name: 'recruitment', description: 'Broker recruitment pipeline. Candidates in each stage now; between two days: candidates added, stage moves (from and to), interviews booked, offers and placements, by recruiter and by source. Admins and directors only.', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['from', 'to'] }, allOnly: true },
+  { name: 'scorecard', description: 'The quarter scorecard: every measure (billed by desk, retained, portal leads, conversion, deals, average per deal, roster, hires, leavers, brokers over AED 20k) with plan, plan to date, actual and RAG (Green, Amber, Red) per month and quarter to date. Admins and directors only.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM, any month in the quarter wanted (default this quarter)' } } }, allOnly: true },
   { name: 'money', description: 'Billing (commission due to the company, excluding VAT, by close date) and deal counts month by month since records began, and by broker for one month. Admins and directors only.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'] }, allOnly: true },
   { name: 'deals', description: 'Every deal in one month: date, broker, commission, sale or rental, who it was split with, company lead or not, property, deal value. Admins and directors only.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'] }, allOnly: true },
 ];
-export const TOOL_LABELS = { overview: 'This week', people: 'People', listings: 'Listings', leads: 'Leads', calls: 'Calls', followups: 'Call-backs', money: 'Money', deals: 'Deals', commission: 'Commission', activity: 'Activity', recruitment: 'Recruitment', listings_off: 'Listings off', billing: 'Billing' };
+export const TOOL_LABELS = { overview: 'This week', people: 'People', listings: 'Listings', leads: 'Leads', calls: 'Calls', followups: 'Call-backs', money: 'Money', deals: 'Deals', commission: 'Commission', scorecard: 'Scorecard', activity: 'Activity', recruitment: 'Recruitment', listings_off: 'Listings off', billing: 'Billing' };
 
 // Each call's result, the same way the Hot & cold report reads it: the longest quick note its note starts with, else its outcome
 const reasonRows = sql`(values ${sql(REASONS.map((x) => [x[0], x[1], x[2]]))}) as r(prefix, label, grp)`;
@@ -210,6 +213,7 @@ async function runTool(name, input, sc) {
     case 'listings_off': return listingsOff(team, input);
     case 'billing': return billing(team, input);
     case 'commission': return commission(input);
+    case 'scorecard': return scorecard(/^\d{4}-\d{2}$/.test(input.month || '') ? input.month + '-01' : null);
     case 'activity': return activity(team, input);
     case 'recruitment': return recruitment(input);
     case 'money': return isMonth(input.month) ? pages.money(input.month + '-01') : { error: 'month must be YYYY-MM' };
@@ -330,45 +334,99 @@ export async function ask(staff, sc, question, opts = {}) {
 const fmt = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
 export async function report(staff, sc, which) {
   const team = sc.team || null;
-  const today = dubaiToday(); const t = new Date(today + 'T12:00:00Z'); const dow = (t.getUTCDay() + 6) % 7;
-  const mon = new Date(t - dow * 864e5); const thisMon = mon.toISOString().slice(0, 10);
-  const lastMon = new Date(mon - 7 * 864e5).toISOString().slice(0, 10); const lastSun = new Date(mon - 864e5).toISOString().slice(0, 10);
-  const [from, to] = which === 'this' ? [thisMon, today] : [lastMon, lastSun];
-  const prevFrom = new Date(Date.parse(from) - 7 * 864e5).toISOString().slice(0, 10); const prevTo = new Date(Date.parse(to) - 7 * 864e5).toISOString().slice(0, 10);
-  const month = to.slice(0, 7); const months = [...new Set([from.slice(0, 7), month])];
+  const today = dubaiToday();
+  const mon = mondayOf(today);
+  const addDays = (d, n) => new Date(Date.parse(d + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  const [from, to] = which === 'this' ? [mon, today] : [addDays(mon, -7), addDays(mon, -1)];
+  const len = Math.round((Date.parse(to) - Date.parse(from)) / 864e5);   // so "the week before" covers the same days
+  const weeks = [0, 1, 2, 3].map((i) => [addDays(from, -7 * i), addDays(from, -7 * i + len)]);
   const title = `Weekly report: ${fmt(from)} to ${fmt(to)}${sc.team ? ' · ' + sc.team : ''}`;
 
-  // Every figure the report needs, gathered here in one go (one query at a time: the connection pool is small)
-  const data = {};
+  // Every figure is worked out here; Claude only writes it up. One query at a time: the connection pool is small.
+  const data = { period: { from, to, comparedWith: weeks[1] }, team: sc.team || 'all teams' };
   const get = async (k, fn) => { try { data[k] = await fn(); } catch (e) { console.error('report', k, e.message); data[k] = { error: 'not available' }; } };
-  await get('this_week_by_broker', () => activity(team, { from, to }));
-  await get('week_before_by_broker', () => activity(team, { from: prevFrom, to: prevTo }));
-  await get('calls_by_team', () => calls(team, { from, to, group_by: 'team' }));
-  await get('calls_by_result', () => calls(team, { from, to, group_by: 'result' }));
-  await get('callbacks_now', () => followups(team));
-  await get('month_to_date_and_targets', async () => { const o = await pages.today(team); delete o.feeds; return o; });
+
+  // The week, the week before and a 4-week average
+  const act = [];
+  for (const [f, t] of weeks) { try { act.push((await activity(team, { from: f, to: t })).rows); } catch (e) { console.error('report activity', e.message); act.push(null); } }
+  const sumOf = (rows) => rows && ['calls', 'reached', 'listing_opps', 'new_listings', 'leads', 'viewings', 'deals', 'billed']
+    .reduce((o, k) => ({ ...o, [k]: rows.reduce((s, r) => s + (Number(r[k]) || 0), 0) }), {});
+  const tot = act.map(sumOf);
+  const rate = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : null);
+  const withRates = (t) => t && { ...t, pct_calls_to_listing_opps: rate(t.listing_opps, t.calls), pct_calls_reached: rate(t.reached, t.calls), pct_leads_to_viewings: rate(t.viewings, t.leads) };
+  const avg = tot.filter(Boolean).length ? Object.fromEntries(Object.keys(tot.find(Boolean)).map((k) => [k, Math.round(tot.filter(Boolean).reduce((s, x) => s + x[k], 0) / tot.filter(Boolean).length)])) : null;
+  data.the_week = { this_week: withRates(tot[0]), week_before: withRates(tot[1]), four_week_average: withRates(avg) };
+
+  // People: exceptions only
+  const wk = act[0] || [], prev = act[1] || [];
+  const prevBy = Object.fromEntries(prev.map((r) => [r.name, r]));
+  data.top_three = [...wk].filter((r) => r.billed > 0 || r.deals > 0).sort((a, b) => b.billed - a.billed || b.deals - a.deals || b.calls - a.calls).slice(0, 3)
+    .map((r) => ({ name: r.name, team: r.team, billed: r.billed, deals: r.deals, calls: r.calls }));
+  data.under_call_target_two_weeks = wk.filter((r) => !/manager|director|leader|head/i.test(r.role || '') && r.call_target_for_period > 0 && r.calls < r.call_target_for_period && prevBy[r.name] && prevBy[r.name].calls < prevBy[r.name].call_target_for_period)
+    .map((r) => ({ name: r.name, team: r.team, this_week: `${r.calls} of ${r.call_target_for_period}`, week_before: `${prevBy[r.name].calls} of ${prevBy[r.name].call_target_for_period}` }));
+  await get('no_deal_in_60_days', async () => {
+    const rows = await sql`
+      select p.full_name as name, ops.team_at(p.email, ops.dubai_day(now())) as team, p.start_date::text as started, max(d.deal_date)::text as last_deal
+      from ops.people p left join ops.deals d on d.email = p.email and d.deleted_at is null
+      where p.status = 'active' and p.kind = 'broker' and not p.hide_from_kpi and (p.start_date is null or p.start_date < ${to}::date - 60)
+        and (${team}::text is null or ops.team_at(p.email, ops.dubai_day(now())) = ${team})
+      group by 1, 2, 3 having max(d.deal_date) is null or max(d.deal_date) < ${to}::date - 60 order by 4 nulls first, 1`;
+    return rows;
+  });
+  await get('new_starters_first_90_days', async () => sql`
+      select p.full_name as name, ops.team_at(p.email, ops.dubai_day(now())) as team, p.start_date::text as started,
+        (${to}::date - p.start_date) as days_in,
+        (select count(*) from ops.deals d where d.email = p.email and d.deleted_at is null and d.counts_as_deal)::int as deals_since_start,
+        (select coalesce(sum(amount), 0) from ops.deals d where d.email = p.email and d.deleted_at is null)::float as billed_since_start
+      from ops.people p where p.status = 'active' and p.kind = 'broker' and p.start_date > ${to}::date - 90 and p.start_date <= ${to}::date
+        and (${team}::text is null or ops.team_at(p.email, ops.dubai_day(now())) = ${team}) order by p.start_date`);
+  data.new_starters_this_week_activity = wk.filter((r) => r.started && r.started > addDays(to, -90)).map((r) => ({ name: r.name, calls: r.calls, call_target: r.call_target_for_period, new_listings: r.new_listings, viewings: r.viewings }));
+  await get('joiners_and_leavers_this_week', async () => sql`
+      select full_name as name, case when start_date between ${from}::date and ${to}::date then 'joined' else 'left' end as what,
+        coalesce(case when start_date between ${from}::date and ${to}::date then start_date end, end_date)::text as day
+      from ops.people where kind in ('broker', 'manager') and (start_date between ${from}::date and ${to}::date or end_date between ${from}::date and ${to}::date)`);
+
+  // Listings, call-backs
   await get('listings', async () => { const l = await pages.listings(team); delete l.recent; return l; });
-  await get('listings_off_this_week', () => listingsOff(team, { from, to, group_by: 'reason' }));
+  await get('listings_off_this_week_by_reason', () => listingsOff(team, { from, to, group_by: 'reason' }).then((r) => r.rows));
+  await get('callbacks_overdue_now', () => followups(team).then((r) => r.rows.filter((x) => x.overdue > 0).map(({ broker, team: t, overdue }) => ({ broker, team: t, overdue }))));
+
+  // Results against plan
   if (sc.all) {
-    await get('commission_this_month_by_team', () => commission({ from_month: month, to_month: month, group_by: 'team' }).then(({ brackets, ...r }) => r));
+    await get('scorecard', async () => {
+      const c = await scorecard(to.slice(0, 7) + '-01');
+      const i = c.months.indexOf(c.latestMonth);
+      return { quarter: c.quarterLabel, month: c.latestMonth, month_share_elapsed: Math.round((c.share[i] ?? 0) * 100) + '%', status_count: c.status,
+        rows: c.rows.map((r) => ({ measure: r.label, owner: r.owner, unit: r.unit,
+          month_plan_to_date: r.months[i]?.planToDate, month_actual: r.months[i]?.actual, month_rag: r.months[i]?.rag,
+          quarter_plan_to_date: r.quarter.planToDate, quarter_actual: r.quarter.actual, quarter_rag: r.quarter.rag })) };
+    });
     await get('deals_this_week', async () => {
       const out = [];
-      for (const m of months) { const d = await dealsPage(m + '-01'); out.push(...d.deals.filter((x) => String(x.date).slice(0, 10) >= from && String(x.date).slice(0, 10) <= to)); }
-      return out.map(({ id, email, ...x }) => x);
+      for (const m of [...new Set([from.slice(0, 7), to.slice(0, 7)])]) {
+        const d = await dealsPage(m + '-01');
+        out.push(...d.deals.filter((x) => String(x.date).slice(0, 10) >= from && String(x.date).slice(0, 10) <= to));
+      }
+      return out.map((x) => ({ broker: x.name, property: x.property, type: x.type, commission: x.amount, counts_as_a_deal: x.counts, split_with: x.splitWith || null }));
     });
     await get('recruitment_this_week', () => recruitment({ from, to }));
+  } else {
+    await get('team_targets', async () => { const o = await pages.today(team); return { month: o.month, targets: o.targets }; });
   }
+  await get('meeting', () => meetingForReport(sc, mon));
 
-  const prompt = `Write the weekly management report for ${from} to ${to}${which === 'this' ? ' (this week so far)' : ''}, compared with ${prevFrom} to ${prevTo}. It is for the management meeting. All the figures are below; use only these.
-Sections, each starting with a "## " heading:
-## Headline: 3 or 4 short lines: billed and deals this week against the week before, month to date against target, and the one thing that most needs attention.
-## Billing and deals: week and month to date by team, team targets and progress${sc.all ? ', retained this month before overrides, and a small table of this week\'s deals (broker, property, sale or rental, commission). For a split deal, list each broker\'s share as its own row but count it as one deal' : ''}.
-## Brokers: one table of every broker for the week: calls, call target, reached, listing opportunities, new listings, leads, viewings, deals, billed. Then the top performers, and anyone behind (under call target, or no deals this week and the week before).
-## Calls and call-backs: totals by team, listing opportunities and valuations, the most common results, and overdue call-backs by broker.
-## Listings: live now, new, gained and lost, and the reasons listings came off.
-${sc.all ? '## Recruitment: pipeline by stage, candidates added, interviews, offers and placements.\n' : ''}## To discuss: 3 to 6 points for the meeting, each tied to a figure above.
-Plain and factual. Whole numbers for deals. If a section's figures say "not available", say so in one line. No closing summary or sign-off.`;
-  return ask(staff, sc, null, { prompt, title, report: true, data, maxTokens: 6000 });
+  const prompt = `Write this week's management meeting report for ${from} to ${to}${which === 'this' ? ' (this week so far)' : ''}${sc.team ? ' for ' + sc.team : ''}. Every figure is below and already worked out: copy them, don't recalculate, and use nothing else.
+The meeting uses it to see where we are against plan, what's coming, who needs attention and what to decide. Keep it to one page: about 600 words, short lines, no padding.
+Sections, in this order, each starting with "## ":
+## Summary: three bullets. Where we are against plan this quarter${sc.all ? ' (quarter billed against plan to date, with its RAG)' : ''}; the week against the week before (billed, deals); the single biggest risk.
+${sc.all ? '## Scorecard: a table of every measure: Measure | Month actual | Month plan to date | RAG | Quarter actual | Quarter plan to date | RAG. Money as AED with thousands (AED 1,234,567); conversion as a percentage. Then list the Red measures under "To explain", each with its owner, so the meeting can agree a cause and an action.\n' : '## Targets: the team\'s billing against its target and how far through the month we are.\n'}## The week: a small table: Measure | This week | Week before | 4-week average, for billed, deals, calls, owners reached, listing opportunities, new listings, portal leads and viewings, then the three rates (calls reached, calls to listing opportunities, leads to viewings). One line on what changed most.
+## Pipeline: for each pipeline post, the manager and team, then the deals in it as a short list (client or property, value, stage, expected date, as far as the post says). If nothing was posted, write "No pipeline posted this week."
+## People: the top three; anyone under their call target two weeks running; brokers with no deal in 60 days (start date and last deal); new starters in their first 90 days (days in, deals, billed); anyone who joined or left this week. Names only where the figures put them there.
+## Listings: live now, gained and lost this week, the reasons listings came off, and overdue call-backs by broker if any.
+${sc.all ? '## Recruitment: candidates by stage, added, interviews, offers and placements this week.\n' : ''}## Last week's actions: each action with its owner and Done or Not done. If there were none, write "No actions were recorded last week."
+## For discussion: three to five points or decisions for the meeting, each tied to a figure above.
+Deal counts are whole numbers. If a section's figures say "not available", say so in one line and move on. No closing summary or sign-off.`;
+  return ask(staff, sc, null, { prompt, title, report: true, data, maxTokens: 5000 });
 }
 
 // The person's own recent questions, and (for admins) how much Ask has used

@@ -2,6 +2,9 @@
 //   GET  ?action=access|today|listings|leads|people|deals|money     read a page
 //   POST { action: deal-add|deal-change|deal-remove|deal-restore }  change the deal log
 //   POST { action: ask, question } / { action: report, week: last|this }  and  GET ?action=ask              the Ask page (see _lib/ask.js)
+//   GET  ?action=scorecard[&month=]  POST { action: plan-set }                 the scorecard (see _lib/scorecard.js)
+//   GET  ?action=meeting[&week=] | report&id=   POST { action: pipeline-*|action-* }   the meeting page (see _lib/meeting.js)
+//   POST { action: deal-offplan, id, on }                                     tick a deal as off-plan
 // This file only checks who is asking and hands over to:
 //   _lib/ops-access.js   who may see and do what
 //   _lib/ops-pages.js    the page queries (read only)
@@ -12,6 +15,8 @@ import { scopeFor } from './_lib/ops-access.js';
 import * as pages from './_lib/ops-pages.js';
 import { dealsPage, dealsWrite, dealsVersion } from './_lib/ops-deals.js';
 import { ask, askPage, report } from './_lib/ask.js';
+import { scorecard, setPlan } from './_lib/scorecard.js';
+import { meetingPage, meetingWrite, reportText } from './_lib/meeting.js';
 
 const cache = new Map();   // short memory so flicking between pages doesn't re-run the same query
 const TTL_MS = 60e3;
@@ -45,7 +50,14 @@ export default route(async (req, res, staff) => {
       const [code, j] = await report(staff, sc, b.week === 'this' ? 'this' : 'last');
       return res.status(code).json(j);
     }
+    const m = await meetingWrite(staff, sc, b);   // pipeline posts and actions: managers too
+    if (m) return res.status(m[0]).json(m[1]);
     if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });
+    if (b.action === 'plan-set') { const [code, j] = await setPlan(sc.email, String(b.measure || ''), String(b.month || ''), b.plan); cache.clear(); return res.status(code).json(j); }
+    if (b.action === 'deal-offplan') {
+      try { const [r] = await sql`select ops.deal_set_offplan(${sc.email}, ${Number(b.id) || 0}, ${!!b.on}) as j`; cache.clear(); return res.json(r.j); }
+      catch (e) { if (e?.code === 'P0001') return res.status(400).json({ error: e.message }); throw e; }
+    }
     const [code, j] = await dealsWrite(sc.email, b);
     cache.clear();
     return res.status(code).json(j);
@@ -54,9 +66,11 @@ export default route(async (req, res, staff) => {
   const action = q.get('action');
   if (action === 'access') {
     const teams = sc.all ? (await sql`select name from ops.teams where active order by sort, name`).map((t) => t.name) : [sc.team];
-    return res.json({ all: sc.all, team: sc.team, teams, money: sc.all, deals: sc.all });
+    return res.json({ all: sc.all, team: sc.team, teams, money: sc.all, deals: sc.all, scorecard: sc.all });
   }
   if (action === 'ask') return res.json(await askPage(staff, sc));
+  if (action === 'meeting') return res.json(await meetingPage(staff, sc, q.get('week')));
+  if (action === 'report') { const r = await reportText(sc, q.get('id')); return r ? res.json(r) : res.status(404).json({ error: 'That report is no longer there.' }); }
   if (action === 'deals') {   // always fresh: this is the page deals are entered on
     if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });
     return res.json(await dealsPage(monthOf(q)));
@@ -70,6 +84,11 @@ export default route(async (req, res, staff) => {
   if (action === 'people') {
     const period = q.get('period') === 'month' ? 'month' : 'week';
     return res.json(await cached(key(v, period), () => pages.people(sc.team, period)));
+  }
+  if (action === 'scorecard') {
+    if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });
+    const m = /^\d{4}-\d{2}$/.test(q.get('month') || '') ? q.get('month') + '-01' : null;
+    return res.json(await cached(key(v, m || 'now'), () => scorecard(m)));
   }
   if (action === 'money') {
     if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });
