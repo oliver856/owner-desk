@@ -2,7 +2,8 @@
 //
 // How it stays safe and cheap:
 //   - Claude never touches the database. It can only call the read-only "tools" below, which run fixed queries the
-//     server already uses for the Management pages, and which only return counts and totals (no owner names or numbers).
+//     server already uses for the Management pages. They return counts, totals and (call_detail) what brokers wrote,
+//     with building and unit, but never owner names or phone numbers.
 //   - The same team rules as the Management pages: a manager only ever gets their own team's figures.
 //   - Limits are checked before every question (desk.settings 'ask', defaults in LIMITS): on/off switch, questions
 //     per person per day, questions per day for the whole company, a dollar ceiling for the month, a cooldown between
@@ -20,7 +21,7 @@ const LIMITS = { enabled: true, perPersonDay: 20, companyDay: 200, monthlyUsd: 6
 // US dollars per million tokens (Sonnet 5.5): input, output, cache write, cache read
 const PRICE = { in: 2, out: 10, cacheWrite: 2.5, cacheRead: 0.2 };
 const MAX_ROUNDS = 5;
-const MAX_TOKENS = 2500;
+const MAX_TOKENS = 3500;
 const MAX_TOOL_CHARS = 16000;
 
 export const limitsNow = async () => ({ ...LIMITS, ...((await setting('ask', {})) || {}) });
@@ -36,6 +37,7 @@ const TOOLS = [
   { name: 'listings', description: 'Live listings now, new, gained and lost listings, by broker and community.', input_schema: { type: 'object', properties: {} } },
   { name: 'leads', description: 'Portal leads by broker, source and listing, recent weeks.', input_schema: { type: 'object', properties: {} } },
   { name: 'calls', description: 'Owner Desk calls between two days (at most 366 days; first_call says when Desk calls start), grouped one way. Each group has: calls; owners (distinct owners called); reached (owner answered); no_answer; listing_opps (owner wants to list for rent or sale: "Listing opportunity", "Wants to sell", "Wants to rent", "Unit available"); valuations (owner wants a valuation); call_backs (owner asked to be called back or is in discussion); hot (all hot results together, including the three before). group_by "result" lists every result with the same labels as the Hot & cold report, and which group it is in (hot, objection = spoke but no, nocontact = didn\'t get through).', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'First day, YYYY-MM-DD (Dubai time)' }, to: { type: 'string', description: 'Last day, YYYY-MM-DD' }, group_by: { type: 'string', enum: ['broker', 'team', 'day', 'area', 'result'] } }, required: ['from', 'to', 'group_by'] } },
+  { name: 'call_detail', description: 'Owner Desk calls in detail between two days (at most 366 days), narrowed to a place (area, sub-community or building name, matched loosely, e.g. "marina", "Springs", "Golf Views"), a broker (name or email, loosely) and/or a result kind (hot, objection = spoke but no, nocontact = didn\'t get through), and/or words in the note. Returns: the areas and buildings that matched; coverage of the place (units, units with an owner number, units ever called, units called in the period, owners reached in the period); totals by broker, by building and by result (wrong numbers, unreachable and so on show how good the data is); then the calls themselves, newest first (day, broker, building, unit, result, hot/cold kind, what the broker wrote), and notes written on units in the place. Use it for "how is X data performing", "who is calling X", "what are the notes", "which are hot". Leave place empty for every area.', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' }, place: { type: 'string', description: 'Area, sub-community or building, e.g. marina' }, broker: { type: 'string' }, kind: { type: 'string', enum: ['any', 'hot', 'objection', 'nocontact'] }, note_contains: { type: 'string', description: 'Only calls whose note contains this' }, max_calls: { type: 'integer', description: 'How many calls to list, 1 to 200 (default 80)' } }, required: ['from', 'to'] } },
   { name: 'listings_off', description: 'Listings that came off the portals between two days (at most 186 days), with the reason recorded when they came off. group_by reason (counts per reason), broker (counts per broker, with their top reasons) or week. Records only start on the day in "since".', input_schema: { type: 'object', properties: { from: { type: 'string', description: 'YYYY-MM-DD' }, to: { type: 'string', description: 'YYYY-MM-DD' }, group_by: { type: 'string', enum: ['reason', 'broker', 'week'] } }, required: ['from', 'to', 'group_by'] } },
   { name: 'billing', description: 'Every active broker and manager (one row each, including those who billed nothing) with: billed and deals between two months inclusive (at most 24 months), months in that range with any billing, their start date, last deal date ever and first deal date ever (null = no deal on record). Use it for "who hasn\'t billed" questions. Sorted lowest billed first.', input_schema: { type: 'object', properties: { from_month: { type: 'string', description: 'YYYY-MM' }, to_month: { type: 'string', description: 'YYYY-MM' } }, required: ['from_month', 'to_month'] } },
   { name: 'followups', description: 'Owner call-backs each broker has booked: overdue, due today, due in the next 7 days.', input_schema: { type: 'object', properties: {} } },
@@ -46,7 +48,7 @@ const TOOLS = [
   { name: 'money', description: 'Billing (commission due to the company, excluding VAT, by close date) and deal counts month by month since records began, and by broker for one month. Admins and directors only.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'] }, allOnly: true },
   { name: 'deals', description: 'Every deal in one month: date, broker, commission, sale or rental, who it was split with, company lead or not, property, deal value. Admins and directors only.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'] }, allOnly: true },
 ];
-export const TOOL_LABELS = { overview: 'This week', people: 'People', listings: 'Listings', leads: 'Leads', calls: 'Calls', followups: 'Call-backs', money: 'Money', deals: 'Deals', commission: 'Commission', scorecard: 'Scorecard', activity: 'Activity', recruitment: 'Recruitment', listings_off: 'Listings off', billing: 'Billing' };
+export const TOOL_LABELS = { overview: 'This week', people: 'People', listings: 'Listings', leads: 'Leads', calls: 'Calls', call_detail: 'Call detail', followups: 'Call-backs', money: 'Money', deals: 'Deals', commission: 'Commission', scorecard: 'Scorecard', activity: 'Activity', recruitment: 'Recruitment', listings_off: 'Listings off', billing: 'Billing' };
 
 // Each call's result, the same way the Hot & cold report reads it: the longest quick note its note starts with, else its outcome
 const reasonRows = sql`(values ${sql(REASONS.map((x) => [x[0], x[1], x[2]]))}) as r(prefix, label, grp)`;
@@ -80,6 +82,87 @@ async function calls(team, { from, to, group_by }) {
     from c group by 1 order by 3 desc limit 200`;
   const [f] = await sql`select ops.dubai_day(min(called_at))::text as first_call from desk.calls`;
   return { from, to, group_by, team: team || 'all teams', first_call: f?.first_call || null, rows: rows.map(({ kind, ...r }) => (group_by === 'result' ? { ...r, kind } : r)) };
+}
+
+// Calls one by one for a place, broker or result, with what was written. Owner names and numbers are never returned.
+async function callDetail(team, { from, to, place, broker, kind, note_contains, max_calls }) {
+  if (!isDay(from) || !isDay(to) || from > to) return { error: 'from and to must be days, YYYY-MM-DD, from first' };
+  if ((Date.parse(to) - Date.parse(from)) / 864e5 > 366) return { error: 'At most 366 days at a time' };
+  const pl = String(place || '').trim().slice(0, 60); const br = String(broker || '').trim().slice(0, 60);
+  const words = String(note_contains || '').trim().slice(0, 60);
+  const k = ['hot', 'objection', 'nocontact'].includes(kind) ? kind : null;
+  const lim = Math.min(200, Math.max(1, Number(max_calls) || 80));
+  const like = (t) => '%' + t.replace(/[%_\\]/g, '') + '%';
+  const start = sql`(${from}::date::timestamp at time zone 'Asia/Dubai')`, end = sql`((${to}::date + 1)::timestamp at time zone 'Asia/Dubai')`;
+  // Buildings in the place: a whole area when an area name contains what was typed, otherwise sub-communities and buildings that do
+  const bset = pl ? sql`(select b.id from desk.buildings b join desk.areas a on a.id = b.area_id
+    where a.name <> 'Old data (hidden)' and (a.name ilike ${like(pl)} or (not exists (select 1 from desk.areas x where x.name <> 'Old data (hidden)' and x.name ilike ${like(pl)})
+      and (b.subcommunity ilike ${like(pl)} or b.name ilike ${like(pl)}))))` : null;
+  const matched = pl ? await sql`select a.name as area, count(*)::int as buildings, (array_agg(distinct coalesce(b.subcommunity, b.name)))[1:15] as e_g
+    from desk.buildings b join desk.areas a on a.id = b.area_id where b.id in ${bset} group by 1 order by 2 desc limit 20` : [];
+  if (pl && !matched.length) return { error: `Nothing on the Desk matches "${pl}". Try another spelling or the area name.` };
+  const rows = await sql`
+    with c as (
+      select c.called_at, ops.dubai_day(c.called_at)::text as day, coalesce(s.full_name, s.email) as broker,
+        coalesce(ops.team_at(lower(s.email), ops.dubai_day(c.called_at)), 'No team') as team,
+        coalesce(a.name, 'Unknown') as area, coalesce(b.name, b.subcommunity, 'Unknown') as building, u.unit_no as unit, c.unit_id, c.owner_id,
+        coalesce(n.label, o.label, case when coalesce(c.note, '') = '' then 'Nothing logged' else 'Other (own words)' end) as reason,
+        coalesce(n.grp, o.grp, case when coalesce(c.note, '') = '' then 'nocontact' else 'objection' end) as grp,
+        nullif(left(c.note, 300), '') as note
+      from desk.calls c
+      join desk.staff s on s.user_id = c.user_id
+      left join desk.units u on u.id = c.unit_id left join desk.buildings b on b.id = u.building_id left join desk.areas a on a.id = b.area_id
+      left join lateral (select label, grp from ${reasonRows} where r.prefix not like 'outcome:%' and lower(coalesce(c.note, '')) like lower(r.prefix) || '%'
+                         order by length(r.prefix) desc limit 1) n on true
+      left join lateral (select label, grp from ${reasonRows} where r.prefix = 'outcome:' || c.outcome limit 1) o on true
+      where c.called_at >= ${start} and c.called_at < ${end}
+        and (${team}::text is null or ops.team_at(lower(s.email), ops.dubai_day(c.called_at)) = ${team})
+        ${pl ? sql`and u.building_id in ${bset}` : sql``}
+        ${br ? sql`and (s.full_name ilike ${like(br)} or s.email ilike ${like(br)})` : sql``}
+        ${words ? sql`and c.note ilike ${like(words)}` : sql``})
+    select * from c ${k ? sql`where grp = ${k}` : sql``}`;
+  const tally = (key) => {
+    const m = new Map();
+    for (const r of rows) {
+      const g = m.get(r[key]) || { [key]: r[key], calls: 0, owners: new Set(), reached: 0, no_answer: 0, hot: 0, listing_opps: 0, wrong_number: 0 };
+      g.calls++; if (r.owner_id) g.owners.add(r.owner_id);
+      if (r.grp === 'nocontact') g.no_answer++; else g.reached++;
+      if (r.grp === 'hot') g.hot++;
+      if (LISTING.includes(r.reason)) g.listing_opps++;
+      if (r.reason === 'Wrong number') g.wrong_number++;
+      m.set(r[key], g);
+    }
+    return [...m.values()].map((g) => ({ ...g, owners: g.owners.size })).sort((a, b) => b.calls - a.calls);
+  };
+  const byResult = new Map();
+  for (const r of rows) { const g = byResult.get(r.reason) || { result: r.reason, kind: r.grp, calls: 0 }; g.calls++; byResult.set(r.reason, g); }
+  let coverage = null; let unitNotes = [];
+  if (pl) {
+    [coverage] = await sql`
+      select count(*)::int as units,
+        count(*) filter (where exists (select 1 from desk.unit_owners uo join desk.owner_phones op on op.owner_id = uo.owner_id where uo.unit_id = u.id))::int as units_with_number,
+        count(*) filter (where exists (select 1 from desk.calls c where c.unit_id = u.id))::int as units_ever_called,
+        count(*) filter (where exists (select 1 from desk.calls c where c.unit_id = u.id and c.called_at >= ${start} and c.called_at < ${end}))::int as units_called_in_period
+      from desk.units u where u.building_id in ${bset}`;
+    coverage.owners_reached_in_period = new Set(rows.filter((r) => r.grp !== 'nocontact' && r.owner_id).map((r) => r.owner_id)).size;
+    unitNotes = await sql`
+      select ops.dubai_day(n.created_at)::text as day, coalesce(s.full_name, s.email) as by, coalesce(b.name, b.subcommunity) as building, u.unit_no as unit, left(n.body, 300) as note
+      from desk.notes n join desk.staff s on s.user_id = n.user_id join desk.units u on u.id = n.unit_id join desk.buildings b on b.id = u.building_id
+      where u.building_id in ${bset} and n.created_at >= ${start} and n.created_at < ${end}
+        and (${team}::text is null or ops.team_at(lower(s.email), ops.dubai_day(n.created_at)) = ${team})
+        ${br ? sql`and (s.full_name ilike ${like(br)} or s.email ilike ${like(br)})` : sql``}
+        ${words ? sql`and n.body ilike ${like(words)}` : sql``}
+      order by n.created_at desc limit 60`;
+  }
+  const list = rows.sort((a, b) => b.called_at - a.called_at).slice(0, lim)
+    .map((r) => ({ day: r.day, broker: r.broker, building: r.building, unit: r.unit, result: r.reason, kind: r.grp, note: r.note }));
+  return {
+    from, to, team: team || 'all teams', place: pl || 'every area', broker: br || 'everyone', kind: k || 'any', note_contains: words || null,
+    matched, coverage, total_calls: rows.length,
+    by_broker: tally('broker'), by_building: tally('building').slice(0, 40),
+    by_result: [...byResult.values()].sort((a, b) => b.calls - a.calls),
+    calls_listed: list.length, calls: list, unit_notes: unitNotes,
+  };
 }
 
 async function listingsOff(team, { from, to, group_by }) {
@@ -139,7 +222,7 @@ async function commission({ from_month, to_month, group_by }) {
 
 const LISTING_SQL = sql`(c.outcome in ('Listing opportunity', 'Wants to sell') or coalesce(c.note, '') ~* '^(wants to rent|wants to sell|unit available)')`;
 const NOANSWER_SQL = sql`(coalesce(c.outcome, '') = 'No answer' or coalesce(c.note, '') ~* '^(called, no reply|called, unreachable|called, line busy|phone off|no answer)' or (c.outcome is null and coalesce(c.note, '') = ''))`;
-async function activity(team, { from, to }) {
+export async function activity(team, { from, to }) {
   if (!isDay(from) || !isDay(to) || from > to) return { error: 'from and to must be days, YYYY-MM-DD, from first' };
   if ((Date.parse(to) - Date.parse(from)) / 864e5 > 93) return { error: 'At most 93 days at a time' };
   const base = Number(await setting('daily_call_target', 50)) || 50;
@@ -209,6 +292,7 @@ async function runTool(name, input, sc) {
     case 'listings': return pages.listings(team);
     case 'leads': return pages.leads(team);
     case 'calls': return calls(team, input);
+    case 'call_detail': return callDetail(team, input);
     case 'followups': return followups(team);
     case 'listings_off': return listingsOff(team, input);
     case 'billing': return billing(team, input);
@@ -226,9 +310,9 @@ async function runTool(name, input, sc) {
 }
 
 // Long results are cut to fit, and Claude is told so
-function fit(v) {
+function fit(v, max = MAX_TOOL_CHARS) {
   const s = JSON.stringify(v ?? null);
-  return s.length <= MAX_TOOL_CHARS ? s : s.slice(0, MAX_TOOL_CHARS) + ' …[cut short: ask for a narrower period or one team]';
+  return s.length <= max ? s : s.slice(0, max) + ' …[cut short: ask for a narrower period or one team]';
 }
 
 const system = (sc, today, firstCall) => `You answer questions from Apex Homes Dubai's management about their brokers, using only figures from the tools.
@@ -241,6 +325,7 @@ Rules:
 - Calls are Owner Desk calls. "Reached" means the owner answered. A listing opportunity is a call where the owner wants to list for rent or sale (listing opportunity, wants to sell, wants to rent, unit available). Valuations and call-backs are counted separately. Call these "listing opportunities from calls", not listings won.
 - For "all calls" or "so far" questions, start from the first Desk call day given above, so nothing is missed. "No team" means calls by people not on a team that day (for example managers, leavers or admin).
 - Commission: "retained" from the commission tool is what the company keeps after the broker's split and BEFORE manager overrides. Always say "before overrides". Overrides aren't in the data yet; if asked for retained after overrides, say that isn't available yet.
+- Call detail: for a place (like Marina), say how much of it has been worked (coverage), who is calling it and how they're doing, what share got through, and what the hot ones are, quoting the brokers' notes briefly with the building and unit. Treat many wrong numbers or unreachable as a sign of poor data. Never give owner names or phone numbers. If the listed calls were cut short, say the list shows the newest ones only.
 - Listings off: give the reasons exactly as recorded. If many say "No reason recorded", say so rather than guessing why.
 - "Who hasn't billed": use the billing tool, name everyone at zero for the period asked, and give their last deal date (or say there is no deal on record). Use their start date to say how long they've been here.
 - If a question is not about the business data, say you can only answer questions about the Desk's figures.`;
@@ -312,7 +397,7 @@ export async function ask(staff, sc, question, opts = {}) {
         used.push({ tool: c.name, input: c.input });
         let out;
         try { out = await runTool(c.name, c.input || {}, sc); } catch (e) { console.error(e); out = { error: 'That data could not be read just now' }; }
-        results.push({ type: 'tool_result', tool_use_id: c.id, content: fit(out) });
+        results.push({ type: 'tool_result', tool_use_id: c.id, content: fit(out, c.name === 'call_detail' ? 45000 : MAX_TOOL_CHARS) });
       }
       messages.push({ role: 'user', content: results });
     }
