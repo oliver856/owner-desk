@@ -4,6 +4,20 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-18 · Listings tab and owner report
+
+- **New** `migrations/019_listing_price_check.sql`: matches every live Kendal listing to land department sales and new
+  Ejari leases for similar units (`mkt.listing_checks()`), the Desk owner on the same unit (`mkt.listing_desk_units()`),
+  and adds `title` and `mobile` to `desk.staff` plus `desk.staff_photos` for headshots. Cut-offs live in
+  `mkt.settings` 'price_check'. Market data itself is loaded separately (`mkt.dld_*`, `mkt.ejari_*`).
+- **New** `api/listings.js`: the Listings tab data and the owner report figures. Read-only.
+- **New** `src/Listings.jsx`: the Listings tab (brokers see their own, managers their team, admins everyone) and
+  the one-page owner report, saved as a PDF from the print window.
+- **New** `public/apex-logo.svg`: the Apex Homes DXB logo for the report.
+- **Changed** `src/App.jsx`: a "Listings" button in the top bar and the lazy-loaded page (6 lines).
+
+By hand: run 019, then the staff details file (kept out of this repo). Upload the src files after calling hours.
+
 ## 2026-11-13 · Management pages limited to named people
 
 - **Changed** `api/ops.js`: if `ops.settings` holds an `ops_access` list of emails, only those people can open the
