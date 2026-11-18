@@ -71,10 +71,23 @@ export default function Listings({ api, onOpen }) {
   const [tab, setTab] = useState('all');
   const [report, setReport] = useState(null);
 
+  const [updating, setUpdating] = useState(false);
   useEffect(() => {
     let live = true; setErr(''); setD(null);
-    api('/api/listings?action=list' + (scope === 'mine' ? '' : '&scope=' + scope))
-      .then((j) => live && setD(j)).catch((e) => live && setErr(e.message));
+    const get = () => api('/api/listings?action=list' + (scope === 'mine' ? '' : '&scope=' + scope));
+    get().then((j) => {
+      if (!live) return;
+      // managers and admins with no listings of their own land on their team (or everyone) instead of an empty page
+      if (scope === 'mine' && !j.listings.length && j.canTeam) { setScope(j.canAll ? 'all' : 'team'); return; }
+      setD(j);
+      // figures over 10 minutes old: show them now, rebuild in the background, then swap in the fresh ones
+      if (j.stale) {
+        setUpdating(true);
+        api('/api/listings', { method: 'POST', body: { action: 'refresh' } })
+          .then(() => get()).then((f) => { if (live) setD(f); })
+          .catch(() => {}).finally(() => live && setUpdating(false));
+      }
+    }).catch((e) => live && setErr(e.message));
     return () => { live = false; };
   }, [api, scope]);
 
@@ -95,10 +108,11 @@ export default function Listings({ api, onOpen }) {
         </div>}
       </div>
       <p className="lst-sub">Live Kendal listings against recent sales and new Ejari leases for similar units.
-        {d?.salesTo ? ` Sales to ${fdate(d.salesTo, { day: 'numeric', month: 'short', year: 'numeric' })}, leases to ${fdate(d.rentsTo, { day: 'numeric', month: 'short', year: 'numeric' })}.` : ''}</p>
+        {d?.salesTo ? ` Sales to ${fdate(d.salesTo, { day: 'numeric', month: 'short', year: 'numeric' })}, leases to ${fdate(d.rentsTo, { day: 'numeric', month: 'short', year: 'numeric' })}.` : ''}
+        {updating ? <span className="faint"> Updating…</span> : null}</p>
 
       {err ? <p className="err" style={{ marginTop: 16 }}>{err}</p> : !d ? <p className="muted" style={{ marginTop: 16 }}>Loading…</p> : <>
-        <p className="lst-sum">{rows.length === 0 ? 'No live listings in Kendal.'
+        <p className="lst-sum">{rows.length === 0 ? (d.scope === 'mine' ? 'You have no live listings in Kendal.' : d.scope === 'team' ? 'Your team has no live listings in Kendal.' : 'No live listings in Kendal.')
           : over ? <><b>{over} of {whose(rows.length)}</b> {over === 1 ? 'is' : 'are'} priced above what similar units have gone for. They're at the top.</>
             : <>None of {whose(rows.length)} are priced above what similar units have gone for.</>}</p>
 

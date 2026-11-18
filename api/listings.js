@@ -3,8 +3,14 @@
 //   GET /api/listings?action=list[&scope=team|all]   brokers: their own listings. Managers can ask for their team,
 //                                                    admins and directors for everyone.
 //   GET /api/listings?action=report&id=AHRE-1234     one listing's figures, the owner's name and the broker's details
+//   POST /api/listings {action:'refresh'}            rebuilds the cache (mkt.listing_check_cache, migration 020) when the
+//                                                    page finds it over 10 minutes old. Slow work goes through POST, which
+//                                                    gets a longer time limit than reads.
 // Read-only. The raw transactions never leave the server: only ranges, medians, counts and the dots on the report.
-import { sql, route, query } from './_lib/core.js';
+import { sql, route, query, body } from './_lib/core.js';
+
+export const config = { maxDuration: 60 };
+const STALE_MIN = 10;
 import { scopeFor } from './_lib/ops-access.js';
 
 // Whose listings may this person see? null = only their own.
@@ -23,33 +29,25 @@ async function emailsFor(staff, scope) {
 
 const canTeam = (staff) => ['admin', 'director', 'manager'].includes(staff.role);
 
-// Desk unit (for "Call owner") per listing. Kendal landlords aren't synced yet, so this is the Desk owner on the unit
-// with the same building and unit number, and only when exactly one unit matches.
-async function deskUnits(ids) {
-  if (!ids.length) return new Map();
-  const rows = await sql`select listing_id, unit_id, owner_name from mkt.listing_desk_units(${ids}::text[])`;
-  return new Map(rows.map((r) => [r.listing_id, r]));
-}
-
 async function list(req, res, staff) {
   const q = query(req);
   const who = await emailsFor(staff, canTeam(staff) ? q.get('scope') : null);
-  await sql`select mkt.refresh_listing_map()`;   // new Kendal buildings get matched the first time they're seen
   const rows = who.all
-    ? await sql`select c.*, k.agent_name from mkt.listing_checks() c join ops.kendal_listings k using (listing_id)`
-    : await sql`select c.*, k.agent_name from mkt.listing_checks(${who.emails}) c join ops.kendal_listings k using (listing_id)`;
-  const units = await deskUnits(rows.map((r) => r.listing_id));
-  const [asOf] = await sql`select (select max(sold_on) from mkt.dld_sales) as sales_to, (select max(starts_on) from mkt.ejari_rents) as rents_to`;
+    ? await sql`select * from mkt.listing_check_cache`
+    : await sql`select * from mkt.listing_check_cache where lower(agent_email) = any(${who.emails})`;
+  const [asOf] = await sql`select (select max(sold_on) from mkt.dld_sales) as sales_to, (select max(starts_on) from mkt.ejari_rents) as rents_to,
+                                  (select min(refreshed_at) from mkt.listing_check_cache) as refreshed_at`;
+  const stale = !asOf.refreshed_at || Date.now() - new Date(asOf.refreshed_at).getTime() > STALE_MIN * 60e3;
   res.json({
     scope: who.all ? 'all' : who.team ? 'team' : 'mine', team: who.team || null, canTeam: canTeam(staff), canAll: ['admin', 'director'].includes(staff.role),
-    salesTo: asOf.sales_to, rentsTo: asOf.rents_to,
+    salesTo: asOf.sales_to, rentsTo: asOf.rents_to, refreshedAt: asOf.refreshed_at, stale,
     listings: rows.map((r) => ({
       id: r.listing_id, agent: r.agent_name || r.agent_email, agentEmail: r.agent_email, title: r.title,
       purpose: r.purpose, kind: r.kind, beds: r.beds, size: r.size_sqft,
       community: r.community, subCommunity: r.sub_community, building: r.building, unitNo: r.unit_no,
       listed: r.listed, target: r.target, gap: r.gap_pct == null ? null : Number(r.gap_pct), verdict: r.verdict,
       evidence: r.evidence, level: r.evidence_level, months: r.evidence_months, low: r.low, high: r.high, latest: r.latest, note: r.note,
-      unitId: units.get(r.listing_id)?.unit_id || null,
+      unitId: r.unit_id || null,
     })),
   });
 }
@@ -64,9 +62,9 @@ async function report(req, res, staff) {
     const team = canTeam(staff) ? await emailsFor(staff, 'team') : null;
     if (!team?.all && !(team?.emails || []).includes(String(k.agent_email || '').toLowerCase())) return res.status(403).json({ error: 'Not your listing.' });
   }
-  const [c] = await sql`select * from mkt.listing_checks(${[String(k.agent_email || '').toLowerCase()]}) where listing_id = ${id}`;
+  const [c] = await sql`select * from mkt.listing_check_cache where listing_id = ${id}`;
   if (!c || c.target == null) return res.status(400).json({ error: 'There isn\'t enough evidence for a report on this listing yet.' });
-  const [u] = await sql`select * from mkt.listing_desk_unit(${id})`;
+  const u = c;
   // The broker on the report is the listing's agent (for a manager downloading a team member's report), else the person asking
   const brokerRow = (email) => sql`select s.full_name, s.email, s.title, s.mobile, p.content_type as photo_type, encode(p.photo, 'base64') as photo
                                    from desk.staff s left join desk.staff_photos p on lower(p.email) = lower(s.email)
@@ -84,9 +82,20 @@ async function report(req, res, staff) {
   });
 }
 
+async function refresh(req, res) {
+  const [r] = await sql`select (select min(refreshed_at) from mkt.listing_check_cache) as at`;
+  if (r.at && Date.now() - new Date(r.at).getTime() < 60e3) return res.json({ ok: true, skipped: true });   // someone just did it
+  const [n] = await sql`select mkt.refresh_listing_cache() as n`;
+  res.json({ ok: true, listings: n.n });
+}
+
 export default route(async (req, res, staff) => {
+  if (req.method === 'POST') {
+    if (body(req).action === 'refresh') return refresh(req, res);
+    return res.status(400).json({ error: 'Unknown action' });
+  }
   const action = query(req).get('action');
   if (action === 'list') return list(req, res, staff);
   if (action === 'report') return report(req, res, staff);
   res.status(400).json({ error: 'Unknown action' });
-});
+}, { limitMs: (req) => (req.method === 'POST' ? 55000 : 12000) });
