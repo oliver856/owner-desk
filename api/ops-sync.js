@@ -135,6 +135,8 @@ async function runFeed(st, deadline) {
       if (feed === 'listings') {
         const [f] = await sql`select ops.finish_listings_pass(${st.pass_started}, ${tot.pass_rows}, ${st.baselined}) as r`;
         detail = JSON.stringify(f.r);
+        // today's price for every live listing, for price drops (migration 021); never holds up the sync
+        await sql`select mkt.snapshot_listing_prices()`.catch((e) => console.error('price snapshot:', e.message));
       }
       await sql`update ops.sync_state set last_ok = pass_started, last_finished = now(), last_rows = pass_rows,
                   pass_started = null, pass_from = null, cursor = null, status = 'ok', error = null,

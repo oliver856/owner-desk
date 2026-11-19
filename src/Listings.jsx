@@ -43,9 +43,9 @@ const PRINT_CSS = `
   body>*:not(.orpt-print){display:none!important}
   .orpt-print{display:block!important;position:static!important}
   .orpt-print .orpt-scrim{position:static;background:none;padding:0;overflow:visible}
-  .orpt-print .orpt-box{padding:0;border-radius:0;background:#fff}
-  .orpt-print .orpt-bar{display:none!important}
-  .orpt-page{box-shadow:none!important}
+  .orpt-print .orpt-box{padding:0;border-radius:0;background:#fff;display:block;gap:0}
+  .orpt-print .orpt-bar,.orpt-print .orpt-hint{display:none!important}
+  .orpt-page{box-shadow:none!important;margin:0!important;overflow:hidden;break-inside:avoid;page-break-after:avoid}
 }
 `;
 
@@ -193,7 +193,7 @@ function OwnerReport({ api, id, onClose }) {
             <button className="btn" onClick={onClose}>Close</button>
           </div>
           {err ? <p className="err" style={{ width: 420 }}>{err}</p> : !d ? <p className="muted" style={{ width: 420 }}>Loading…</p> : <ReportPage d={d} owner={owner.trim()} />}
-          {d && <p className="faint" style={{ fontSize: 12, margin: 0, width: 420 }}>In the print window choose "Save as PDF". Check the owner's name above first: land department names are often in capitals or a different order.</p>}
+          {d && <p className="faint orpt-hint" style={{ fontSize: 12, margin: 0, width: 420 }}>In the print window choose "Save as PDF". Check the owner's name above first: land department names are often in capitals or a different order.</p>}
         </div>
       </div>
     </div>, document.body);

@@ -4,6 +4,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useOps, Wait, Bar, Section, Two, Btn, LinkBtn, Field, day, clock } from './kit.jsx';
 import { Answer, ASK_CSS, printAnswer, downloadTables, tablesIn } from './Ask.jsx';
 
+// The Friday slides load only when opened
+const Slides = React.lazy(() => import('./Slides.jsx'));
+
 const CSS = `
 .mt-reports{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .mt-reports button{font:inherit;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);padding:10px 14px;cursor:pointer;color:var(--ink);display:flex;justify-content:space-between;gap:10px}
@@ -25,6 +28,7 @@ export default function Meeting({ api, team, teams, all }) {
   const [open, setOpen] = useState(null);     // the report being read: { id, title, answer, at }
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
+  const [slides, setSlides] = useState(false);
   const card = useRef(null);
   const post = (body) => api('/api/ops' + (team ? '?team=' + encodeURIComponent(team) : ''), { method: 'POST', body });
   useEffect(() => { if (d && !open && d.reports[0]) openReport(d.reports[0].id); }, [d?.reports?.[0]?.id]);
@@ -46,6 +50,14 @@ export default function Meeting({ api, team, teams, all }) {
     <>
       <style>{ASK_CSS + CSS}</style>
       <Bar note="Everything for the weekly meeting in one place: the report, the pipelines from the group, and the actions agreed." />
+
+      <Section title="Meeting slides" aside="This week's real figures, for the TV and to send round">
+        <div className="ops-acts">
+          <Btn primary onClick={() => setSlides(true)}>Download slides</Btn>
+          <span className="muted">Scorecards, KPIs, flagged brokers by group session, listings health, and the issues and actions below. Start an action with "Issue:" to show it as an issue.</span>
+        </div>
+        {slides && <React.Suspense fallback={null}><Slides api={api} team={team} onClose={() => setSlides(false)} /></React.Suspense>}
+      </Section>
 
       <Section title="Weekly report" aside="Saved here each time one is made">
         <div className="ops-acts" style={{ marginBottom: 12 }}>

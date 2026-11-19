@@ -5,6 +5,7 @@
 //   GET  ?action=scorecard[&month=]  POST { action: plan-set }                 the scorecard (see _lib/scorecard.js)
 //   GET  ?action=meeting[&week=] | report&id=   POST { action: pipeline-*|action-* }   the meeting page (see _lib/meeting.js)
 //   POST { action: deal-offplan, id, on }                                     tick a deal as off-plan
+//   GET  ?action=slides                                                       the Friday meeting slides (see _lib/slides.js)
 // This file only checks who is asking and hands over to:
 //   _lib/ops-access.js   who may see and do what
 //   _lib/ops-pages.js    the page queries (read only)
@@ -17,6 +18,7 @@ import { dealsPage, dealsWrite, dealsVersion } from './_lib/ops-deals.js';
 import { ask, askPage, report } from './_lib/ask.js';
 import { scorecard, setPlan } from './_lib/scorecard.js';
 import { meetingPage, meetingWrite, reportText } from './_lib/meeting.js';
+import { slides } from './_lib/slides.js';
 
 const cache = new Map();   // short memory so flicking between pages doesn't re-run the same query
 const TTL_MS = 60e3;
@@ -70,6 +72,7 @@ export default route(async (req, res, staff) => {
   }
   if (action === 'ask') return res.json(await askPage(staff, sc));
   if (action === 'meeting') return res.json(await meetingPage(staff, sc, q.get('week')));
+  if (action === 'slides') return res.json(await slides(sc));
   if (action === 'report') { const r = await reportText(sc, q.get('id')); return r ? res.json(r) : res.status(404).json({ error: 'That report is no longer there.' }); }
   if (action === 'deals') {   // always fresh: this is the page deals are entered on
     if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });

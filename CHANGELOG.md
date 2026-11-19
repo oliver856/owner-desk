@@ -4,6 +4,19 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-19 · Friday meeting slides and daily listing prices
+
+- **New** `migrations/021_listing_price_log.sql`: every live listing's price once a day (`mkt.listing_price_log`), and
+  `mkt.listing_price_drops(days)` for price drops.
+- **Changed** `api/ops-sync.js`: records the day's prices after each Kendal listings sync (2 lines; never stops the sync).
+- **New** `migrations/022_meeting_slides.sql`: monthly targets for Oct to Dec 2026 (`desk.meeting_targets`) and the
+  KPI and flag rules (`mkt.settings` 'meeting_flags').
+- **New** `api/_lib/slides.js`, and `GET /api/ops?action=slides` in `api/ops.js`: every figure on the slides.
+- **New** `src/ops/Slides.jsx`, and a "Download slides" button on the Meeting page (`src/ops/Meeting.jsx`): the deck,
+  saved as a PDF one slide per page. An action starting "Issue:" shows as an issue.
+
+By hand: run 021 and 022. Upload the src files after calling hours.
+
 ## 2026-11-18 · Listings tab and owner report
 
 - **New** `migrations/019_listing_price_check.sql`: matches every live Kendal listing to land department sales and new

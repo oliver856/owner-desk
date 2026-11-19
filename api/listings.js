@@ -66,11 +66,15 @@ async function report(req, res, staff) {
   if (!c || c.target == null) return res.status(400).json({ error: 'There isn\'t enough evidence for a report on this listing yet.' });
   const u = c;
   // The broker on the report is the listing's agent (for a manager downloading a team member's report), else the person asking
-  const brokerRow = (email) => sql`select s.full_name, s.email, s.title, s.mobile, p.content_type as photo_type, encode(p.photo, 'base64') as photo
-                                   from desk.staff s left join desk.staff_photos p on lower(p.email) = lower(s.email)
-                                   where lower(s.email) = lower(${email}) and s.active`;
-  let [b] = k.agent_email ? await brokerRow(k.agent_email) : [];
-  if (!b) [b] = await brokerRow(staff.email);
+  // The broker on the report is always the listing's own agent in Kendal: found on the Desk by email, then by name.
+  // If they aren't on the Desk, their Kendal name and email are used (no photo).
+  const brokerSql = (cond) => sql`select s.full_name, s.email, s.title, s.mobile, p.content_type as photo_type, encode(p.photo, 'base64') as photo
+                                  from desk.staff s left join desk.staff_photos p on lower(p.email) = lower(s.email)
+                                  where s.active and ${cond} limit 1`;
+  const [ka] = await sql`select agent_name from ops.kendal_listings where listing_id = ${id}`;
+  let [b] = k.agent_email ? await brokerSql(sql`lower(s.email) = lower(${k.agent_email})`) : [];
+  if (!b && ka?.agent_name) [b] = await brokerSql(sql`lower(regexp_replace(s.full_name, '[^a-zA-Z]', '', 'g')) = lower(regexp_replace(${ka.agent_name}, '[^a-zA-Z]', '', 'g'))`);
+  if (!b && (ka?.agent_name || k.agent_email)) b = { full_name: ka?.agent_name || '', email: k.agent_email || '', title: '', mobile: '', photo: null };
   res.json({
     id, purpose: c.purpose, kind: c.kind, beds: c.beds, size: c.size_sqft,
     building: c.building, community: c.community, subCommunity: c.sub_community,
