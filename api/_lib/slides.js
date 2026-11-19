@@ -7,13 +7,16 @@
 import { sql } from './core.js';
 import { mondayOf } from './meeting.js';
 
+// Every broker gets the first of these in their funnel. 'nolisting' is on top of that: anyone judged on stock
+// who hasn't put a listing live this month is on that list whatever their other flag.
 const FLAGS = [
   ['calls', 'Low stock, not calling', 'Call-out session'],
   ['pitch', 'Calling, not winning listings', 'Owner pitch session'],
   ['listings', 'Underperforming listings', 'Underperforming listings conversation'],
-  ['leads', 'Leads, not enough viewings', 'Lead follow-up session'],
+  ['leads', 'Leads, few viewings logged', 'Lead follow-up / CRM compliance'],
   ['closing', 'Viewings, no deals', 'Closing session'],
   ['nodeal', 'No deal in 60 days', '1:1 with Billie'],
+  ['nolisting', 'No new listing this month', 'Listing plan with their manager'],
 ];
 
 const iso = (d) => d.toISOString().slice(0, 10);
@@ -75,6 +78,8 @@ export async function slides(sc) {
            and c.called_at < (${today}::date::timestamp at time zone 'Asia/Dubai')) as calls,
       (select count(*)::int from ops.kendal_listings n where n.agent_email = p.email and n.live_since is not null
          and ops.dubai_day(n.created_at) > ${wk}::date and ops.dubai_day(n.created_at) <= ${yest}::date) as listed,
+      (select count(*)::int from ops.kendal_listings n where n.agent_email = p.email and n.live_since is not null
+         and ops.dubai_day(n.created_at) >= ${mo}::date) as listed_month,
       (select count(*)::int from ops.kendal_listings l where l.agent_email = p.email and l.is_live) as stock,
       (select count(*)::int from ops.v_portal_leads i where i.agent_email = p.email and i.lead_day > ${wk}::date and i.lead_day <= ${yest}::date) as leads,
       (select count(*)::int from ops.kendal_appointments a where a.appointment_type ilike '%view%' and p.email = any(a.team_members)
@@ -111,19 +116,23 @@ export async function slides(sc) {
   }
 
   const callTarget = R.calls_a_day * R.working_days;
+  const lowShare = R.low_stock_share ?? 0.5;
+  const inGroup = (b, key) => (key === 'nolisting' ? b.noListing : b.flag === key);
   const brokers = ppl.map((p) => {
     const kind = ['apartment', 'villa'].includes(p.type) ? p.type : null;   // off-plan and commercial aren't judged on stock
     const L = byBroker.get(p.email) || { live: 0, over: 0, low: 0, bad: 0, drops: 0, worst: null };
     const k = kind ? { listed: R.listed_week[kind], stock: R.stock[kind] } : null;
     const settled = !p.start || p.start <= addDays(today, -R.settled_days);
     let flag = null;
-    if (k && p.stock < k.stock && p.calls < callTarget) flag = 'calls';
+    // low stock is well under the KPI (under half by default: 12 of 25, 5 of 12), not just one or two short
+    if (k && p.stock < k.stock * lowShare && p.calls < callTarget) flag = 'calls';
     else if (k && p.calls >= callTarget && p.listed < k.listed) flag = 'pitch';
     else if (k && L.live > 0 && L.bad >= Math.ceil(L.live * R.underperforming_share)) flag = 'listings';
     else if (p.leads >= R.leads_week_high && p.viewings < R.viewings_week) flag = 'leads';
     else if (p.viewings30 >= R.viewings_30_high && p.deals30 === 0) flag = 'closing';
     else if (settled && p.deals60 === 0) flag = 'nodeal';
-    return { ...p, kind, k, ...L, worst: L.worst?.text || '', flag,
+    const noListing = !!k && p.listed_month === 0;
+    return { ...p, kind, k, ...L, worst: L.worst?.text || '', flag, noListing,
       met: { calls: p.calls >= callTarget, listed: k ? p.listed >= k.listed : null, stock: k ? p.stock >= k.stock : null, viewings: p.viewings >= R.viewings_week } };
   });
 
@@ -144,10 +153,11 @@ export async function slides(sc) {
   };
 
   const groups = FLAGS.map(([key, name, session]) => ({ key, name, session,
-    brokers: brokers.filter((b) => b.flag === key).map((b) => ({ name: b.name, team: b.team, type: b.type, stock: b.stock, stockTarget: b.k?.stock ?? null,
+    brokers: brokers.filter((b) => inGroup(b, key)).map((b) => ({ name: b.name, team: b.team, type: b.type, stock: b.stock, stockTarget: b.k?.stock ?? null,
+      listedMonth: b.listed_month,
       callsPerDay: Math.round(b.calls / R.working_days), listed: b.listed, listedTarget: b.k?.listed ?? null, leads: b.leads, viewings: b.viewings,
       viewings30: b.viewings30, live: b.live, bad: b.bad, over: b.over, low: b.low, worst: b.worst })) }));
-  const flagByTeam = FLAGS.map(([key]) => teams.map((t) => brokers.filter((b) => b.flag === key && (b.team || 'No team') === t).length));
+  const flagByTeam = FLAGS.map(([key]) => teams.map((t) => brokers.filter((b) => inGroup(b, key) && (b.team || 'No team') === t).length));
 
   // ── Listings health by team ──
   const teamOf = new Map(brokers.map((b) => [b.email, b.team || 'No team']));
@@ -173,7 +183,7 @@ export async function slides(sc) {
     today, month: mo, monthEnd, quarterStart: qs, quarterEnd, team,
     pace: { month: dayOfMonth / daysInMonth, quarter: qDay / qDays }, workingDaysLeft: wdLeft, monthsLeft,
     monthScore: month, quarterScore: quarter, monthDeals: mDeals,
-    rules: R, callTarget, kpis, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag).length, brokerCount: brokers.length,
+    rules: { ...R, low_stock_share: lowShare }, callTarget, kpis, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag || b.noListing).length, brokerCount: brokers.length,
     health, worst, priceFrom: priceFrom || null,
     lastWeek: acts.filter((a) => a.week < thisWeek && !isIssue(a)).map(clean),
     issues: acts.filter((a) => a.week === thisWeek && isIssue(a)).map(clean),

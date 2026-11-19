@@ -4,6 +4,16 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-19 · Meeting slides: flag changes
+
+- **Changed** `api/_lib/slides.js` and `src/ops/Slides.jsx`:
+  - Low stock now means well under the stock KPI: under half by default (12 of 25 apartments, 5 of 12 villas).
+    Change it with `low_stock_share` in `mkt.settings 'meeting_flags'`.
+  - New flag 7, "No new listing this month": every apartment and villa broker with nothing live since the 1st,
+    on top of any other flag, with its own slide.
+  - Group 4 is now "Lead follow-up / CRM compliance", because few viewings can mean they aren't being logged.
+- History: `history/slides.2026-11-19-v1.js`, `history/Slides.2026-11-19-v1.jsx`. No SQL to run.
+
 ## 2026-11-19 · Friday meeting slides and daily listing prices
 
 - **New** `migrations/021_listing_price_log.sql`: every live listing's price once a day (`mkt.listing_price_log`), and

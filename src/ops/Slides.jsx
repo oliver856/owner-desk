@@ -57,7 +57,7 @@ const Stat = ({ label, value, sub }) => (
     <p style={{ margin: '4px 0 0', fontSize: 26, fontWeight: 600 }}>{value}</p>
     {sub ? <p style={{ margin: 0, fontSize: 13, color: MUT }}>{sub}</p> : null}
   </div>);
-function Table({ cols, rows, head }) {
+function Table({ cols, rows, head, dense }) {
   const grid = cols.map((c) => c.w || 'minmax(0, 1fr)').join(' ');
   return (
     <Card style={{ paddingTop: 14 }}>
@@ -65,7 +65,7 @@ function Table({ cols, rows, head }) {
         {(head || cols.map((c) => c.label)).map((h, i) => <span key={i} style={{ textAlign: cols[i].num ? 'right' : cols[i].center ? 'center' : 'left' }}>{h}</span>)}
       </div>
       {rows.map((r, j) => (
-        <div key={j} style={{ display: 'grid', gridTemplateColumns: grid, gap: 16, padding: '12px 16px', fontSize: 16, alignItems: 'center', borderBottom: j === rows.length - 1 ? 'none' : '1px solid ' + LINE }}>
+        <div key={j} style={{ display: 'grid', gridTemplateColumns: grid, gap: 16, padding: dense ? '8px 16px' : '12px 16px', fontSize: 16, alignItems: 'center', borderBottom: j === rows.length - 1 ? 'none' : '1px solid ' + LINE }}>
           {cols.map((c, i) => <span key={i} style={{ textAlign: c.num ? 'right' : c.center ? 'center' : 'left', fontVariantNumeric: c.num ? 'tabular-nums' : undefined, minWidth: 0 }}>{c.render(r)}</span>)}
         </div>))}
     </Card>);
@@ -158,15 +158,16 @@ function deck(d) {
     </div></>));
 
   const RULES = {
-    calls: `Under the stock KPI and under ${R0.calls_a_day} calls a day`, pitch: `${R0.calls_a_day}+ calls a day, new listings under KPI`,
-    listings: `Half their listings overpriced or under ${R0.low_leads} leads in ${R0.low_leads_days} days`, leads: `${R0.leads_week_high}+ leads this week, under ${R0.viewings_week} viewings`,
+    calls: `Stock under ${Math.ceil(R0.stock.apartment * R0.low_stock_share)} apt / ${Math.ceil(R0.stock.villa * R0.low_stock_share)} villa and under ${R0.calls_a_day} calls a day`, pitch: `${R0.calls_a_day}+ calls a day, new listings under KPI`,
+    listings: `Half their listings overpriced or under ${R0.low_leads} leads in ${R0.low_leads_days} days`, leads: `${R0.leads_week_high}+ leads this week, under ${R0.viewings_week} viewings logged`,
     closing: `${R0.viewings_30_high}+ viewings in 30 days, no deal in 30 days`, nodeal: `Past ${R0.settled_days} days, no deal in ${R0.no_deal_days}, no other flag`,
+    nolisting: `Nothing live since 1 ${month} · on top of any other flag`,
   };
-  add('flags', "What's working and what isn't", `${d.flagged} broker${d.flagged === 1 ? '' : 's'} flagged. Each goes into one group session this week.`, (
-    <Table head={['Flag · each broker gets the first one in their funnel', ...d.flagTeams, 'Group session']}
+  add('flags', "What's working and what isn't", `${d.flagged} broker${d.flagged === 1 ? '' : 's'} flagged. Each goes into one group session, plus the no-listing list.`, (
+    <Table dense head={['Flag · each broker gets the first one in their funnel', ...d.flagTeams, 'Group session']}
       cols={[{ w: 'minmax(0, 2.6fr)', render: (g) => <span><b style={{ fontWeight: 600 }}>{g.i}. {g.name}</b><span style={{ display: 'block', fontSize: 13, color: MUT }}>{RULES[g.key]}</span></span> },
         ...d.flagTeams.map((_, t) => ({ w: 'minmax(0, 0.7fr)', center: true, render: (g) => { const v = d.flagByTeam[g.i - 1][t]; return <span style={{ fontSize: 18, fontWeight: v ? 600 : 400, color: v ? R[0] : '#b5b5b5' }}>{v || '–'}</span>; } })),
-        { w: 'minmax(0, 1.7fr)', render: (g) => <b style={{ fontWeight: 600 }}>{g.session}</b> }]}
+        { w: 'minmax(0, 2fr)', render: (g) => <b style={{ fontWeight: 600 }}>{g.session}</b> }]}
       rows={d.groups.map((g, i) => ({ ...g, i: i + 1 }))} />));
 
   const groupCols = {
@@ -176,14 +177,16 @@ function deck(d) {
     leads: [['Leads', (b) => b.leads], ['Viewings', (b) => b.viewings], ['Calls', (b) => `${b.callsPerDay} a day`]],
     closing: [['Viewings, 30 days', (b) => b.viewings30], ['Viewings, 7 days', (b) => b.viewings]],
     nodeal: [['Viewings, 30 days', (b) => b.viewings30], ['Stock', (b) => (b.stockTarget ? `${b.stock} / ${b.stockTarget}` : b.stock)]],
+    nolisting: [[`Listed in ${month}`, (b) => b.listedMonth], ['Stock', (b) => `${b.stock} / ${b.stockTarget}`], ['Calls', (b) => `${b.callsPerDay} a day`]],
   };
   const SUBS = {
     calls: 'The fix is call time: a supervised power hour, everyone on the Desk at once.',
     pitch: 'Calling enough but not turning calls into listings: the script, objections and listening back to calls.',
     listings: 'Listings not pulling leads or priced above the market. Each listing gets checked on title, photos, price and portal spend: it isn\'t always the price.',
-    leads: 'Getting the leads but not booking the viewings: response time, qualifying, booking on the first call.',
+    leads: 'Getting leads but few viewings in Kendal. Check the CRM first: they may be doing viewings and not logging them. If not, it\'s response time and booking on the first call.',
     closing: 'Plenty of viewings, no deals: negotiation and offers, paired with a senior for their next viewings.',
     nodeal: 'No deal in 60 days and nothing else explains it. A 1:1 with Billie, not a group session.',
+    nolisting: 'Nothing new live this month. Each one leaves with a listing plan and a date for their manager.',
   };
   const PER = 8;   // brokers per group slide; a bigger group carries on onto another slide
   groups.forEach((g) => {
