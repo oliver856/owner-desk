@@ -4,6 +4,15 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-19 · Meeting slides: managers and personal targets
+
+- **Changed** `api/_lib/slides.js`:
+  - Managers and directors (Mahan, Oliver Mollet, Callum, Kamil and anyone else with a manager role) are never flagged
+    and aren't counted in the KPI slide. Their listings still count in Listings health.
+  - The scorecards no longer show personal targets (Callum, Kamil) as their own rows. They sit inside their team's
+    target, which already adds up to the 1.3m.
+- History: `history/slides.2026-11-19-v2.js`. No SQL to run.
+
 ## 2026-11-19 · Meeting slides: flag changes
 
 - **Changed** `api/_lib/slides.js` and `src/ops/Slides.jsx`:

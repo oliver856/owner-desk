@@ -51,13 +51,15 @@ export async function slides(sc) {
   const qDays = (new Date(quarterEnd) - new Date(qs)) / 864e5 + 1, qDay = (new Date(today) - new Date(qs)) / 864e5 + 1;
   const wdLeft = workingDays(today, monthEnd);
   const monthsLeft = 3 - Math.floor((Number(today.slice(5, 7)) - qStartMonth));
-  const month = targets.filter((t) => t.month === mo && visible(t)).map((t) => {
+  // personal targets sit inside their team's target, so they aren't shown as rows of their own
+  const shown = (t) => t.scope !== 'person' && visible(t);
+  const month = targets.filter((t) => t.month === mo && shown(t)).map((t) => {
     const b = billedFor(t, [mo]);
     return { label: t.label, scope: t.scope, target: t.target, billed: b.billed, deals: b.deals, needed: Math.max(0, t.target - b.billed),
              perDay: wdLeft ? Math.max(0, t.target - b.billed) / wdLeft : null };
   });
   const qMonths = [...new Set(targets.map((t) => t.month))];
-  const quarter = [...new Map(targets.filter(visible).map((t) => [t.label, t])).values()].map((t0) => {
+  const quarter = [...new Map(targets.filter(shown).map((t) => [t.label, t])).values()].map((t0) => {
     const tgt = targets.filter((t) => t.label === t0.label).reduce((a, t) => a + t.target, 0);
     const b = billedFor(t0, qMonths);
     return { label: t0.label, scope: t0.scope, target: tgt, billed: b.billed, deals: b.deals, needed: Math.max(0, tgt - b.billed),
@@ -69,10 +71,14 @@ export async function slides(sc) {
 
   // ── People: the last 7 full days ──
   const ppl = await sql`
-    with p as (select p.email, p.full_name, p.broker_type, p.start_date, ops.team_at(p.email, ${yest}::date) as team
+    with p as (select p.email, p.full_name, p.kind, p.broker_type, p.start_date, ops.team_at(p.email, ${yest}::date) as team
                from ops.people p where p.status = 'active' and p.kind in ('broker', 'manager') and not p.hide_from_kpi
                  and (${team}::text is null or ops.team_at(p.email, ${yest}::date) = ${team}))
     select p.email, p.full_name as name, p.broker_type as type, p.start_date::text as start, p.team,
+      -- managers and directors are never flagged: by kind, Desk role, or roster role title
+      (p.kind = 'manager'
+        or exists (select 1 from desk.staff s where lower(s.email) = p.email and s.role in ('manager', 'director', 'admin'))
+        or coalesce(ops.role_at(p.email, ${yest}::date), '') ~* '(manager|director|head of|team lead)') as is_manager,
       (select count(*)::int from desk.calls c join desk.staff s on s.user_id = c.user_id
          where lower(s.email) = p.email and c.called_at >= (${addDays(wk, 1)}::date::timestamp at time zone 'Asia/Dubai')
            and c.called_at < (${today}::date::timestamp at time zone 'Asia/Dubai')) as calls,
@@ -118,7 +124,7 @@ export async function slides(sc) {
   const callTarget = R.calls_a_day * R.working_days;
   const lowShare = R.low_stock_share ?? 0.5;
   const inGroup = (b, key) => (key === 'nolisting' ? b.noListing : b.flag === key);
-  const brokers = ppl.map((p) => {
+  const everyone = ppl.map((p) => {
     const kind = ['apartment', 'villa'].includes(p.type) ? p.type : null;   // off-plan and commercial aren't judged on stock
     const L = byBroker.get(p.email) || { live: 0, over: 0, low: 0, bad: 0, drops: 0, worst: null };
     const k = kind ? { listed: R.listed_week[kind], stock: R.stock[kind] } : null;
@@ -135,6 +141,7 @@ export async function slides(sc) {
     return { ...p, kind, k, ...L, worst: L.worst?.text || '', flag, noListing,
       met: { calls: p.calls >= callTarget, listed: k ? p.listed >= k.listed : null, stock: k ? p.stock >= k.stock : null, viewings: p.viewings >= R.viewings_week } };
   });
+  const brokers = everyone.filter((b) => !b.is_manager);
 
   const order = (await sql`select name from ops.teams order by sort, name`).map((t) => t.name);
   const teams = [...new Set(brokers.map((b) => b.team || 'No team'))].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
@@ -160,7 +167,7 @@ export async function slides(sc) {
   const flagByTeam = FLAGS.map(([key]) => teams.map((t) => brokers.filter((b) => inGroup(b, key) && (b.team || 'No team') === t).length));
 
   // ── Listings health by team ──
-  const teamOf = new Map(brokers.map((b) => [b.email, b.team || 'No team']));
+  const teamOf = new Map(everyone.map((b) => [b.email, b.team || 'No team']));
   const health = teams.map((t) => {
     const ls = lst.filter((l) => teamOf.get(l.email) === t);
     return { team: t, live: ls.length, checked: ls.filter((l) => l.verdict && l.verdict !== 'nee').length,
@@ -170,7 +177,7 @@ export async function slides(sc) {
   const worst = lst.filter((l) => (l.verdict === 'well' || l.verdict === 'reduce') && teamOf.has(l.email))
     .sort((a, b) => b.gap - a.gap).slice(0, 3)
     .map((l) => ({ building: l.building, beds: l.beds, kind: l.kind, purpose: l.purpose, listed: l.listed, target: l.target, gap: l.gap,
-                   broker: brokers.find((b) => b.email === l.email)?.name || '' }));
+                   broker: everyone.find((b) => b.email === l.email)?.name || '' }));
 
   // ── Actions and issues ──
   const thisWeek = mondayOf(today);
