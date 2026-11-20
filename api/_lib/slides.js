@@ -92,16 +92,18 @@ export async function slides(sc) {
          and a.start_day > ${wk}::date and a.start_day <= ${yest}::date) as viewings,
       (select count(*)::int from ops.kendal_appointments a where a.appointment_type ilike '%view%' and p.email = any(a.team_members)
          and a.start_day > ${addDays(today, -31)}::date and a.start_day <= ${yest}::date) as viewings30,
-      (select count(*)::int from ops.deals x where x.email = p.email and x.deleted_at is null and x.counts_as_deal and x.deal_date > ${addDays(today, -31)}::date) as deals30,
-      (select count(*)::int from ops.deals x where x.email = p.email and x.deleted_at is null and x.counts_as_deal and x.deal_date > ${addDays(today, -61)}::date) as deals60
+      (select count(*)::int from ops.deals x where lower(x.email) = p.email and x.deleted_at is null and x.counts_as_deal and x.deal_date > ${addDays(today, -31)}::date) as deals30,
+      (select count(*)::int from ops.deals x where lower(x.email) = p.email and x.deleted_at is null and x.counts_as_deal and x.deal_date > ${addDays(today, -61)}::date) as deals60,
+      (select max(x.deal_date)::text from ops.deals x where lower(x.email) = p.email and x.deleted_at is null and x.counts_as_deal) as last_deal
     from p order by p.team, p.full_name`;
 
   // Listings per broker: underperforming = overpriced on the price check, or live 14+ days with under 5 leads in 14 days
   const lst = await sql`
     with ld as (select i.listing_id, count(*) as n from ops.v_portal_leads i
                 where i.lead_day > ${addDays(today, -(R.low_leads_days + 1))}::date group by 1),
-    l as (select k.listing_id, k.agent_email, k.live_since, coalesce(ld.n, 0) as leads14
-          from ops.kendal_listings k left join ld using (listing_id) where k.is_live)
+    l as (select k.listing_id, k.agent_email, least(k.created_at, k.live_since) as live_since,
+                 (select coalesce(sum(ld.n), 0) from ld where ld.listing_id in (k.listing_id, k.pf_ref, k.bayut_ref, k.pf_listing_id)) as leads14
+          from ops.kendal_listings k where k.is_live)
     select l.listing_id as id, lower(l.agent_email) as email, l.leads14::int,
            (l.live_since is not null and l.live_since < now() - make_interval(days => ${R.low_leads_days}::int)) as settled,
            c.verdict, c.gap_pct::float8 as gap, c.listed, c.target, c.purpose, c.kind, c.beds, coalesce(c.building, c.sub_community, c.title) as building
@@ -123,22 +125,26 @@ export async function slides(sc) {
 
   const callTarget = R.calls_a_day * R.working_days;
   const lowShare = R.low_stock_share ?? 0.5;
-  const inGroup = (b, key) => (key === 'nolisting' ? b.noListing : b.flag === key);
+  const viewShare = R.viewings_low_share ?? 0.5;
+  const inGroup = (b, key) => (key === 'nolisting' ? b.noListing : key === 'nodeal' ? b.noDeal : b.flag === key);
   const everyone = ppl.map((p) => {
     const kind = ['apartment', 'villa'].includes(p.type) ? p.type : null;   // off-plan and commercial aren't judged on stock
     const L = byBroker.get(p.email) || { live: 0, over: 0, low: 0, bad: 0, drops: 0, worst: null };
     const k = kind ? { listed: R.listed_week[kind], stock: R.stock[kind] } : null;
-    const settled = !p.start || p.start <= addDays(today, -R.settled_days);
+    // no deal in 60 days only means something once they've been here 60 days
+    const settled = !p.start || p.start <= addDays(today, -R.no_deal_days);
+    const lowViewings = p.viewings < R.viewings_week * viewShare;
     let flag = null;
     // low stock is well under the KPI (under half by default: 12 of 25, 5 of 12), not just one or two short
     if (k && p.stock < k.stock * lowShare && p.calls < callTarget) flag = 'calls';
     else if (k && p.calls >= callTarget && p.listed < k.listed) flag = 'pitch';
     else if (k && L.live > 0 && L.bad >= Math.ceil(L.live * R.underperforming_share)) flag = 'listings';
-    else if (p.leads >= R.leads_week_high && p.viewings < R.viewings_week) flag = 'leads';
+    else if (p.leads >= R.leads_week_high && lowViewings) flag = 'leads';
     else if (p.viewings30 >= R.viewings_30_high && p.deals30 === 0) flag = 'closing';
-    else if (settled && p.deals60 === 0) flag = 'nodeal';
+    // these two are on top of the first flag, so nobody drops off them for being in another session
+    const noDeal = settled && p.deals60 === 0;
     const noListing = !!k && p.listed_month === 0;
-    return { ...p, kind, k, ...L, worst: L.worst?.text || '', flag, noListing,
+    return { ...p, kind, k, ...L, worst: L.worst?.text || '', flag, noListing, noDeal,
       met: { calls: p.calls >= callTarget, listed: k ? p.listed >= k.listed : null, stock: k ? p.stock >= k.stock : null, viewings: p.viewings >= R.viewings_week } };
   });
   const brokers = everyone.filter((b) => !b.is_manager);
@@ -161,7 +167,7 @@ export async function slides(sc) {
 
   const groups = FLAGS.map(([key, name, session]) => ({ key, name, session,
     brokers: brokers.filter((b) => inGroup(b, key)).map((b) => ({ name: b.name, team: b.team, type: b.type, stock: b.stock, stockTarget: b.k?.stock ?? null,
-      listedMonth: b.listed_month,
+      listedMonth: b.listed_month, lastDeal: b.last_deal,
       callsPerDay: Math.round(b.calls / R.working_days), listed: b.listed, listedTarget: b.k?.listed ?? null, leads: b.leads, viewings: b.viewings,
       viewings30: b.viewings30, live: b.live, bad: b.bad, over: b.over, low: b.low, worst: b.worst })) }));
   const flagByTeam = FLAGS.map(([key]) => teams.map((t) => brokers.filter((b) => inGroup(b, key) && (b.team || 'No team') === t).length));
@@ -190,7 +196,7 @@ export async function slides(sc) {
     today, month: mo, monthEnd, quarterStart: qs, quarterEnd, team,
     pace: { month: dayOfMonth / daysInMonth, quarter: qDay / qDays }, workingDaysLeft: wdLeft, monthsLeft,
     monthScore: month, quarterScore: quarter, monthDeals: mDeals,
-    rules: { ...R, low_stock_share: lowShare }, callTarget, kpis, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag || b.noListing).length, brokerCount: brokers.length,
+    rules: { ...R, low_stock_share: lowShare, viewings_low_share: viewShare }, callTarget, kpis, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag || b.noListing || b.noDeal).length, brokerCount: brokers.length,
     health, worst, priceFrom: priceFrom || null,
     lastWeek: acts.filter((a) => a.week < thisWeek && !isIssue(a)).map(clean),
     issues: acts.filter((a) => a.week === thisWeek && isIssue(a)).map(clean),

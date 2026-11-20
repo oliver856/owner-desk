@@ -4,6 +4,16 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-20 · Meeting slides: leads, viewings and no-deal fixes
+
+- **Changed** `api/_lib/slides.js`, `src/ops/Slides.jsx`:
+  - "Under 5 leads" was always 0: a listing's age came only from when the Desk first saw it live. It now uses when
+    the listing was created in Kendal, and leads are matched on any of the listing's references.
+  - Lead follow-up flag only when viewings are under half the KPI (under 5 a week), not one short.
+  - No deal in 60 days now shows everyone here 60+ days with no deal, on top of any other flag, with their last deal date.
+    Deals are matched on email whatever the capitals.
+- History: `history/slides.2026-11-20-v3.js`, `history/Slides.2026-11-20-v3.jsx`. No SQL needed for the code.
+
 ## 2026-11-19 · Meeting slides: managers and personal targets
 
 - **Changed** `api/_lib/slides.js`:

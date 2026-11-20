@@ -42,6 +42,7 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const noon = (s) => new Date(String(s).slice(0, 10) + 'T12:00:00');
 const longDate = (s) => noon(s).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const shortDate = (s) => noon(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const dayYear = (s) => noon(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 const monthName = (s) => noon(s).toLocaleDateString('en-GB', { month: 'long' });
 const weekNo = (s) => { const d = noon(s); d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7)); const y = new Date(d.getFullYear(), 0, 4); return 1 + Math.round(((d - y) / 864e5 - 3 + ((y.getDay() + 6) % 7)) / 7); };
 const quarterName = (s) => 'Q' + (Math.floor((noon(s).getMonth()) / 3) + 1) + ' ' + noon(s).getFullYear();
@@ -159,11 +160,11 @@ function deck(d) {
 
   const RULES = {
     calls: `Stock under ${Math.ceil(R0.stock.apartment * R0.low_stock_share)} apt / ${Math.ceil(R0.stock.villa * R0.low_stock_share)} villa and under ${R0.calls_a_day} calls a day`, pitch: `${R0.calls_a_day}+ calls a day, new listings under KPI`,
-    listings: `Half their listings overpriced or under ${R0.low_leads} leads in ${R0.low_leads_days} days`, leads: `${R0.leads_week_high}+ leads this week, under ${R0.viewings_week} viewings logged`,
-    closing: `${R0.viewings_30_high}+ viewings in 30 days, no deal in 30 days`, nodeal: `Past ${R0.settled_days} days, no deal in ${R0.no_deal_days}, no other flag`,
+    listings: `Half their listings overpriced or under ${R0.low_leads} leads in ${R0.low_leads_days} days`, leads: `${R0.leads_week_high}+ leads this week, under ${Math.ceil(R0.viewings_week * R0.viewings_low_share)} viewings logged`,
+    closing: `${R0.viewings_30_high}+ viewings in 30 days, no deal in 30 days`, nodeal: `Here ${R0.no_deal_days}+ days, no deal in ${R0.no_deal_days} · on top of any other flag`,
     nolisting: `Nothing live since 1 ${month} · on top of any other flag`,
   };
-  add('flags', "What's working and what isn't", `${d.flagged} broker${d.flagged === 1 ? '' : 's'} flagged. Each goes into one group session, plus the no-listing list.`, (
+  add('flags', "What's working and what isn't", `${d.flagged} broker${d.flagged === 1 ? '' : 's'} flagged. Each goes into one group session, plus the no-deal and no-listing lists.`, (
     <Table dense head={['Flag · each broker gets the first one in their funnel', ...d.flagTeams, 'Group session']}
       cols={[{ w: 'minmax(0, 2.6fr)', render: (g) => <span><b style={{ fontWeight: 600 }}>{g.i}. {g.name}</b><span style={{ display: 'block', fontSize: 13, color: MUT }}>{RULES[g.key]}</span></span> },
         ...d.flagTeams.map((_, t) => ({ w: 'minmax(0, 0.7fr)', center: true, render: (g) => { const v = d.flagByTeam[g.i - 1][t]; return <span style={{ fontSize: 18, fontWeight: v ? 600 : 400, color: v ? R[0] : '#b5b5b5' }}>{v || '–'}</span>; } })),
@@ -176,7 +177,7 @@ function deck(d) {
     listings: [['Live', (b) => b.live], ['Underperforming', (b) => b.bad], ['Overpriced', (b) => b.over], [`Under ${R0.low_leads} leads`, (b) => b.low]],
     leads: [['Leads', (b) => b.leads], ['Viewings', (b) => b.viewings], ['Calls', (b) => `${b.callsPerDay} a day`]],
     closing: [['Viewings, 30 days', (b) => b.viewings30], ['Viewings, 7 days', (b) => b.viewings]],
-    nodeal: [['Viewings, 30 days', (b) => b.viewings30], ['Stock', (b) => (b.stockTarget ? `${b.stock} / ${b.stockTarget}` : b.stock)]],
+    nodeal: [['Last deal', (b) => (b.lastDeal ? dayYear(b.lastDeal) : 'None on record')], ['Viewings, 30 days', (b) => b.viewings30], ['Stock', (b) => (b.stockTarget ? `${b.stock} / ${b.stockTarget}` : b.stock)]],
     nolisting: [[`Listed in ${month}`, (b) => b.listedMonth], ['Stock', (b) => `${b.stock} / ${b.stockTarget}`], ['Calls', (b) => `${b.callsPerDay} a day`]],
   };
   const SUBS = {
@@ -185,7 +186,7 @@ function deck(d) {
     listings: 'Listings not pulling leads or priced above the market. Each listing gets checked on title, photos, price and portal spend: it isn\'t always the price.',
     leads: 'Getting leads but few viewings in Kendal. Check the CRM first: they may be doing viewings and not logging them. If not, it\'s response time and booking on the first call.',
     closing: 'Plenty of viewings, no deals: negotiation and offers, paired with a senior for their next viewings.',
-    nodeal: 'No deal in 60 days and nothing else explains it. A 1:1 with Billie, not a group session.',
+    nodeal: 'No deal in the last 60 days. A 1:1 with Billie, not a group session.',
     nolisting: 'Nothing new live this month. Each one leaves with a listing plan and a date for their manager.',
   };
   const PER = 8;   // brokers per group slide; a bigger group carries on onto another slide
