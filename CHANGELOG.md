@@ -4,6 +4,14 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-20 · Manager breakdown as a zip, one PDF per person
+
+- **Added** "Zip, one per person" on the Manager breakdown: Billie gets the overview, each manager their team's page
+  (Oliver Mollet and Mahan get a copy each), named "<person> - <team> - <date>.pdf". Made in the browser
+  (html2canvas-pro, jsPDF, JSZip, loaded only when clicked); long pages are cut into A4 sheets between rows.
+  "One PDF" still prints everything as one file.
+- **Changed** `package.json` / `package-lock.json` for the three libraries. History: `history/package.2026-11-20-before-zip.json`.
+
 ## 2026-11-20 · Manager breakdown laid out by action
 
 - **Changed** `src/ops/Slides.jsx`: each team page is now grouped by action (1:1 with Billie, call-out, listings review,

@@ -350,7 +350,7 @@ function TeamPage({ t, d }) {
     people: t.people.filter((p) => p.keys.includes(key)) })).filter((x) => x.people.length);
   const box = <span style={{ display: 'inline-block', width: 13, height: 13, border: '1.5px solid ' + INK, borderRadius: 2 }} />;
   return (
-    <div className="bd-page" style={{ width: 794, minHeight: 1000, boxSizing: 'border-box', padding: '44px 52px', background: '#fff', color: INK, fontFamily: sans, boxShadow: '0 2px 18px rgba(0,0,0,.18)' }}>
+    <div className="bd-page" data-for={JSON.stringify(t.managers)} data-name={t.team} style={{ width: 794, minHeight: 1000, boxSizing: 'border-box', padding: '44px 52px', background: '#fff', color: INK, fontFamily: sans, boxShadow: '0 2px 18px rgba(0,0,0,.18)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid ' + LINE, paddingBottom: 14 }}>
         <img src="/apex-logo.svg" alt="Apex Homes DXB" style={{ height: 30 }} />
         <span style={{ fontSize: 11, letterSpacing: 2, color: GOLD, textTransform: 'uppercase' }}>Manager breakdown · {shortDate(d.today)}</span>
@@ -389,11 +389,12 @@ function TeamPage({ t, d }) {
 // Billie's overview: every flagged broker across the teams on one sheet, with who owns it, so next week he can tick off
 // whether each action got done
 function OverviewPage({ pages, d }) {
+  const tag = { 'data-for': JSON.stringify(['Billie']), 'data-name': 'Overview' };
   const rows = pages.flatMap((t) => t.people.map((p) => ({ ...p, team: t.team, owner: t.managers.join(' / ') || '–' })));
   const short = { calls: 'Call-out', pitch: 'Owner pitch', listings: 'Listings review', leads: 'Lead follow-up / CRM', closing: 'Closing', nodeal: '1:1 with Billie', nolisting: 'Listing plan' };
   const ovGrid = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 2fr) 34px', gap: 10, padding: '7px 0', fontSize: 12, lineHeight: 1.35, alignItems: 'start', overflowWrap: 'anywhere' };
   return (
-    <div className="bd-page" style={{ width: 794, minHeight: 1000, boxSizing: 'border-box', padding: '44px 52px', background: '#fff', color: INK, fontFamily: sans, boxShadow: '0 2px 18px rgba(0,0,0,.18)' }}>
+    <div className="bd-page" {...tag} style={{ width: 794, minHeight: 1000, boxSizing: 'border-box', padding: '44px 52px', background: '#fff', color: INK, fontFamily: sans, boxShadow: '0 2px 18px rgba(0,0,0,.18)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid ' + LINE, paddingBottom: 14 }}>
         <img src="/apex-logo.svg" alt="Apex Homes DXB" style={{ height: 30 }} />
         <span style={{ fontSize: 11, letterSpacing: 2, color: GOLD, textTransform: 'uppercase' }}>Manager breakdown · {shortDate(d.today)}</span>
@@ -420,6 +421,42 @@ function OverviewPage({ pages, d }) {
     </div>);
 }
 
+// One PDF per person, zipped: Billie gets the overview, each manager their team's page (joint managers get a copy each).
+// Pages are photographed in the browser and cut into A4 sheets between rows, never through one.
+async function zipPerPerson(root, today) {
+  const [{ default: html2canvas }, { jsPDF }, { default: JSZip }] = await Promise.all([import('html2canvas-pro'), import('jspdf'), import('jszip')]);
+  const zip = new JSZip();
+  const A4W = 794, A4H = 1123, M = 40;          // CSS px at 96dpi; M = top/bottom margin on continuation sheets
+  for (const el of root.querySelectorAll('.bd-page')) {
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    const k = canvas.width / el.offsetWidth;
+    const top0 = el.getBoundingClientRect().top;
+    const cuts = [...el.querySelectorAll('.bd-row')].map((r) => r.getBoundingClientRect().bottom - top0);
+    const pdf = new jsPDF({ unit: 'px', format: [A4W, A4H], hotfixes: ['px_scaling'] });
+    let y = 0, first = true;
+    while (y < el.offsetHeight - 1) {
+      const room = first ? A4H : A4H - 2 * M;
+      let end = Math.min(el.offsetHeight, y + room);
+      if (end < el.offsetHeight) { const ok = cuts.filter((c) => c > y + 40 && c <= end); if (ok.length) end = ok[ok.length - 1]; }
+      const part = document.createElement('canvas');
+      part.width = canvas.width; part.height = Math.round((end - y) * k);
+      part.getContext('2d').drawImage(canvas, 0, Math.round(y * k), canvas.width, part.height, 0, 0, canvas.width, part.height);
+      if (!first) pdf.addPage([A4W, A4H]);
+      pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', 0, first ? 0 : M, A4W, end - y);
+      y = end; first = false;
+    }
+    const blob = pdf.output('blob');
+    const who = JSON.parse(el.dataset.for || '[]');
+    const files = who.length ? who.map((n) => `${n} - ${el.dataset.name}`) : [el.dataset.name];
+    for (const f of files) zip.file(`${f} - ${today}.pdf`.replace(/[\\/:*?"<>|]/g, ''), blob);
+  }
+  const out = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(out); a.download = `Manager breakdown ${today}.zip`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
 export function Breakdown({ api, team, onClose }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
@@ -434,6 +471,13 @@ export function Breakdown({ api, team, onClose }) {
   }, [api, team]);
   useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
   const pages = d ? breakdown(d) : [];
+  const listRef = React.useRef(null);
+  const [zipping, setZipping] = useState(false);
+  const zipIt = async () => {
+    setZipping(true);
+    try { await zipPerPerson(listRef.current, d.today); } catch (e) { setErr('Could not make the zip: ' + e.message); }
+    setZipping(false);
+  };
   const download = () => {
     const was = document.title;
     document.title = `Manager breakdown ${d.today}${d.team ? ' - ' + d.team : ''}`;
@@ -446,11 +490,12 @@ export function Breakdown({ api, team, onClose }) {
         <div className="sl-bar" style={{ maxWidth: 794, flexWrap: 'nowrap' }}>
           <span className="muted sl-hint">{d ? `Figures as of ${hm(d.builtAt)} · Kendal synced ${hm(d.feeds?.map((f) => f.finished).filter(Boolean).sort()[0])}` : err ? '' : stage}</span>
           <span className="grow" />
-          <button type="button" className="ops-btn primary" disabled={!d} onClick={download}>Download PDF</button>
+          <button type="button" className="ops-btn primary" disabled={!d || zipping} onClick={zipIt}>{zipping ? 'Making the zip…' : 'Zip, one per person'}</button>
+          <button type="button" className="ops-btn" disabled={!d} onClick={download}>One PDF</button>
           <button type="button" className="ops-btn" onClick={onClose}>Close</button>
         </div>
         {err ? <p className="err" style={{ maxWidth: 794, margin: '0 auto', background: 'var(--bg)', padding: 12, borderRadius: 8 }}>{err}</p> : null}
-        <div className="sl-list">{pages.length ? <OverviewPage pages={pages} d={d} /> : null}{pages.map((t) => <TeamPage key={t.team} t={t} d={d} />)}
+        <div className="sl-list" ref={listRef}>{pages.length ? <OverviewPage pages={pages} d={d} /> : null}{pages.map((t) => <TeamPage key={t.team} t={t} d={d} />)}
           {d && !pages.length ? <p style={{ background: 'var(--bg)', padding: 12, borderRadius: 8 }}>Nobody flagged this week.</p> : null}</div>
       </div>
     </div>, document.body);
