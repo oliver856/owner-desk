@@ -126,7 +126,7 @@ export async function slides(sc) {
   const callTarget = R.calls_a_day * R.working_days;
   const lowShare = R.low_stock_share ?? 0.5;
   const viewShare = R.viewings_low_share ?? 0.5;
-  const inGroup = (b, key) => (key === 'nolisting' ? b.noListing : key === 'nodeal' ? b.noDeal : b.flag === key);
+  const inGroup = (b, key) => (key === 'nolisting' ? b.noListing : key === 'nodeal' ? b.noDeal : key === 'leads' ? b.leadsGap : b.flag === key);
   const everyone = ppl.map((p) => {
     const kind = ['apartment', 'villa'].includes(p.type) ? p.type : null;   // off-plan and commercial aren't judged on stock
     const L = byBroker.get(p.email) || { live: 0, over: 0, low: 0, bad: 0, drops: 0, worst: null };
@@ -139,15 +139,18 @@ export async function slides(sc) {
     if (k && p.stock < k.stock * lowShare && p.calls < callTarget) flag = 'calls';
     else if (k && p.calls >= callTarget && p.listed < k.listed) flag = 'pitch';
     else if (k && L.live > 0 && L.bad >= Math.ceil(L.live * R.underperforming_share)) flag = 'listings';
-    else if (p.leads >= R.leads_week_high && lowViewings) flag = 'leads';
     else if (p.viewings30 >= R.viewings_30_high && p.deals30 === 0) flag = 'closing';
     // these two are on top of the first flag, so nobody drops off them for being in another session
     const noDeal = settled && p.deals60 === 0;
+    const leadsGap = p.leads >= R.leads_week_high && lowViewings;
     const noListing = !!k && p.listed_month === 0;
-    return { ...p, kind, k, ...L, worst: L.worst?.text || '', flag, noListing, noDeal,
+    return { ...p, kind, k, ...L, worst: L.worst?.text || '', flag, noListing, noDeal, leadsGap,
       met: { calls: p.calls >= callTarget, listed: k ? p.listed >= k.listed : null, stock: k ? p.stock >= k.stock : null, viewings: p.viewings >= R.viewings_week } };
   });
-  const brokers = everyone.filter((b) => !b.is_manager);
+  // people left out of the review by name or email (meeting_flags.exclude); Ahamed by default
+  const skip = (R.exclude ?? ['ahamed']).map((x) => String(x).toLowerCase());
+  const left = (b) => skip.some((x) => b.email === x || b.email.split('@')[0] === x || (b.name || '').toLowerCase() === x);
+  const brokers = everyone.filter((b) => !b.is_manager && !left(b));
 
   const order = (await sql`select name from ops.teams order by sort, name`).map((t) => t.name);
   const teams = [...new Set(brokers.map((b) => b.team || 'No team'))].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
@@ -196,7 +199,7 @@ export async function slides(sc) {
     today, month: mo, monthEnd, quarterStart: qs, quarterEnd, team,
     pace: { month: dayOfMonth / daysInMonth, quarter: qDay / qDays }, workingDaysLeft: wdLeft, monthsLeft,
     monthScore: month, quarterScore: quarter, monthDeals: mDeals,
-    rules: { ...R, low_stock_share: lowShare, viewings_low_share: viewShare }, callTarget, kpis, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag || b.noListing || b.noDeal).length, brokerCount: brokers.length,
+    rules: { ...R, low_stock_share: lowShare, viewings_low_share: viewShare }, callTarget, kpis, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag || b.noListing || b.noDeal || b.leadsGap).length, brokerCount: brokers.length,
     health, worst, priceFrom: priceFrom || null,
     lastWeek: acts.filter((a) => a.week < thisWeek && !isIssue(a)).map(clean),
     issues: acts.filter((a) => a.week === thisWeek && isIssue(a)).map(clean),

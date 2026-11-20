@@ -4,6 +4,14 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-20 · Meeting slides: Ahamed out, lead follow-up for everyone
+
+- **Changed** `api/_lib/slides.js`, `src/ops/Slides.jsx`:
+  - Ahamed is left out of the review (`exclude` in `mkt.settings 'meeting_flags'`, by name or email).
+  - Lead follow-up / CRM compliance now lists everyone with 10+ leads and under 5 viewings, on top of any other flag.
+  - Underperforming listings slide: no worst listing column. Flags slide rows a little tighter so all 7 fit.
+- History: `history/slides.2026-11-20-v4.js`, `history/Slides.2026-11-20-v4.jsx`. No SQL to run.
+
 ## 2026-11-20 · Meeting slides: leads, viewings and no-deal fixes
 
 - **Changed** `api/_lib/slides.js`, `src/ops/Slides.jsx`:

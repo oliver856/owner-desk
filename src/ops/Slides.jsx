@@ -66,7 +66,7 @@ function Table({ cols, rows, head, dense }) {
         {(head || cols.map((c) => c.label)).map((h, i) => <span key={i} style={{ textAlign: cols[i].num ? 'right' : cols[i].center ? 'center' : 'left' }}>{h}</span>)}
       </div>
       {rows.map((r, j) => (
-        <div key={j} style={{ display: 'grid', gridTemplateColumns: grid, gap: 16, padding: dense ? '8px 16px' : '12px 16px', fontSize: 16, alignItems: 'center', borderBottom: j === rows.length - 1 ? 'none' : '1px solid ' + LINE }}>
+        <div key={j} style={{ display: 'grid', gridTemplateColumns: grid, gap: 16, padding: dense ? '6px 16px' : '12px 16px', fontSize: 16, alignItems: 'center', borderBottom: j === rows.length - 1 ? 'none' : '1px solid ' + LINE }}>
           {cols.map((c, i) => <span key={i} style={{ textAlign: c.num ? 'right' : c.center ? 'center' : 'left', fontVariantNumeric: c.num ? 'tabular-nums' : undefined, minWidth: 0 }}>{c.render(r)}</span>)}
         </div>))}
     </Card>);
@@ -160,11 +160,11 @@ function deck(d) {
 
   const RULES = {
     calls: `Stock under ${Math.ceil(R0.stock.apartment * R0.low_stock_share)} apt / ${Math.ceil(R0.stock.villa * R0.low_stock_share)} villa and under ${R0.calls_a_day} calls a day`, pitch: `${R0.calls_a_day}+ calls a day, new listings under KPI`,
-    listings: `Half their listings overpriced or under ${R0.low_leads} leads in ${R0.low_leads_days} days`, leads: `${R0.leads_week_high}+ leads this week, under ${Math.ceil(R0.viewings_week * R0.viewings_low_share)} viewings logged`,
+    listings: `Half their listings overpriced or under ${R0.low_leads} leads in ${R0.low_leads_days} days`, leads: `${R0.leads_week_high}+ leads, under ${Math.ceil(R0.viewings_week * R0.viewings_low_share)} viewings logged · on top of any other flag`,
     closing: `${R0.viewings_30_high}+ viewings in 30 days, no deal in 30 days`, nodeal: `Here ${R0.no_deal_days}+ days, no deal in ${R0.no_deal_days} · on top of any other flag`,
     nolisting: `Nothing live since 1 ${month} · on top of any other flag`,
   };
-  add('flags', "What's working and what isn't", `${d.flagged} broker${d.flagged === 1 ? '' : 's'} flagged. Each goes into one group session, plus the no-deal and no-listing lists.`, (
+  add('flags', "What's working and what isn't", `${d.flagged} broker${d.flagged === 1 ? '' : 's'} flagged. Each goes into one group session, plus any of flags 4, 6 and 7.`, (
     <Table dense head={['Flag · each broker gets the first one in their funnel', ...d.flagTeams, 'Group session']}
       cols={[{ w: 'minmax(0, 2.6fr)', render: (g) => <span><b style={{ fontWeight: 600 }}>{g.i}. {g.name}</b><span style={{ display: 'block', fontSize: 13, color: MUT }}>{RULES[g.key]}</span></span> },
         ...d.flagTeams.map((_, t) => ({ w: 'minmax(0, 0.7fr)', center: true, render: (g) => { const v = d.flagByTeam[g.i - 1][t]; return <span style={{ fontSize: 18, fontWeight: v ? 600 : 400, color: v ? R[0] : '#b5b5b5' }}>{v || '–'}</span>; } })),
@@ -199,8 +199,7 @@ function deck(d) {
         more ? `${g.name}. ${g.brokers.length} brokers.` : `${g.name}. ${g.brokers.length} broker${g.brokers.length === 1 ? '' : 's'}. ${SUBS[g.key]}`, (
         <Table cols={[{ label: 'Broker', w: 'minmax(0, 1.1fr)', render: (b) => <b style={{ fontWeight: 600 }}>{b.name}</b> },
           { label: 'Team', w: 'minmax(0, 1.4fr)', render: (b) => <span style={{ color: MUT, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[b.team, b.type ? b.type[0].toUpperCase() + b.type.slice(1) : ''].filter(Boolean).join(' · ')}</span> },
-          ...extra.map(([label, f]) => ({ label, num: true, w: 'minmax(0, 0.7fr)', render: f })),
-          ...(g.key === 'listings' ? [{ label: 'Worst listing', w: 'minmax(0, 2.2fr)', render: (b) => <span style={{ fontSize: 14, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.worst}</span> }] : [])]}
+          ...extra.map(([label, f]) => ({ label, num: true, w: 'minmax(0, 0.7fr)', render: f }))]}
           rows={part} />));
     }
   });
