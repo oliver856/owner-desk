@@ -169,7 +169,7 @@ export async function slides(sc) {
   };
 
   const groups = FLAGS.map(([key, name, session]) => ({ key, name, session,
-    brokers: brokers.filter((b) => inGroup(b, key)).map((b) => ({ name: b.name, team: b.team, type: b.type, stock: b.stock, stockTarget: b.k?.stock ?? null,
+    brokers: brokers.filter((b) => inGroup(b, key)).map((b) => ({ id: b.email, name: b.name, team: b.team, type: b.type, stock: b.stock, stockTarget: b.k?.stock ?? null,
       listedMonth: b.listed_month, lastDeal: b.last_deal,
       callsPerDay: Math.round(b.calls / R.working_days), listed: b.listed, listedTarget: b.k?.listed ?? null, leads: b.leads, viewings: b.viewings,
       viewings30: b.viewings30, live: b.live, bad: b.bad, over: b.over, low: b.low, worst: b.worst })) }));
@@ -188,6 +188,12 @@ export async function slides(sc) {
     .map((l) => ({ building: l.building, beds: l.beds, kind: l.kind, purpose: l.purpose, listed: l.listed, target: l.target, gap: l.gap,
                    broker: everyone.find((b) => b.email === l.email)?.name || '' }));
 
+  // ── Manager breakdown: who runs each team, and how fresh the Kendal figures are ──
+  const managers = teams.map((t) => ({ team: t,
+    names: everyone.filter((b) => b.is_manager && !left(b) && (b.team || 'No team') === t).map((b) => b.name) }));
+  const feeds = await sql`select endpoint as feed, last_finished::text as finished from ops.sync_state where endpoint <> '_lock' order by endpoint`.catch(() => []);
+  const [cache] = await sql`select max(refreshed_at)::text as at from mkt.listing_check_cache`.catch(() => [{}]);
+
   // ── Actions and issues ──
   const thisWeek = mondayOf(today);
   const acts = await sql`select a.body, a.owner, a.due::text, a.week::text, a.done_at is not null as done
@@ -200,7 +206,7 @@ export async function slides(sc) {
     pace: { month: dayOfMonth / daysInMonth, quarter: qDay / qDays }, workingDaysLeft: wdLeft, monthsLeft,
     monthScore: month, quarterScore: quarter, monthDeals: mDeals,
     rules: { ...R, low_stock_share: lowShare, viewings_low_share: viewShare }, callTarget, kpis, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag || b.noListing || b.noDeal || b.leadsGap).length, brokerCount: brokers.length,
-    health, worst, priceFrom: priceFrom || null,
+    health, worst, priceFrom: priceFrom || null, managers, feeds, priceCheckAt: cache?.at || null, builtAt: new Date().toISOString(),
     lastWeek: acts.filter((a) => a.week < thisWeek && !isIssue(a)).map(clean),
     issues: acts.filter((a) => a.week === thisWeek && isIssue(a)).map(clean),
     actions: acts.filter((a) => a.week === thisWeek && !isIssue(a)).map(clean),

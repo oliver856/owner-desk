@@ -189,7 +189,7 @@ function deck(d) {
     nodeal: 'No deal in the last 60 days. A 1:1 with Billie, not a group session.',
     nolisting: 'Nothing new live this month. Each one leaves with a listing plan and a date for their manager.',
   };
-  const PER = 8;   // brokers per group slide; a bigger group carries on onto another slide
+  const PER = 7;   // brokers per group slide; a bigger group carries on onto another slide
   groups.forEach((g) => {
     const n = d.groups.indexOf(g) + 1;
     const extra = groupCols[g.key];
@@ -283,6 +283,158 @@ export default function Slides({ api, team, onClose }) {
         <div className="sl-zoom"><div className="sl-list">
           {slides.map((s, i) => <Slide key={s.key} i={i + 1} n={slides.length} date={d.today} title={s.title} sub={s.sub}>{s.body}</Slide>)}
         </div></div>
+      </div>
+    </div>, document.body);
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manager breakdown: one A4 page per team, every flagged broker on it with what their manager needs to do and the
+// numbers behind it. Same figures as the slides. Opening it refreshes the listing price check first, so it is current.
+// ─────────────────────────────────────────────────────────────────────────────
+const BD_CSS = `
+@media print{
+  @page{size:A4 portrait;margin:14mm}
+  html,body{background:#fff!important}
+  body>*:not(.sl-print){display:none!important}
+  .sl-print .sl-scrim{position:static;background:none;padding:0;overflow:visible}
+  .sl-print .sl-bar,.sl-print .sl-hint{display:none!important}
+  .sl-print .sl-list{display:block}
+  .bd-page{box-shadow:none!important;width:auto!important;padding:0!important;break-after:page;page-break-after:always;margin:0!important}
+  .bd-page:last-child{break-after:auto;page-break-after:auto}
+  .bd-row{break-inside:avoid}
+}`;
+
+// What each flag asks of the manager, with that broker's own numbers
+function actionFor(key, b, d) {
+  const R0 = d.rules, mo = monthName(d.today);
+  switch (key) {
+    case 'calls': return ['Call-out session', `${b.callsPerDay} calls a day against ${R0.calls_a_day}, stock ${b.stock} of ${b.stockTarget}. Get them on the phones in the supervised power hour.`];
+    case 'pitch': return ['Owner pitch session', `Calling ${b.callsPerDay} a day but ${b.listed} new listing${b.listed === 1 ? '' : 's'} this week against ${b.listedTarget}. Listen to their calls and work on the pitch.`];
+    case 'listings': return ['Underperforming listings', `${b.bad} of ${b.live} live listings underperforming (${b.over} priced over the market, ${b.low} under ${R0.low_leads} leads in ${R0.low_leads_days} days). Go through title, photos, price and spend with them.`];
+    case 'leads': return ['Lead follow-up / CRM', `${b.leads} leads this week, ${b.viewings} viewing${b.viewings === 1 ? '' : 's'} logged. Check Kendal first in case viewings aren't being logged, then response time and booking on the first call.`];
+    case 'closing': return ['Closing session', `${b.viewings30} viewings in 30 days and no deal. Go through their last few viewings and where they stalled.`];
+    case 'nodeal': return ['1:1 with Billie', b.lastDeal ? `No deal since ${dayYear(b.lastDeal)}. Book the 1:1.` : 'No deal on record in the last 60 days. Book the 1:1.'];
+    case 'nolisting': return ['Listing plan', `Nothing new live since 1 ${mo}, stock ${b.stock} of ${b.stockTarget}. Agree a listing plan and a date.`];
+    default: return [key, ''];
+  }
+}
+
+function breakdown(d) {
+  const people = new Map();
+  d.groups.forEach((g) => g.brokers.forEach((b) => {
+    const k = b.id || b.name;
+    if (!people.has(k)) people.set(k, { ...b, keys: [] });
+    people.get(k).keys.push(g.key);
+  }));
+  const byTeam = d.flagTeams.map((t) => ({ team: t, managers: d.managers?.find((m) => m.team === t)?.names || [],
+    people: [...people.values()].filter((p) => (p.team || 'No team') === t).sort((a, b) => b.keys.length - a.keys.length || a.name.localeCompare(b.name)) }))
+    .filter((t) => t.people.length);
+  return byTeam;
+}
+
+const hm = (s) => (s ? new Date(s).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–');
+
+function TeamPage({ t, d }) {
+  const sessions = {};
+  t.people.forEach((p) => p.keys.forEach((k) => { sessions[k] = (sessions[k] || 0) + 1; }));
+  return (
+    <div className="bd-page" style={{ width: 794, minHeight: 1000, boxSizing: 'border-box', padding: '44px 52px', background: '#fff', color: INK, fontFamily: sans, boxShadow: '0 2px 18px rgba(0,0,0,.18)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid ' + LINE, paddingBottom: 14 }}>
+        <img src="/apex-logo.svg" alt="Apex Homes DXB" style={{ height: 30 }} />
+        <span style={{ fontSize: 11, letterSpacing: 2, color: GOLD, textTransform: 'uppercase' }}>Manager breakdown · {shortDate(d.today)}</span>
+      </div>
+      <h1 style={{ fontFamily: jost, fontWeight: 400, fontSize: 30, margin: '22px 0 2px' }}>{t.team}</h1>
+      <p style={{ margin: 0, color: MUT, fontSize: 14 }}>
+        {t.managers.length ? 'For ' + t.managers.join(' and ') + '. ' : ''}{t.people.length} broker{t.people.length === 1 ? '' : 's'} to action this week.
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '14px 0 18px' }}>
+        {Object.entries(sessions).map(([k, n]) => <Pill key={k} c={GREY}>{actionFor(k, {}, d)[0]}: {n}</Pill>)}
+      </div>
+      {t.people.map((p) => (
+        <div key={p.id || p.name} className="bd-row" style={{ borderTop: '1px solid ' + LINE, padding: '12px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+            <b style={{ fontSize: 16, fontWeight: 600 }}>{p.name}</b>
+            <span style={{ fontSize: 12, color: MUT, whiteSpace: 'nowrap' }}>{p.type ? p.type[0].toUpperCase() + p.type.slice(1) + ' · ' : ''}{p.callsPerDay} calls a day · {p.viewings} viewing{p.viewings === 1 ? '' : 's'} · {p.leads} lead{p.leads === 1 ? '' : 's'} this week</span>
+          </div>
+          {p.keys.map((k) => { const [what, why] = actionFor(k, p, d); return (
+            <div key={k} style={{ display: 'grid', gridTemplateColumns: '170px 1fr', gap: 12, marginTop: 6, fontSize: 13.5, lineHeight: 1.45 }}>
+              <span style={{ fontWeight: 600, color: R[0] }}>{what}</span><span>{why}</span>
+            </div>); })}
+          <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', gap: 12, marginTop: 6, fontSize: 13.5, color: MUT }}>
+            <span>Done by</span><span style={{ borderBottom: '1px dotted ' + MUT, height: 16 }} />
+          </div>
+        </div>))}
+    </div>);
+}
+
+// Billie's overview: every flagged broker across the teams on one sheet, with who owns it, so next week he can tick off
+// whether each action got done
+function OverviewPage({ pages, d }) {
+  const rows = pages.flatMap((t) => t.people.map((p) => ({ ...p, team: t.team, owner: t.managers.join(' / ') || '–' })));
+  const short = { calls: 'Call-out', pitch: 'Owner pitch', listings: 'Listings review', leads: 'Lead follow-up / CRM', closing: 'Closing', nodeal: '1:1 with Billie', nolisting: 'Listing plan' };
+  const cell = { padding: '7px 8px', borderBottom: '1px solid ' + LINE, verticalAlign: 'top' };
+  return (
+    <div className="bd-page" style={{ width: 794, minHeight: 1000, boxSizing: 'border-box', padding: '44px 52px', background: '#fff', color: INK, fontFamily: sans, boxShadow: '0 2px 18px rgba(0,0,0,.18)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid ' + LINE, paddingBottom: 14 }}>
+        <img src="/apex-logo.svg" alt="Apex Homes DXB" style={{ height: 30 }} />
+        <span style={{ fontSize: 11, letterSpacing: 2, color: GOLD, textTransform: 'uppercase' }}>Manager breakdown · {shortDate(d.today)}</span>
+      </div>
+      <h1 style={{ fontFamily: jost, fontWeight: 400, fontSize: 30, margin: '22px 0 2px' }}>Overview for Billie</h1>
+      <p style={{ margin: '0 0 16px', color: MUT, fontSize: 14 }}>
+        {rows.length} brokers to action across {pages.length} team{pages.length === 1 ? '' : 's'}. Check each one off at next Friday's meeting.
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+        {pages.map((t) => <Pill key={t.team} c={GREY}>{t.team}: {t.people.length}{t.managers.length ? ' · ' + t.managers.join(' / ') : ''}</Pill>)}
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+        <thead><tr style={{ color: MUT, textAlign: 'left' }}>
+          {['Broker', 'Team', 'Manager', 'Actions', 'Done'].map((h) => <th key={h} style={{ ...cell, fontWeight: 500, borderBottom: '1px solid ' + INK }}>{h}</th>)}
+        </tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={(r.id || r.name) + r.team} className="bd-row">
+            <td style={{ ...cell, fontWeight: 600 }}>{r.name}</td>
+            <td style={{ ...cell, color: MUT, whiteSpace: 'nowrap' }}>{r.team}</td>
+            <td style={{ ...cell, color: MUT }}>{r.owner}</td>
+            <td style={cell}>{r.keys.map((k) => short[k] || k).join(', ')}</td>
+            <td style={{ ...cell, width: 54 }}><span style={{ display: 'inline-block', width: 14, height: 14, border: '1px solid ' + MUT, borderRadius: 2 }} /></td>
+          </tr>))}</tbody>
+      </table>
+    </div>);
+}
+
+export function Breakdown({ api, team, onClose }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState('');
+  const [stage, setStage] = useState('Refreshing the listing price check…');
+  useEffect(() => {
+    let live = true;
+    // fresh numbers: rebuild the price check cache first (skipped quietly if one is already running), then the figures
+    api('/api/listings', { method: 'POST', body: { action: 'refresh' } }).catch(() => null)
+      .then(() => { if (live) setStage('Working out this week\'s figures…'); return api('/api/ops?action=slides' + (team ? '&team=' + encodeURIComponent(team) : '')); })
+      .then((x) => live && setD(x)).catch((e) => live && setErr(e.message));
+    return () => { live = false; };
+  }, [api, team]);
+  useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
+  const pages = d ? breakdown(d) : [];
+  const download = () => {
+    const was = document.title;
+    document.title = `Manager breakdown ${d.today}${d.team ? ' - ' + d.team : ''}`;
+    window.print();
+    setTimeout(() => { document.title = was; }, 500);
+  };
+  return createPortal(
+    <div className="sl-print"><style>{CSS + BD_CSS}</style>
+      <div className="sl-scrim">
+        <div className="sl-bar" style={{ maxWidth: 794 }}>
+          <span className="muted sl-hint">{d ? `Billie's overview + ${pages.length} team${pages.length === 1 ? '' : 's'} · figures as of ${hm(d.builtAt)} · Kendal synced ${hm(d.feeds?.map((f) => f.finished).filter(Boolean).sort()[0])} · prices checked ${hm(d.priceCheckAt)}` : err ? '' : stage}</span>
+          <span className="grow" />
+          <button type="button" className="ops-btn primary" disabled={!d} onClick={download}>Download PDF</button>
+          <button type="button" className="ops-btn" onClick={onClose}>Close</button>
+        </div>
+        {err ? <p className="err" style={{ maxWidth: 794, margin: '0 auto', background: 'var(--bg)', padding: 12, borderRadius: 8 }}>{err}</p> : null}
+        <div className="sl-list">{pages.length ? <OverviewPage pages={pages} d={d} /> : null}{pages.map((t) => <TeamPage key={t.team} t={t} d={d} />)}
+          {d && !pages.length ? <p style={{ background: 'var(--bg)', padding: 12, borderRadius: 8 }}>Nobody flagged this week.</p> : null}</div>
       </div>
     </div>, document.body);
 }

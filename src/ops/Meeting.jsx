@@ -6,6 +6,7 @@ import { Answer, ASK_CSS, printAnswer, downloadTables, tablesIn } from './Ask.js
 
 // The Friday slides load only when opened
 const Slides = React.lazy(() => import('./Slides.jsx'));
+const Breakdown = React.lazy(() => import('./Slides.jsx').then((m) => ({ default: m.Breakdown })));
 
 const CSS = `
 .mt-reports{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -29,6 +30,7 @@ export default function Meeting({ api, team, teams, all }) {
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
   const [slides, setSlides] = useState(false);
+  const [breakdown, setBreakdown] = useState(false);
   const card = useRef(null);
   const post = (body) => api('/api/ops' + (team ? '?team=' + encodeURIComponent(team) : ''), { method: 'POST', body });
   useEffect(() => { if (d && !open && d.reports[0]) openReport(d.reports[0].id); }, [d?.reports?.[0]?.id]);
@@ -54,9 +56,11 @@ export default function Meeting({ api, team, teams, all }) {
       <Section title="Meeting slides" aside="This week's real figures, for the TV and to send round">
         <div className="ops-acts">
           <Btn primary onClick={() => setSlides(true)}>Download slides</Btn>
+          <Btn onClick={() => setBreakdown(true)}>Manager breakdown</Btn>
           <span className="muted">Scorecards, KPIs, flagged brokers by group session, listings health, and the issues and actions below. Start an action with "Issue:" to show it as an issue.</span>
         </div>
         {slides && <React.Suspense fallback={null}><Slides api={api} team={team} onClose={() => setSlides(false)} /></React.Suspense>}
+        {breakdown && <React.Suspense fallback={null}><Breakdown api={api} team={team} onClose={() => setBreakdown(false)} /></React.Suspense>}
       </Section>
 
       <Section title="Weekly report" aside="Saved here each time one is made">
