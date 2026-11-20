@@ -10,7 +10,8 @@ of every file, so any change can be rolled back by reverting its commit.
   one A4 page per team for its managers, every flagged broker with what to action and their own numbers, a "done by"
   line each. Opening it rebuilds the listing price check first, then works the figures out fresh.
 - The first page is Billie's overview: every flagged broker across the teams, their manager, their actions and a
-  Done box, to check off at the next Friday meeting.
+  Done box, to check off at the next Friday meeting. Built from divs, not a table, so the Desk's table styles
+  can't stretch it off the page.
 - `api/_lib/slides.js` also returns each team's managers, Kendal sync times and when prices were last checked.
 - Group slides now hold 7 brokers so the last row doesn't run into the footer.
 - History: `history/slides.2026-11-20-v5.js`, `history/Slides.2026-11-20-v5.jsx`, `history/Meeting.2026-11-20-v5.jsx`. No SQL.

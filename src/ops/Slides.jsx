@@ -373,7 +373,7 @@ function TeamPage({ t, d }) {
 function OverviewPage({ pages, d }) {
   const rows = pages.flatMap((t) => t.people.map((p) => ({ ...p, team: t.team, owner: t.managers.join(' / ') || '–' })));
   const short = { calls: 'Call-out', pitch: 'Owner pitch', listings: 'Listings review', leads: 'Lead follow-up / CRM', closing: 'Closing', nodeal: '1:1 with Billie', nolisting: 'Listing plan' };
-  const cell = { padding: '7px 8px', borderBottom: '1px solid ' + LINE, verticalAlign: 'top' };
+  const ovGrid = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 2fr) 34px', gap: 10, padding: '7px 0', fontSize: 12, lineHeight: 1.35, alignItems: 'start', overflowWrap: 'anywhere' };
   return (
     <div className="bd-page" style={{ width: 794, minHeight: 1000, boxSizing: 'border-box', padding: '44px 52px', background: '#fff', color: INK, fontFamily: sans, boxShadow: '0 2px 18px rgba(0,0,0,.18)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid ' + LINE, paddingBottom: 14 }}>
@@ -387,19 +387,18 @@ function OverviewPage({ pages, d }) {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
         {pages.map((t) => <Pill key={t.team} c={GREY}>{t.team}: {t.people.length}{t.managers.length ? ' · ' + t.managers.join(' / ') : ''}</Pill>)}
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-        <thead><tr style={{ color: MUT, textAlign: 'left' }}>
-          {['Broker', 'Team', 'Manager', 'Actions', 'Done'].map((h) => <th key={h} style={{ ...cell, fontWeight: 500, borderBottom: '1px solid ' + INK }}>{h}</th>)}
-        </tr></thead>
-        <tbody>{rows.map((r) => (
-          <tr key={(r.id || r.name) + r.team} className="bd-row">
-            <td style={{ ...cell, fontWeight: 600 }}>{r.name}</td>
-            <td style={{ ...cell, color: MUT, whiteSpace: 'nowrap' }}>{r.team}</td>
-            <td style={{ ...cell, color: MUT }}>{r.owner}</td>
-            <td style={cell}>{r.keys.map((k) => short[k] || k).join(', ')}</td>
-            <td style={{ ...cell, width: 54 }}><span style={{ display: 'inline-block', width: 14, height: 14, border: '1px solid ' + MUT, borderRadius: 2 }} /></td>
-          </tr>))}</tbody>
-      </table>
+      {/* divs, not a <table>: the Desk's own table styles would stretch it past the page */}
+      <div style={{ ...ovGrid, color: MUT, fontWeight: 500, borderBottom: '1px solid ' + INK }}>
+        {['Broker', 'Team', 'Manager', 'Actions', 'Done'].map((h) => <span key={h}>{h}</span>)}
+      </div>
+      {rows.map((r) => (
+        <div key={(r.id || r.name) + r.team} className="bd-row" style={{ ...ovGrid, borderBottom: '1px solid ' + LINE }}>
+          <span style={{ fontWeight: 600 }}>{r.name}</span>
+          <span style={{ color: MUT }}>{r.team}</span>
+          <span style={{ color: MUT }}>{r.owner}</span>
+          <span>{r.keys.map((k) => short[k] || k).join(', ')}</span>
+          <span><span style={{ display: 'inline-block', width: 13, height: 13, border: '1px solid ' + MUT, borderRadius: 2 }} /></span>
+        </div>))}
     </div>);
 }
 
@@ -426,8 +425,8 @@ export function Breakdown({ api, team, onClose }) {
   return createPortal(
     <div className="sl-print"><style>{CSS + BD_CSS}</style>
       <div className="sl-scrim">
-        <div className="sl-bar" style={{ maxWidth: 794 }}>
-          <span className="muted sl-hint">{d ? `Billie's overview + ${pages.length} team${pages.length === 1 ? '' : 's'} · figures as of ${hm(d.builtAt)} · Kendal synced ${hm(d.feeds?.map((f) => f.finished).filter(Boolean).sort()[0])} · prices checked ${hm(d.priceCheckAt)}` : err ? '' : stage}</span>
+        <div className="sl-bar" style={{ maxWidth: 794, flexWrap: 'nowrap' }}>
+          <span className="muted sl-hint">{d ? `Figures as of ${hm(d.builtAt)} · Kendal synced ${hm(d.feeds?.map((f) => f.finished).filter(Boolean).sort()[0])}` : err ? '' : stage}</span>
           <span className="grow" />
           <button type="button" className="ops-btn primary" disabled={!d} onClick={download}>Download PDF</button>
           <button type="button" className="ops-btn" onClick={onClose}>Close</button>
