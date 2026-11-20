@@ -4,6 +4,13 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-20 · Manager breakdown laid out by action
+
+- **Changed** `src/ops/Slides.jsx`: each team page is now grouped by action (1:1 with Billie, call-out, listings review,
+  lead follow-up / CRM, listing plan…). Each says once what to do, then lists the brokers with a tick box, only the
+  numbers that matter, and a Done line. A row of counts at the top shows the size of each job.
+- History: `history/Slides.2026-11-20-v6.jsx`. No SQL.
+
 ## 2026-11-20 · Manager breakdown
 
 - **Added** "Manager breakdown" button on the Meeting page (`src/ops/Meeting.jsx`, `Breakdown` in `src/ops/Slides.jsx`):

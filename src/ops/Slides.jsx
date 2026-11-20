@@ -305,20 +305,29 @@ const BD_CSS = `
   .bd-row{break-inside:avoid}
 }`;
 
-// What each flag asks of the manager, with that broker's own numbers
-function actionFor(key, b, d) {
-  const R0 = d.rules, mo = monthName(d.today);
+// Each action as a manager works it: what to do once, then every broker it applies to with only the numbers that matter
+const ACTIONS = [
+  ['nodeal', '1:1 with Billie', 'No deal in 60 days. Book the 1:1 this week.'],
+  ['calls', 'Call-out session', (R0) => `Low stock and not calling. Into the supervised power hour; the target is ${R0.calls_a_day} calls a day.`],
+  ['pitch', 'Owner pitch session', 'Calling enough but not winning listings. Listen to their calls and fix the pitch.'],
+  ['listings', 'Listings review', 'Sit down with them and go through each listing: title, photos, price and portal spend.'],
+  ['leads', 'Lead follow-up / CRM', 'Check Kendal first: viewings may be happening and not logged. If not, it\'s response time and booking on the first call.'],
+  ['closing', 'Closing session', 'Plenty of viewings, no deal. Go through where the last few stalled.'],
+  ['nolisting', 'Listing plan', (R0, mo) => `Nothing new live since 1 ${mo}. Agree a listing plan and a date.`],
+];
+const facts = (key, b, d) => {
+  const R0 = d.rules;
   switch (key) {
-    case 'calls': return ['Call-out session', `${b.callsPerDay} calls a day against ${R0.calls_a_day}, stock ${b.stock} of ${b.stockTarget}. Get them on the phones in the supervised power hour.`];
-    case 'pitch': return ['Owner pitch session', `Calling ${b.callsPerDay} a day but ${b.listed} new listing${b.listed === 1 ? '' : 's'} this week against ${b.listedTarget}. Listen to their calls and work on the pitch.`];
-    case 'listings': return ['Underperforming listings', `${b.bad} of ${b.live} live listings underperforming (${b.over} priced over the market, ${b.low} under ${R0.low_leads} leads in ${R0.low_leads_days} days). Go through title, photos, price and spend with them.`];
-    case 'leads': return ['Lead follow-up / CRM', `${b.leads} leads this week, ${b.viewings} viewing${b.viewings === 1 ? '' : 's'} logged. Check Kendal first in case viewings aren't being logged, then response time and booking on the first call.`];
-    case 'closing': return ['Closing session', `${b.viewings30} viewings in 30 days and no deal. Go through their last few viewings and where they stalled.`];
-    case 'nodeal': return ['1:1 with Billie', b.lastDeal ? `No deal since ${dayYear(b.lastDeal)}. Book the 1:1.` : 'No deal on record in the last 60 days. Book the 1:1.'];
-    case 'nolisting': return ['Listing plan', `Nothing new live since 1 ${mo}, stock ${b.stock} of ${b.stockTarget}. Agree a listing plan and a date.`];
-    default: return [key, ''];
+    case 'calls': return [`${b.callsPerDay} calls a day`, `stock ${b.stock} / ${b.stockTarget}`];
+    case 'pitch': return [`${b.callsPerDay} calls a day`, `${b.listed} / ${b.listedTarget} new listings this week`];
+    case 'listings': return [`${b.bad} of ${b.live} listings`, b.over ? `${b.over} overpriced` : null, b.low ? `${b.low} under ${R0.low_leads} leads` : null].filter(Boolean);
+    case 'leads': return [`${b.leads} leads`, `${b.viewings} viewing${b.viewings === 1 ? '' : 's'} logged`];
+    case 'closing': return [`${b.viewings30} viewings in 30 days`, 'no deal'];
+    case 'nodeal': return [b.lastDeal ? `last deal ${dayYear(b.lastDeal)}` : 'no deal on record'];
+    case 'nolisting': return [`0 new this month`, `stock ${b.stock} / ${b.stockTarget}`];
+    default: return [];
   }
-}
+};
 
 function breakdown(d) {
   const people = new Map();
@@ -336,8 +345,10 @@ function breakdown(d) {
 const hm = (s) => (s ? new Date(s).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–');
 
 function TeamPage({ t, d }) {
-  const sessions = {};
-  t.people.forEach((p) => p.keys.forEach((k) => { sessions[k] = (sessions[k] || 0) + 1; }));
+  const mo = monthName(d.today);
+  const sections = ACTIONS.map(([key, title, how]) => ({ key, title, how: typeof how === 'function' ? how(d.rules, mo) : how,
+    people: t.people.filter((p) => p.keys.includes(key)) })).filter((x) => x.people.length);
+  const box = <span style={{ display: 'inline-block', width: 13, height: 13, border: '1.5px solid ' + INK, borderRadius: 2 }} />;
   return (
     <div className="bd-page" style={{ width: 794, minHeight: 1000, boxSizing: 'border-box', padding: '44px 52px', background: '#fff', color: INK, fontFamily: sans, boxShadow: '0 2px 18px rgba(0,0,0,.18)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid ' + LINE, paddingBottom: 14 }}>
@@ -346,24 +357,31 @@ function TeamPage({ t, d }) {
       </div>
       <h1 style={{ fontFamily: jost, fontWeight: 400, fontSize: 30, margin: '22px 0 2px' }}>{t.team}</h1>
       <p style={{ margin: 0, color: MUT, fontSize: 14 }}>
-        {t.managers.length ? 'For ' + t.managers.join(' and ') + '. ' : ''}{t.people.length} broker{t.people.length === 1 ? '' : 's'} to action this week.
+        {t.managers.length ? 'For ' + t.managers.join(' and ') + '. ' : ''}{t.people.length} broker{t.people.length === 1 ? '' : 's'}, {sections.reduce((a, x) => a + x.people.length, 0)} actions. Tick each one off when it's done.
       </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '14px 0 18px' }}>
-        {Object.entries(sessions).map(([k, n]) => <Pill key={k} c={GREY}>{actionFor(k, {}, d)[0]}: {n}</Pill>)}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${sections.length}, minmax(0, 1fr))`, gap: 8, margin: '16px 0 6px' }}>
+        {sections.map((x) => (
+          <div key={x.key} style={{ border: '1px solid ' + LINE, borderRadius: 4, padding: '8px 10px' }}>
+            <div style={{ fontSize: 22, fontWeight: 600 }}>{x.people.length}</div>
+            <div style={{ fontSize: 12, color: MUT }}>{x.title}</div>
+          </div>))}
       </div>
-      {t.people.map((p) => (
-        <div key={p.id || p.name} className="bd-row" style={{ borderTop: '1px solid ' + LINE, padding: '12px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-            <b style={{ fontSize: 16, fontWeight: 600 }}>{p.name}</b>
-            <span style={{ fontSize: 12, color: MUT, whiteSpace: 'nowrap' }}>{p.type ? p.type[0].toUpperCase() + p.type.slice(1) + ' · ' : ''}{p.callsPerDay} calls a day · {p.viewings} viewing{p.viewings === 1 ? '' : 's'} · {p.leads} lead{p.leads === 1 ? '' : 's'} this week</span>
+      {sections.map((x) => (
+        <div key={x.key} style={{ marginTop: 20 }}>
+          <div className="bd-row" style={{ borderBottom: '2px solid ' + INK, paddingBottom: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <b style={{ fontSize: 16, fontWeight: 600 }}>{x.title}</b>
+              <span style={{ fontSize: 12, color: MUT }}>{x.people.length} broker{x.people.length === 1 ? '' : 's'}</span>
+            </div>
+            <p style={{ margin: '3px 0 0', fontSize: 12.5, color: MUT }}>{x.how}</p>
           </div>
-          {p.keys.map((k) => { const [what, why] = actionFor(k, p, d); return (
-            <div key={k} style={{ display: 'grid', gridTemplateColumns: '170px 1fr', gap: 12, marginTop: 6, fontSize: 13.5, lineHeight: 1.45 }}>
-              <span style={{ fontWeight: 600, color: R[0] }}>{what}</span><span>{why}</span>
-            </div>); })}
-          <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr', gap: 12, marginTop: 6, fontSize: 13.5, color: MUT }}>
-            <span>Done by</span><span style={{ borderBottom: '1px dotted ' + MUT, height: 16 }} />
-          </div>
+          {x.people.map((p) => (
+            <div key={p.id || p.name} className="bd-row" style={{ display: 'grid', gridTemplateColumns: '20px minmax(0, 1.3fr) minmax(0, 2fr) 90px', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid ' + LINE, fontSize: 13 }}>
+              {box}
+              <span style={{ fontWeight: 600 }}>{p.name}</span>
+              <span style={{ color: MUT }}>{facts(x.key, p, d).join(' · ')}</span>
+              <span style={{ fontSize: 11, color: MUT, borderBottom: '1px dotted ' + MUT, paddingBottom: 2 }}>Done</span>
+            </div>))}
         </div>))}
     </div>);
 }
@@ -396,7 +414,7 @@ function OverviewPage({ pages, d }) {
           <span style={{ fontWeight: 600 }}>{r.name}</span>
           <span style={{ color: MUT }}>{r.team}</span>
           <span style={{ color: MUT }}>{r.owner}</span>
-          <span>{r.keys.map((k) => short[k] || k).join(', ')}</span>
+          <span>{ACTIONS.filter((a) => r.keys.includes(a[0])).map((a) => short[a[0]]).join(', ')}</span>
           <span><span style={{ display: 'inline-block', width: 13, height: 13, border: '1px solid ' + MUT, borderRadius: 2 }} /></span>
         </div>))}
     </div>);
