@@ -4,6 +4,17 @@ Every change to the Owner Desk is listed here, newest first. Each entry says wha
 anything that has to be done by hand (SQL to run, settings to add). The Git history holds every earlier version
 of every file, so any change can be rolled back by reverting its commit.
 
+## 2026-11-21 · Promotions tab
+
+- **Added** Management → Performance → Promotions (`src/ops/Promotions.jsx`, `promotions` in `api/_lib/ops-pages.js`,
+  route in `api/ops.js`, menu line in `src/Ops.jsx`). Each broker's level, GCI since they reached it, a bar to the
+  target and to fast-track (150%), months served against the window, and a status: Ready, Ready · fast-track,
+  Target hit (waiting on tenure) or AED left to go. Ready first. Follows the team picker.
+- **Migration 023** `ops.promotion_levels` (the FY2026 framework) and `ops.promotion_track` (level and the date it
+  counts from). People are loaded by a separate seed file that stays out of the repo.
+- History: `history/ops-pages.2026-11-21-before-promotions.js`, `history/ops.2026-11-21-before-promotions.js`,
+  `history/Ops.2026-11-21-before-promotions.jsx`.
+
 ## 2026-11-20 · Manager breakdown as a zip, one PDF per person
 
 - **Added** "Zip, one per person" on the Manager breakdown: Billie gets the overview, each manager their team's page

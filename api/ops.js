@@ -88,6 +88,7 @@ export default route(async (req, res, staff) => {
     const period = q.get('period') === 'month' ? 'month' : 'week';
     return res.json(await cached(key(v, period), () => pages.people(sc.team, period)));
   }
+  if (action === 'promotions') return res.json(await cached(key(v), () => pages.promotions(sc.team)));
   if (action === 'scorecard') {
     if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });
     const m = /^\d{4}-\d{2}$/.test(q.get('month') || '') ? q.get('month') + '-01' : null;

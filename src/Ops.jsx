@@ -17,6 +17,7 @@ import Meeting from './ops/Meeting.jsx';
 import Listings from './ops/Listings.jsx';
 import Leads from './ops/Leads.jsx';
 import People from './ops/People.jsx';
+import Promotions from './ops/Promotions.jsx';
 import Deals from './ops/Deals.jsx';
 import Money from './ops/Money.jsx';
 import Ask from './ops/Ask.jsx';
@@ -28,6 +29,7 @@ const PAGES = [
   ['This week', 'ask', 'Ask', Ask, true],
   ['Performance', 'scorecard', 'Scorecard', Scorecard, false, 'scorecard'],
   ['Performance', 'people', 'People', People, true],
+  ['Performance', 'promotions', 'Promotions', Promotions, true],
   ['Performance', 'deals', 'Deals', Deals, false, 'deals'],
   ['Performance', 'money', 'Money', Money, false, 'money'],
   ['Activity', 'listings', 'Listings', Listings, true],

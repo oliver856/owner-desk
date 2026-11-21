@@ -147,3 +147,21 @@ export const money = (month) => one(sql`
         select coalesce(p.full_name, b.email) as name, b.email, b.team, b.role, b.billed, b.deals
         from ops.v_broker_month b left join ops.people p on p.email = b.email where b.month = ${month}::date) x)
   ) as j`);
+
+// Promotions (migration 023): each tracked broker's level, GCI since they reached it, and how far they are from the next.
+// Normal route: GCI target hit and the window served. Fast-track: 150% of the target, at any time
+// (to Associate Director it also needs 5 closed deals). GCI = their billed amount on ops.deals from `since` onwards.
+export const promotions = (team) => one(sql`
+  with d as (select ops.dubai_day(now()) as today),
+  t as (select t.*, coalesce(p.full_name, t.name) as shown, ops.team_at(t.email, d.today) as team, d.today
+        from ops.promotion_track t cross join d left join ops.people p on p.email = t.email
+        where (${team}::text is null or ops.team_at(t.email, d.today) = ${team})
+          and (p.email is null or p.status = 'active'))
+  select json_build_object('today', (select today from d), 'rows', (select coalesce(json_agg(x), '[]') from (
+    select t.email, t.shown as name, t.team, t.level, t.since, t.note,
+           l.title, l.window_months as window, l.next_target as target, n.title as next_title,
+           (extract(year from age(t.today, t.since)) * 12 + extract(month from age(t.today, t.since)))::int as months,
+           (t.since + make_interval(months => coalesce(l.window_months, 0)))::date as window_ends,
+           coalesce((select sum(x.amount) from ops.deals x where lower(x.email) = t.email and x.deleted_at is null and x.deal_date >= t.since), 0)::float8 as gci,
+           (select count(*) from ops.deals x where lower(x.email) = t.email and x.deleted_at is null and x.counts_as_deal and x.deal_date >= t.since)::int as deals
+    from t left join ops.promotion_levels l on l.level = t.level left join ops.promotion_levels n on n.level = t.level + 1) x)) as j`);
