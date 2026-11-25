@@ -106,6 +106,11 @@ export function whereSql(q, areas, me, locked = [], broker = false) {
   if (one('port')) w.push(sql`owner_units >= 2`);
   if (one('mort')) w.push(sql`mortgaged`);
   if (one('ind')) w.push(sql`not is_company`);
+  if (one('co')) w.push(sql`is_company`);
+  const omin = num('omin');
+  if (omin != null && omin > 1) w.push(sql`owner_units >= ${Math.floor(omin)}`);
+  // Commercial: how sure we are of the owner, kept in the unit's layout ('Owner confirmed', 'Owner likely' …)
+  if (many('ost').length) w.push(sql`id in (select ou.id from desk.units ou where ou.layout = any(${many('ost').slice(0, 4)}))`);
   if (one('phone')) w.push(sql`has_phone`);
   if (one('ncall')) w.push(sql`last_called is null`);
   // Hide owners another broker is holding (called recently, or calling right now)
