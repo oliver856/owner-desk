@@ -375,7 +375,7 @@ const actions = {
     await Promise.all([ensureNotes(), ensureHolds(), ensureUnitExtras()]);
     // Checked against the units themselves (not the owner list), so a unit added a moment ago by Lookup opens straight away
     const inArea = sql`exists (select 1 from desk.units uu join desk.buildings bb on bb.id = uu.building_id where uu.id = ${id} and bb.area_id = any(${s.areas}) and ${notLocked(s, sql`bb.id`)})`;
-    const [[u0], owners, calls, notes, [extra]] = await Promise.all([
+    const [[u0], owners, calls, notes, [extra], [sbc]] = await Promise.all([
       sql`select * from desk.v_unit_list where id = ${id} and area_id = any(${s.areas}) and ${inArea}`,
       sql`select o.id, o.name, o.is_company, uo.role, ph.masked, (ph.owner_id is not null) as has_phone,
                  (select count(*) from desk.unit_owners x where x.owner_id = o.id and x.role = 'owner')::int as units,
@@ -395,6 +395,7 @@ const actions = {
           from desk.notes n join desk.staff st on st.user_id = n.user_id
           where n.unit_id = ${id} and ${inArea} order by n.created_at desc limit 500`,
       sql`select old_code, layout from desk.units where id = ${id}`,
+      sbcFacts(id),
     ]);
     // Not in the owner list yet (e.g. just found with Lookup): build the basics from the unit itself
     const u = u0 || (await sql`
@@ -407,7 +408,7 @@ const actions = {
       where u.id = ${id} and b.area_id = any(${s.areas}) and ${notLocked(s, sql`b.id`)}`)[0];
     if (!u) return res.status(404).json({ error: 'That unit isn\'t in your areas.' });
     delete u.search_text;
-    Object.assign(u, extra || {});
+    Object.assign(u, extra || {}, sbc ? { sbc } : {});
     const [, others] = await Promise.all([
       audit(s.user_id, 'opened_unit', { unitId: id, ip }),
       sql`select uo.owner_id, u.id, u.unit_no, u.unit_type, b.subcommunity, b.name as building
@@ -855,6 +856,14 @@ const actions = {
 };
 
 const RECRUITER_ACTIONS = new Set(['me', 'copyBlocked', 'savePrefs', 'rc']);
+// SB Commercial: the extra facts from the SB owner file (desk.sbc_units, loaded by SQL). Nothing for any other unit.
+let sbcTable = null;
+function sbcFacts(id) {
+  sbcTable ??= sql`select to_regclass('desk.sbc_units') is not null as ok`.then(([r]) => r.ok).catch(() => { sbcTable = null; return false; });
+  return sbcTable.then((ok) => (ok ? sql`select country, abroad, has_email, own_number, owners_n, transfers, last_transfer, bldg_sales_24m
+    from desk.sbc_units where unit_id = ${id}` : [])).catch(() => []);
+}
+
 export default route(async (req, res, s, ip) => {
   const action = query(req).get('action');
   if (s.role === 'recruiter' && !RECRUITER_ACTIONS.has(action)) return res.status(403).json({ error: 'Not allowed.' });
