@@ -111,6 +111,19 @@ export function whereSql(q, areas, me, locked = [], broker = false) {
   if (omin != null && omin > 1) w.push(sql`owner_units >= ${Math.floor(omin)}`);
   // Commercial: how sure we are of the owner, kept in the unit's layout ('Owner confirmed', 'Owner likely' …)
   if (many('ost').length) w.push(sql`id in (select ou.id from desk.units ou where ou.layout = any(${many('ost').slice(0, 4)}))`);
+  // SB Commercial only: facts from the SB owner file in desk.sbc_units (the filters only show when that area is picked)
+  const sb = [];
+  const where = (cond) => sb.push(cond);
+  const nat = many('sbn');
+  if (nat.length === 1) where(nat[0] === 'Abroad' ? sql`x.abroad` : sql`not x.abroad and x.country is not null`);
+  if (one('sbe')) where(sql`x.has_email`);
+  if (one('sbo')) where(sql`x.own_number`);
+  const yf = num('sbyf'), yt = num('sbyt'), tmin = num('sbt'), amin = num('sba');
+  if (yf != null) where(sql`x.last_transfer >= make_date(${Math.floor(yf)}::int, 1, 1)`);
+  if (yt != null) where(sql`x.last_transfer < make_date(${Math.floor(yt) + 1}::int, 1, 1)`);
+  if (tmin != null && tmin > 0) where(sql`x.transfers >= ${Math.floor(tmin)}`);
+  if (amin != null && amin > 0) where(sql`x.bldg_sales_24m >= ${Math.floor(amin)}`);
+  if (sb.length) w.push(sql`id in (select x.unit_id from desk.sbc_units x where ${sb.reduce((a, b) => sql`${a} and ${b}`)})`);
   if (one('phone')) w.push(sql`has_phone`);
   if (one('ncall')) w.push(sql`last_called is null`);
   // Hide owners another broker is holding (called recently, or calling right now)
