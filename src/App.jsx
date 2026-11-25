@@ -165,6 +165,9 @@ const TABS = [
 // First week of the month (Dubai): the Monthly reports tab is highlighted as due
 const monthStart = () => Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric' }).format(new Date())) <= 7;
 const BEDS = ['Studio', '1', '2', '3', '4', '5', '6', '7'];
+// Commercial units: the use sits in the beds column, how sure we are of the owner in the unit's layout
+const USES = ['Office', 'Shop', 'Showroom', 'Labor Camp', 'Workshop', 'Commercial Land', 'Medical Office', 'Other'];
+const OWNER_STATUS = ['Owner confirmed', 'Owner likely', 'Owner may have sold since', 'Past owner only'];
 const EXPIRY = [['30', 'Within 30 days'], ['90', 'Within 90 days'], ['180', 'Within 6 months'], ['365', 'Within a year'], ['', 'Any time']];
 // WhatsApp follow-up after a call. {first} = owner's first name, {me} = broker's first name,
 // {property} = e.g. "villa 12 in Maple 1" or "apartment 504 in Acacia A", {area} = e.g. "Dubai Hills Estate".
@@ -387,6 +390,7 @@ th:hover .fbtn,.fbtn.open,.fbtn.on{opacity:1} .fbtn:hover,.fbtn.open{background:
 .fbtn.on{color:var(--accent)!important}
 .hf{position:fixed;z-index:40;width:260px;background:var(--bg);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);font-size:13px;letter-spacing:0;font-weight:400;text-align:left}
 .hf-h{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.filters .sec-b>.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
 .unums{display:grid;gap:6px;margin-top:10px} .sect .unums,.section .unums{margin-top:0} .unums .lbl{font-size:12px;color:var(--muted);margin-top:2px} .unums input{width:100%;min-width:0} .unums .ulx label{display:grid;gap:4px;min-width:0}
 .hf .pair{display:grid;grid-template-columns:1fr 1fr;gap:8px} .hf .pair input{width:100%;min-width:0}
 .hf-b{padding:10px 12px;display:grid;gap:2px;max-height:340px;overflow:auto} .hf-b select,.hf-b input[type=search]{width:100%}
@@ -843,7 +847,7 @@ const fd = (d) => (iso(d) ? new Date(iso(d) + 'T00:00:00Z').toLocaleDateString('
 const fdt = (d) => new Date(d).toLocaleString('en-GB', { timeZone: 'Asia/Dubai', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const todayDubai = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(new Date());
 const daysTo = (d) => (iso(d) ? Math.round((Date.parse(iso(d)) - Date.parse(todayDubai())) / 864e5) : null);
-const bedsLabel = (b) => (!b ? '—' : b === 'Studio' ? 'Studio' : `${b} bed`);
+const bedsLabel = (b) => (!b ? '—' : b === 'Studio' || !/^\d/.test(b) ? b : `${b} bed`);   // commercial units keep their use here (Office, Shop…)
 const placeOf = (u) => (u.unit_type === 'Villa' ? u.subcommunity : u.building);
 const pct = (a, b) => (a && b ? Math.round((Number(a) / Number(b) - 1) * 100) : null);
 
@@ -1045,13 +1049,14 @@ function ThemeToggle() {
 
 // ── Laptop: owner list, unit panel, activity ────────────────────────────────
 const EMPTY = { q: '', area: [], sc: [], bld: [], st: [], exp: '', from: '', to: '', type: [], beds: [], smin: '', smax: '', umin: '', umax: '', useries: '', uletter: '', rmin: '', rmax: '', pmin: '', pmax: '',
-  first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, phone: false,
+  first: false, ren2: false, up: false, down: false, port: false, mort: false, ind: false, co: false, omin: '', ost: [], phone: false,
+  sbn: [], sbe: false, sbo: false, sbyf: '', sbyt: '', sbt: '', sba: '',
   ncall: false, called: false, oc: [], free: true, tone: '' };
 
 // Older saved views stored one area/cluster/building as text; these are now lists
 function normF(f) {
   const n = { ...EMPTY, ...(f || {}) };
-  for (const k of ['area', 'sc', 'bld']) n[k] = Array.isArray(n[k]) ? n[k] : n[k] ? [n[k]] : [];
+  for (const k of ['area', 'sc', 'bld', 'ost', 'sbn']) n[k] = Array.isArray(n[k]) ? n[k] : n[k] ? [n[k]] : [];
   return n;
 }
 
@@ -1329,6 +1334,9 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
   const areas = useMemo(() => [...new Set(places.map((p) => p.area))], [places]);
   const inArea = useMemo(() => places.filter((p) => !f.area.length || f.area.includes(p.area)), [places, f.area]);
   const subcommunities = useMemo(() => [...new Set(inArea.map((p) => p.sc))], [inArea]);
+  const commercial = areas.some((a) => /commercial/i.test(a));   // the commercial filters only show for people with a commercial area
+  // The SB file's own filters only show while SB Commercial is the area being looked at (or the only one someone has)
+  const sbOnly = (f.area.length === 1 && /^sb commercial$/i.test(f.area[0])) || (areas.length === 1 && /^sb commercial$/i.test(areas[0]));
   const buildings = useMemo(() => [...new Set(inArea.filter((p) => p.bld && (!f.sc.length || f.sc.includes(p.sc))).map((p) => p.bld))], [inArea, f.sc]);
   // Picking areas/clusters keeps only the clusters/buildings that still belong to them
   const setPlace = (k, list) => {
@@ -1403,9 +1411,9 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
     rent: { on: ['rmin', 'rmax'], ui: () => <div className="pair">{num('rmin', 'Min')}{num('rmax', 'Max')}</div> },
     change: { on: ['up', 'down'], ui: () => <>{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</> },
     sale: { on: ['pmin', 'pmax'], ui: () => <div className="pair">{num('pmin', 'Min')}{num('pmax', 'Max')}</div> },
-    owner: { on: ['q', 'ind'], ui: () => <>{search()}<div style={{ marginTop: 8 }}>{flag('ind', 'Individuals only')}</div></> },
+    owner: { on: ['q', 'ind', 'co'], ui: () => <>{search()}<div style={{ marginTop: 8 }}>{flag('ind', 'Individuals only')}{flag('co', 'Companies only')}</div></> },
     mobile: { on: ['phone'], ui: () => flag('phone', 'Has a mobile number') },
-    owned: { on: ['port'], ui: () => flag('port', 'Owns 2+ units here') },
+    owned: { on: ['port', 'omin'], ui: () => <>{flag('port', 'Owns 2+ units here')}<div className="pair" style={{ marginTop: 6 }}>{num('omin', 'Owns at least…')}</div></> },
     mortgaged: { on: ['mort'], ui: () => flag('mort', 'Mortgaged') },
     lastcall: { on: ['ncall', 'called'], ui: () => <>{flag('ncall', 'Never called')}{flag('called', 'Called before')}{flag('free', 'Hide owners others are working')}</> },
     outcome: { on: ['oc'], ui: () => OUTCOMES.map((o) => box('oc', o)) },
@@ -1440,6 +1448,7 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
           {areas.length > 1 && <MultiSelect label="Area" options={areas} selected={f.area} onChange={(v) => setPlace('area', v)} />}
           <MultiSelect label="Sub-community" options={subcommunities} selected={f.sc} onChange={(v) => setPlace('sc', v)} />
           <MultiSelect label="Building" options={buildings} selected={f.bld} onChange={(v) => setPlace('bld', v)} />
+          {!sbOnly && <>
           <Section title="Lease" on={f.st.length}>{['Live Ejari', 'No live Ejari', 'Not confirmed'].map((v) => box('st', v))}</Section>
           <Section title="Contract ends" on={f.exp || f.from || f.to}>
             {EXPIRY.map(([v, l]) => <label className="cb" key={v}><input type="radio" name="exp" checked={f.exp === v} onChange={() => change({ exp: v })} />{l}</label>)}
@@ -1449,12 +1458,30 @@ function Owners({ places, onOpen, target, onCaps, canOverride, prefs, onSavePref
             </div></Section>
           <Section title="Type" on={f.type.length}>{box('type', 'Apartment')}{box('type', 'Villa')}</Section>
           <Section title="Beds" on={f.beds.length}><div className="cols">{BEDS.map((b) => box('beds', b, bedsLabel(b)))}</div></Section>
+          </>}
           <Section title="Unit number" on={f.umin || f.umax || f.useries || f.uletter}>{unitNums(true)}</Section>
           <Section title="Size, sq ft" on={f.smin || f.smax}><div className="pair">{num('smin', 'Min')}{num('smax', 'Max')}</div></Section>
+          {!sbOnly && <>
           <Section title="Rent, AED a year" on={f.rmin || f.rmax}><div className="pair">{num('rmin', 'Min')}{num('rmax', 'Max')}</div></Section>
           <Section title="Tenancy" on={f.first || f.ren2 || f.up || f.down}>{flag('first', 'First year (no renewals)')}{flag('ren2', 'Renewed 2+ times')}{flag('up', 'Rent went up')}{flag('down', 'Rent went down')}</Section>
           <Section title="Last sale price, AED" on={f.pmin || f.pmax}><div className="pair">{num('pmin', 'Min')}{num('pmax', 'Max')}</div></Section>
-          <Section title="Owner" on={f.port || f.mort || f.ind || f.phone}>{flag('port', 'Owns 2+ units here')}{flag('mort', 'Mortgaged')}{flag('ind', 'Individuals only')}{flag('phone', 'Has a mobile number')}</Section>
+          </>}
+          {commercial && !sbOnly && <Section title="Commercial" on={f.ost.length || f.beds.some((b) => USES.includes(b))}>
+            <span className="lbl">Use</span><div className="cols">{USES.map((u) => box('beds', u))}</div></Section>}
+          {sbOnly && <>
+            <Section title="Use" open on={f.beds.some((b) => USES.includes(b))}><div className="cols">{USES.map((u) => box('beds', u))}</div></Section>
+            <Section title="How sure we are of the owner" open on={f.ost.length}>{OWNER_STATUS.map((v) => box('ost', v))}</Section>
+            <Section title="Owner" on={f.ind || f.co || f.omin || f.sbn.length}>{flag('co', 'Companies only')}{flag('ind', 'Individuals only')}
+              <span className="lbl" style={{ marginTop: 8 }}>Owns at least this many units</span><div className="pair">{num('omin', 'e.g. 5')}</div>
+              <span className="lbl" style={{ marginTop: 8 }}>Owner's number</span>{box('sbn', 'UAE', 'UAE number')}{box('sbn', 'Abroad', 'Number abroad')}</Section>
+            <Section title="Contact" on={f.phone || f.sbe || f.sbo}>{flag('phone', 'Has a number')}{flag('sbo', 'Number is under this owner\'s own name')}{flag('sbe', 'Has an email')}</Section>
+            <Section title="Sales history" on={f.sbyf || f.sbyt || f.sbt}>
+              <span className="lbl">Last sold, year</span><div className="pair">{num('sbyf', 'From, e.g. 2010')}{num('sbyt', 'To, e.g. 2018')}</div>
+              <span className="lbl" style={{ marginTop: 8 }}>Sold at least this many times</span><div className="pair">{num('sbt', 'e.g. 3')}</div></Section>
+            <Section title="Building activity" on={f.sba}><span className="lbl">Building sales in the last 24 months, at least</span><div className="pair">{num('sba', 'e.g. 500')}</div></Section>
+          </>}
+          {!sbOnly && <Section title="Owner" on={f.port || f.mort || f.ind || f.co || f.omin || f.phone}>{flag('port', 'Owns 2+ units here')}{flag('mort', 'Mortgaged')}{flag('ind', 'Individuals only')}{flag('co', 'Companies only')}{flag('phone', 'Has a mobile number')}
+            <span className="lbl" style={{ marginTop: 8 }}>Owns at least this many units</span><div className="pair">{num('omin', 'e.g. 5')}</div></Section>}
           <Section title="Calls" open on={f.ncall || f.called}>{flag('free', 'Hide owners others are working')}{flag('ncall', 'Never called')}{flag('called', 'Called before')}</Section>
           <button className="link" style={{ textAlign: 'left' }} onClick={() => { setF(EMPTY); load(EMPTY, tab, sort, 1); }}>Clear filters</button>
         </aside>}
@@ -2136,7 +2163,14 @@ function UnitPanel({ id, onClose, onOpen, onCaps, canOverride }) {
         <div className="panel-head">
           <div>{u ? <><h2>{/^Street /.test(u.unit_no) ? '' : u.unit_type === 'Villa' ? 'Villa ' : 'Unit '}{u.unit_no}</h2>
             <div className="muted">{[titleCase(place), u.layout, u.beds ? bedsLabel(u.beds) : null, u.size_sqft ? `${fmt(u.size_sqft)} sq ft` : null].filter(Boolean).join(' · ')}</div>
-            {u.old_code && <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>Old unit code: {u.old_code}</div>}</> : <h2>{err ? 'Not available' : 'Loading…'}</h2>}</div>
+            {u.old_code && <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>Old unit code: {u.old_code}</div>}
+            {u.sbc && <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>{[
+              u.sbc.last_transfer ? `Last sold ${fd(u.sbc.last_transfer)}` : 'No sale on record',
+              u.sbc.transfers ? `sold ${u.sbc.transfers} time${u.sbc.transfers === 1 ? '' : 's'}` : null,
+              u.sbc.owners_n > 1 ? `${u.sbc.owners_n} owners on record` : null,
+              u.sbc.abroad ? 'owner\'s number is abroad' : null,
+              u.sbc.has_email ? 'email on file' : null,
+              u.sbc.bldg_sales_24m ? `${fmt(u.sbc.bldg_sales_24m)} sales in the building in 24 months` : null].filter(Boolean).join(' · ')}</div>}</> : <h2>{err ? 'Not available' : 'Loading…'}</h2>}</div>
           <button className="x" aria-label="Close" onClick={onClose}>×</button>
         </div>
         {err && <p className="err">{err}</p>}
