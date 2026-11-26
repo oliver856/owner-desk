@@ -41,6 +41,10 @@ function issuesFor(r, days, month) {
 const BILLING = [[/associate\s*director/i, null], [/principal/i, 90000], [/senior/i, 60000], [/property\s*consultant/i, 30000], [/associate/i, 15000]];
 const billingTarget = (role) => { const m = BILLING.find(([re]) => re.test(role || '')); return m ? m[1] : null; };
 
+// Managers aren't judged here: anyone whose title is a manager, team leader, director or head of something
+// (Associate Director is a broker level, so they stay).
+const isManager = (r) => r.kind === 'manager' || (/manager|team leader|director|head of|owner/i.test(r.role || '') && !/associate\s*director/i.test(r.role || ''));
+
 const LEVEL = [['act', 'Needs a conversation'], ['push', 'Needs a push'], ['ok', 'On track']];
 
 export default function People({ api, team, period }) {
@@ -50,7 +54,7 @@ export default function People({ api, team, period }) {
   const rows = useMemo(() => {
     if (!d) return [];
     const days = workDays(d.from);
-    return d.rows.map((r) => {
+    return d.rows.filter((r) => !isManager(r)).map((r) => {
       const target = billingTarget(r.role);
       const billedIt = target != null && Number(r.billed) >= target;
       const issues = billedIt ? [] : issuesFor(r, days, d.period === 'month');
