@@ -82,10 +82,10 @@ export async function slides(sc) {
       (select count(*)::int from desk.calls c join desk.staff s on s.user_id = c.user_id
          where lower(s.email) = p.email and c.called_at >= (${addDays(wk, 1)}::date::timestamp at time zone 'Asia/Dubai')
            and c.called_at < (${today}::date::timestamp at time zone 'Asia/Dubai')) as calls,
-      (select count(*)::int from ops.kendal_listings n where n.agent_email = p.email and n.live_since is not null
-         and ops.dubai_day(n.created_at) > ${wk}::date and ops.dubai_day(n.created_at) <= ${yest}::date) as listed,
-      (select count(*)::int from ops.kendal_listings n where n.agent_email = p.email and n.live_since is not null
-         and ops.dubai_day(n.created_at) >= ${mo}::date) as listed_month,
+      (select count(*)::int from ops.listing_events e where e.agent_email = p.email and e.event = 'live' and e.reason = 'New listing'
+         and e.day > ${wk}::date and e.day <= ${yest}::date) as listed,
+      (select count(*)::int from ops.listing_events e where e.agent_email = p.email and e.event = 'live' and e.reason = 'New listing'
+         and e.day >= ${mo}::date) as listed_month,
       (select count(*)::int from ops.kendal_listings l where l.agent_email = p.email and l.is_live) as stock,
       (select count(*)::int from ops.v_portal_leads i where i.agent_email = p.email and i.lead_day > ${wk}::date and i.lead_day <= ${yest}::date) as leads,
       (select count(*)::int from ops.kendal_appointments a where a.appointment_type ilike '%view%' and p.email = any(a.team_members)

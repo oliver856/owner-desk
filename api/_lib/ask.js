@@ -240,7 +240,7 @@ export async function activity(team, { from, to }) {
     select p.full_name as name, p.team, p.role, p.start_date::text as started,
       coalesce(cl.calls, 0) as calls, coalesce(cl.reached, 0) as reached, coalesce(cl.listing_opps, 0) as listing_opps,
       coalesce(cl.daily_target, ${base})::int as daily_call_target, (coalesce(cl.daily_target, ${base}) * w.weekdays)::int as call_target_for_period,
-      (select count(*) from ops.kendal_listings n where n.agent_email = p.email and n.live_since is not null and ops.dubai_day(n.created_at) between w.fr and w.tt)::int as new_listings,
+      (select count(*) from ops.listing_events e where e.agent_email = p.email and e.event = 'live' and e.reason = 'New listing' and e.day between w.fr and w.tt)::int as new_listings,
       (select count(*) from ops.v_portal_leads i where i.agent_email = p.email and i.lead_day between w.fr and w.tt)::int as leads,
       (select count(*) from ops.kendal_appointments a where a.appointment_type ilike '%view%' and a.start_day between w.fr and w.tt and p.email = any(a.team_members))::int as viewings,
       (select count(*) from ops.deals x where x.email = p.email and x.deleted_at is null and x.counts_as_deal and x.deal_date between w.fr and w.tt)::int as deals,

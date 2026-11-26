@@ -34,7 +34,8 @@ export const today = (team, period = 'week') => one(sql`
     'figs', (select json_object_agg(f.which, json_build_object(
       'billed',   case when f.which = 'now' then (select coalesce(sum(amount), 0) from dn) else (select coalesce(sum(amount), 0) from dp) end,
       'deals',    case when f.which = 'now' then (select count(*) filter (where counts_as_deal) from dn) else (select count(*) filter (where counts_as_deal) from dp) end,
-      'listed',   (select count(*) from ops.kendal_listings n, ok where n.live_since is not null and ops.dubai_day(n.created_at) between f.a and f.b and (ok.everyone or n.agent_email in (select email from ppl))),
+      -- a new listing = the day it first went live, whenever it was created in Kendal
+      'listed',   (select count(*) from ops.listing_events e, ok where e.event = 'live' and e.reason = 'New listing' and e.day between f.a and f.b and (ok.everyone or e.agent_email in (select email from ppl))),
       'lost',     (select count(*) from ops.listing_events e, ok where e.event = 'off' and e.day between f.a and f.b and (ok.everyone or e.agent_email in (select email from ppl))),
       'gained',   (select count(*) from ops.listing_events e, ok where e.event = 'live' and e.day between f.a and f.b and (ok.everyone or e.agent_email in (select email from ppl))),
       'leads',    (select count(*) from ops.v_portal_leads i, ok where i.lead_day between f.a and f.b and (ok.everyone or i.agent_email in (select email from ppl))),
@@ -130,7 +131,7 @@ export const people = (team, period) => one(sql`
             and (${team}::text is null or ops.team_at(p.email, w.today) = ${team}))
   select json_build_object('period', ${period}::text, 'from', (select fr from w), 'rows', (select coalesce(json_agg(x order by x.name), '[]') from (
     select p.full_name as name, p.email, p.team, p.role, p.broker_type as type,
-      (select count(*) from ops.kendal_listings n, w where n.agent_email = p.email and n.live_since is not null and ops.dubai_day(n.created_at) >= w.fr) as listed,
+      (select count(*) from ops.listing_events e, w where e.agent_email = p.email and e.event = 'live' and e.reason = 'New listing' and e.day >= w.fr) as listed,
       (select count(*) from ops.kendal_listings l where l.agent_email = p.email and l.is_live) as stock,
       (select count(*) from ops.v_portal_leads i, w where i.agent_email = p.email and i.lead_day >= w.fr) as leads,
       (select count(*) from ops.kendal_appointments a, w where a.appointment_type ilike '%view%' and a.start_day >= w.fr and a.start_day <= w.today and p.email = any(a.team_members)) as viewings,
