@@ -80,14 +80,12 @@ export default route(async (req, res, staff) => {
   }
   // Pages that show deal figures are remembered only until the next change to a deal
   const key = (...p) => [action, sc.team || '*', ...p].join('|');
-  if (action === 'listings') return res.json(await cached(key(), () => pages.listings(sc.team)));
-  if (action === 'leads') return res.json(await cached(key(), () => pages.leads(sc.team)));
+  const period = q.get('period') === 'month' ? 'month' : 'week';   // every page that has a This week / This month switch
+  if (action === 'listings') return res.json(await cached(key(period), () => pages.listings(sc.team, period)));
+  if (action === 'leads') return res.json(await cached(key(period), () => pages.leads(sc.team, period)));
   const v = await dealsVersion();
-  if (action === 'today') return res.json(await cached(key(v), () => pages.today(sc.team)));
-  if (action === 'people') {
-    const period = q.get('period') === 'month' ? 'month' : 'week';
-    return res.json(await cached(key(v, period), () => pages.people(sc.team, period)));
-  }
+  if (action === 'today') return res.json(await cached(key(v, period), () => pages.today(sc.team, period)));
+  if (action === 'people') return res.json(await cached(key(v, period), () => pages.people(sc.team, period)));
   if (action === 'promotions') return res.json(await cached(key(v), () => pages.promotions(sc.team)));
   if (action === 'scorecard') {
     if (!sc.all) return res.status(403).json({ error: 'Not allowed.' });

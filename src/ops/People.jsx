@@ -1,11 +1,10 @@
-import React, { useMemo, useState } from 'react';
-import { useOps, Wait, Bar, Seg, Section, Table, Name, n0, aed, day } from './kit.jsx';
+import React, { useMemo } from 'react';
+import { useOps, Wait, Bar, Section, Table, Name, n0, aed, day } from './kit.jsx';
 import { KPI, CALLS_A_DAY, WORKING_DAYS } from './rules.js';
 
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : '');
 
-export default function People({ api, team }) {
-  const [period, setPeriod] = useState('week');
+export default function People({ api, team, period }) {
   const { d, err } = useOps(api, 'people', { team, period });
   const week = period === 'week';
   const rows = useMemo(() => {
@@ -22,9 +21,7 @@ export default function People({ api, team }) {
   const of = (v, target) => n0(v) + (target != null ? ' / ' + n0(target) : '');
   return (
     <>
-      <Bar note={d ? `${week ? 'Since Monday ' + day(d.from) : 'Since ' + day(d.from)} · red is a missed KPI` : ''}>
-        <Seg value={period} onChange={setPeriod} options={[['week', 'This week'], ['month', 'This month']]} />
-      </Bar>
+      <Bar note={d ? `${week ? 'Since Monday ' + day(d.from) : 'Since ' + day(d.from)} ` : ''} />
       {!d ? <Wait err={err} /> : <Section title={`${rows.length} ${rows.length === 1 ? 'person' : 'people'}`} aside="Off-plan and commercial brokers have no listing or stock target">
         <Table rowKey={(r) => r.email} rows={rows} empty="Nobody on this team yet." sort={{ key: 'missed', dir: 'desc' }} cols={[
           { key: 'name', label: 'Broker', render: (r) => <Name main={r.name} sub={[r.team, cap(r.type)].filter(Boolean).join(' · ')} /> },

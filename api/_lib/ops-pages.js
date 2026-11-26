@@ -7,39 +7,47 @@ import { sql } from './core.js';
 
 export const one = async (q) => (await q)[0]?.j;
 
-export const today = (team) => one(sql`
-  with d as (select ops.dubai_day(now()) as today),
-  w as (select today, date_trunc('week', today)::date as wk, (date_trunc('week', today) - interval '7 days')::date as lw,
-               date_trunc('month', today)::date as mo, (today - date_trunc('week', today)::date) as dow from d),
+// The period a page is looking at: this week (from Monday) or this month (from the 1st), up to today, and the same
+// number of days at the start of the period before, so Tuesday is compared with Tuesday and the 12th with the 12th.
+const span = (period) => sql`
+  d as (select ops.dubai_day(now()) as today),
+  w as (select today, fr, pfr, least(pfr + (today - fr), fr - 1) as pto, date_trunc('month', today)::date as mo, date_trunc('week', today)::date as wk
+        from (select today,
+                case when ${period} = 'month' then date_trunc('month', today)::date else date_trunc('week', today)::date end as fr,
+                case when ${period} = 'month' then (date_trunc('month', today) - interval '1 month')::date else (date_trunc('week', today) - interval '7 days')::date end as pfr
+              from d) x)`;
+const isMonth = (period) => sql`(${period} = 'month')`;
+
+export const today = (team, period = 'week') => one(sql`
+  with ${span(period)},
   ppl as (select p.email, p.full_name from ops.people p, w where ${team}::text is null or ops.team_at(p.email, w.today) = ${team}),
-  ok as (select ${team}::text is null as everyone)
+  ok as (select ${team}::text is null as everyone),
+  dl as (select x.* from ops.deals x, ok where x.deleted_at is null and (ok.everyone or x.email in (select email from ppl))),
+  -- billed this period: by deal month for a month (so it matches Money), by close date for a week
+  dn as (select dl.* from dl, w where case when ${isMonth(period)} then dl.month = w.fr else dl.deal_date between w.fr and w.today end),
+  dp as (select dl.* from dl, w where case when ${isMonth(period)} then dl.month = w.pfr and dl.deal_date <= w.pto else dl.deal_date between w.pfr and w.pto end),
+  figs as (select f.which, f.a, f.b from w, lateral (values ('now', w.fr, w.today), ('before', w.pfr, w.pto)) f(which, a, b))
   select json_build_object(
-    'today', (select today from w), 'weekStart', (select wk from w), 'team', ${team}::text,
-    'month', (select json_build_object('billed', coalesce(sum(amount), 0), 'deals', count(*) filter (where counts_as_deal))
-              from ops.deals x, w, ok where x.deleted_at is null and x.month = w.mo and (ok.everyone or x.email in (select email from ppl))),
-    'byTeam', (select coalesce(json_agg(t order by t.billed desc), '[]') from (
-              select ops.team_at(x.email, x.deal_date) as team, sum(amount) as billed, count(*) filter (where counts_as_deal) as deals
-              from ops.deals x, w, ok where x.deleted_at is null and x.month = w.mo and (ok.everyone or x.email in (select email from ppl)) group by 1) t),
-    'week', json_build_object(
-      'listed',   (select count(*) from ops.kendal_listings n, w, ok where n.live_since is not null and ops.dubai_day(n.created_at) >= w.wk and (ok.everyone or n.agent_email in (select email from ppl))),
-      'lost',     (select count(*) from ops.listing_events e, w, ok where e.event = 'off' and e.day >= w.wk and (ok.everyone or e.agent_email in (select email from ppl))),
-      'gained',   (select count(*) from ops.listing_events e, w, ok where e.event = 'live' and e.day >= w.wk and (ok.everyone or e.agent_email in (select email from ppl))),
-      'leads',    (select count(*) from ops.v_portal_leads i, w, ok where i.lead_day >= w.wk and (ok.everyone or i.agent_email in (select email from ppl))),
-      'viewings', (select count(*) from ops.kendal_appointments a, w, ok where a.appointment_type ilike '%view%' and a.start_day >= w.wk and a.start_day <= w.today
+    'today', (select today from w), 'from', (select fr from w), 'before', (select pfr from w), 'beforeTo', (select pto from w),
+    'period', ${period}::text, 'team', ${team}::text,
+    'figs', (select json_object_agg(f.which, json_build_object(
+      'billed',   case when f.which = 'now' then (select coalesce(sum(amount), 0) from dn) else (select coalesce(sum(amount), 0) from dp) end,
+      'deals',    case when f.which = 'now' then (select count(*) filter (where counts_as_deal) from dn) else (select count(*) filter (where counts_as_deal) from dp) end,
+      'listed',   (select count(*) from ops.kendal_listings n, ok where n.live_since is not null and ops.dubai_day(n.created_at) between f.a and f.b and (ok.everyone or n.agent_email in (select email from ppl))),
+      'lost',     (select count(*) from ops.listing_events e, ok where e.event = 'off' and e.day between f.a and f.b and (ok.everyone or e.agent_email in (select email from ppl))),
+      'gained',   (select count(*) from ops.listing_events e, ok where e.event = 'live' and e.day between f.a and f.b and (ok.everyone or e.agent_email in (select email from ppl))),
+      'leads',    (select count(*) from ops.v_portal_leads i, ok where i.lead_day between f.a and f.b and (ok.everyone or i.agent_email in (select email from ppl))),
+      'viewings', (select count(*) from ops.kendal_appointments a, ok where a.appointment_type ilike '%view%' and a.start_day between f.a and f.b
                     and (ok.everyone or a.team_members && (select array_agg(email) from ppl))),
-      'deals',    (select count(*) from ops.deals x, w, ok where x.deleted_at is null and x.counts_as_deal and x.deal_date >= w.wk and (ok.everyone or x.email in (select email from ppl)))),
-    'lastWeek', json_build_object(   -- the same days of last week, so Tuesday is compared with Tuesday
-      'listed',   (select count(*) from ops.kendal_listings n, w, ok where n.live_since is not null and ops.dubai_day(n.created_at) >= w.lw and ops.dubai_day(n.created_at) <= w.lw + w.dow and (ok.everyone or n.agent_email in (select email from ppl))),
-      'lost',     (select count(*) from ops.listing_events e, w, ok where e.event = 'off' and e.day >= w.lw and e.day <= w.lw + w.dow and (ok.everyone or e.agent_email in (select email from ppl))),
-      'gained',   (select count(*) from ops.listing_events e, w, ok where e.event = 'live' and e.day >= w.lw and e.day <= w.lw + w.dow and (ok.everyone or e.agent_email in (select email from ppl))),
-      'leads',    (select count(*) from ops.v_portal_leads i, w, ok where i.lead_day >= w.lw and i.lead_day <= w.lw + w.dow and (ok.everyone or i.agent_email in (select email from ppl))),
-      'viewings', (select count(*) from ops.kendal_appointments a, w, ok where a.appointment_type ilike '%view%' and a.start_day >= w.lw and a.start_day <= w.lw + w.dow
-                    and (ok.everyone or a.team_members && (select array_agg(email) from ppl))),
-      'deals',    (select count(*) from ops.deals x, w, ok where x.deleted_at is null and x.counts_as_deal and x.deal_date >= w.lw and x.deal_date <= w.lw + w.dow and (ok.everyone or x.email in (select email from ppl)))),
+      'calls',    (select count(*) from desk.calls c join desk.staff s on s.user_id = c.user_id, ok
+                    where c.called_at >= (f.a::timestamp at time zone 'Asia/Dubai') and c.called_at < ((f.b + 1)::timestamp at time zone 'Asia/Dubai')
+                      and (ok.everyone or lower(s.email) in (select email from ppl)))))
+      from figs f),
+    'callsToday', (select count(*) from desk.calls c join desk.staff s on s.user_id = c.user_id, ok, w
+                    where c.called_at >= (w.today::timestamp at time zone 'Asia/Dubai') and (ok.everyone or lower(s.email) in (select email from ppl))),
     'live', (select count(*) from ops.kendal_listings l, ok where l.is_live and (ok.everyone or l.agent_email in (select email from ppl))),
-    'calls', (select json_build_object('today', count(*) filter (where ops.dubai_day(c.called_at) = (select today from w)), 'week', count(*))
-              from desk.calls c join desk.staff s on s.user_id = c.user_id, ok
-              where c.called_at >= ((select wk from w)::timestamp at time zone 'Asia/Dubai') and (ok.everyone or lower(s.email) in (select email from ppl))),
+    'byTeam', (select coalesce(json_agg(t order by t.billed desc), '[]') from (
+              select ops.team_at(dn.email, dn.deal_date) as team, sum(amount) as billed, count(*) filter (where counts_as_deal) as deals from dn group by 1) t),
     'targets', (select coalesce(json_agg(t order by t.target desc), '[]') from (
               select distinct a.scope, a.team, a.target, a.counts_to_target as billed, a.target_includes_own as "includesOwn", a.period_from as "from", a.period_to as "to"
               from ops.v_agreement_progress a, w where w.today between a.period_from and a.period_to
@@ -49,72 +57,66 @@ export const today = (team) => one(sql`
     'baselined', (select baselined from ops.sync_state where endpoint = 'listings')
   ) as j`);
 
-export const listings = (team) => one(sql`
-  with d as (select ops.dubai_day(now()) as today),
-  w as (select today, date_trunc('week', today)::date as wk, date_trunc('month', today)::date as mo from d),
+export const listings = (team, period = 'week') => one(sql`
+  with ${span(period)},
   ppl as (select p.email, p.full_name from ops.people p, w where ${team}::text is null or ops.team_at(p.email, w.today) = ${team}),
   ok as (select ${team}::text is null as everyone),
   ev as (select e.* from ops.listing_events e, ok where ok.everyone or e.agent_email in (select email from ppl)),
   ll as (select l.* from ops.kendal_listings l, ok where l.is_live and (ok.everyone or l.agent_email in (select email from ppl)))
   select json_build_object(
+    'period', ${period}::text, 'from', (select fr from w),
     'live', (select count(*) from ll),
     'liveSale', (select count(*) from ll where market_type ilike '%sale%' or market_type ilike '%sell%' or market_type ilike '%buy%'),
-    'weeks', (select coalesce(json_agg(x order by x.week desc), '[]') from (
-        select date_trunc('week', day)::date as week, count(*) filter (where event = 'live') as gained,
+    'history', (select coalesce(json_agg(x order by x.start desc), '[]') from (
+        select case when ${isMonth(period)} then date_trunc('month', day)::date else date_trunc('week', day)::date end as start,
+               count(*) filter (where event = 'live') as gained,
                count(*) filter (where event = 'live' and reason = 'New listing') as new, count(*) filter (where event = 'off') as lost
-        from ev, w where day >= w.wk - 77 group by 1) x),
-    'months', (select coalesce(json_agg(x order by x.month desc), '[]') from (
-        select date_trunc('month', day)::date as month, count(*) filter (where event = 'live') as gained,
-               count(*) filter (where event = 'live' and reason = 'New listing') as new, count(*) filter (where event = 'off') as lost
-        from ev group by 1) x),
+        from ev, w where day >= case when ${isMonth(period)} then (w.fr - interval '11 months')::date else w.fr - 77 end group by 1) x),
     'reasons', (select coalesce(json_agg(x order by x.n desc), '[]') from (
-        select coalesce(reason, 'Other') as reason, count(*) as n from ev, w where event = 'off' and day >= w.mo group by 1) x),
+        select coalesce(reason, 'Other') as reason, count(*) as n from ev, w where event = 'off' and day >= w.fr group by 1) x),
     'brokers', (select coalesce(json_agg(x order by x.live desc, x.name), '[]') from (
         select coalesce(p.full_name, a.agent_email) as name, a.agent_email as email, a.live,
-               coalesce(f.gw, 0) as "gainedWeek", coalesce(f.lw, 0) as "lostWeek", coalesce(f.gm, 0) as "gainedMonth", coalesce(f.lm, 0) as "lostMonth"
+               coalesce(f.g, 0) as gained, coalesce(f.l, 0) as lost
         from (select coalesce(agent_email, '') as agent_email, count(*) as live from ll group by 1
-              union select coalesce(agent_email, ''), 0 from ev, w where day >= w.mo and coalesce(agent_email, '') not in (select coalesce(agent_email, '') from ll) group by 1) a
+              union select coalesce(agent_email, ''), 0 from ev, w where day >= w.fr and coalesce(agent_email, '') not in (select coalesce(agent_email, '') from ll) group by 1) a
         left join ops.people p on p.email = a.agent_email
         left join (select coalesce(agent_email, '') as agent_email,
-                     count(*) filter (where event = 'live' and day >= w.wk) as gw, count(*) filter (where event = 'off' and day >= w.wk) as lw,
-                     count(*) filter (where event = 'live' and day >= w.mo) as gm, count(*) filter (where event = 'off' and day >= w.mo) as lm
+                     count(*) filter (where event = 'live' and day >= w.fr) as g, count(*) filter (where event = 'off' and day >= w.fr) as l
                    from ev, w group by 1) f on f.agent_email = a.agent_email) x),
     'recent', (select coalesce(json_agg(x order by x.at desc), '[]') from (
         select e.at, e.day, e.listing_id as ref, e.event, e.reason, coalesce(p.full_name, e.agent_email) as broker,
                coalesce(l.building, l.locality, l.title) as place, l.beds
-        from ev e left join ops.people p on p.email = e.agent_email left join ops.kendal_listings l on l.listing_id = e.listing_id
-        order by e.at desc limit 60) x),
+        from ev e left join ops.people p on p.email = e.agent_email left join ops.kendal_listings l on l.listing_id = e.listing_id, w
+        where e.day >= w.fr order by e.at desc limit 80) x),
     'baselined', (select baselined from ops.sync_state where endpoint = 'listings'),
     'since', (select min(day) from ops.listing_events),
     'synced', (select last_finished from ops.sync_state where endpoint = 'listings')
   ) as j`);
 
-export const leads = (team) => one(sql`
-  with d as (select ops.dubai_day(now()) as today),
-  w as (select today, date_trunc('month', today)::date as mo from d),
+export const leads = (team, period = 'week') => one(sql`
+  with ${span(period)},
   ppl as (select p.email, p.full_name from ops.people p, w where ${team}::text is null or ops.team_at(p.email, w.today) = ${team}),
   ok as (select ${team}::text is null as everyone),
-  i as (select q.* from ops.kendal_inquiries q, ok, w where q.is_genuine and q.lead_day >= least(w.mo, w.today - 7)
+  i as (select q.* from ops.kendal_inquiries q, ok, w where q.is_genuine and q.lead_day >= w.pfr
           and (ok.everyone or q.agent_email in (select email from ppl)))
   select json_build_object(
-    'channels', (select coalesce(json_agg(x order by x.month desc), '[]') from (
-        select channel, count(*) filter (where lead_day = w.today) as today, count(*) filter (where lead_day = w.today - 1) as yesterday,
-               count(*) filter (where lead_day > w.today - 7) as week, count(*) filter (where lead_day >= w.mo) as month
+    'period', ${period}::text, 'from', (select fr from w), 'today', (select today from w),
+    'channels', (select coalesce(json_agg(x order by x.now desc), '[]') from (
+        select channel, count(*) filter (where lead_day >= w.fr) as now, count(*) filter (where lead_day between w.pfr and w.pto) as before,
+               count(*) filter (where lead_day = w.today) as today
         from i, w group by 1) x),
-    'brokers', (select coalesce(json_agg(x order by x.month desc, x.name), '[]') from (
+    'brokers', (select coalesce(json_agg(x order by x.portal desc, x.name), '[]') from (
         select coalesce(p.full_name, nullif(i.agent_email, ''), 'Unassigned') as name,
-               count(*) filter (where channel in ('bayut', 'pf') and lead_day = w.today - 1) as yesterday,
-               count(*) filter (where channel in ('bayut', 'pf') and lead_day > w.today - 7) as week,
-               count(*) filter (where channel in ('bayut', 'pf') and lead_day >= w.mo) as month,
-               count(*) filter (where channel = 'bayut' and lead_day >= w.mo) as bayut,
-               count(*) filter (where channel = 'pf' and lead_day >= w.mo) as pf,
-               count(*) filter (where channel = 'owner_desk' and lead_day >= w.mo) as "ownerDesk",
-               count(*) filter (where call_status = 'missed' and lead_day > w.today - 7) as "missedWeek"
-        from i left join ops.people p on p.email = i.agent_email, w group by 1) x),
+               count(*) filter (where channel in ('bayut', 'pf') and lead_day >= w.fr) as portal,
+               count(*) filter (where channel = 'bayut' and lead_day >= w.fr) as bayut,
+               count(*) filter (where channel = 'pf' and lead_day >= w.fr) as pf,
+               count(*) filter (where channel = 'owner_desk' and lead_day >= w.fr) as "ownerDesk",
+               count(*) filter (where call_status = 'missed' and lead_day >= w.fr) as missed
+        from i left join ops.people p on p.email = i.agent_email, w where i.lead_day >= w.fr group by 1) x),
     'missed', (select coalesce(json_agg(x order by x.at desc), '[]') from (
         select i.lead_at as at, i.channel, coalesce(p.full_name, i.agent_email) as broker, i.listing_id as ref
         from i left join ops.people p on p.email = i.agent_email, w
-        where i.call_status = 'missed' and i.lead_day > w.today - 7 order by i.lead_at desc limit 60) x),
+        where i.call_status = 'missed' and i.lead_day >= w.fr order by i.lead_at desc limit 80) x),
     'synced', (select last_finished from ops.sync_state where endpoint = 'inquiries')
   ) as j`);
 

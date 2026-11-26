@@ -51,7 +51,6 @@ export default function Meeting({ api, team, teams, all }) {
   return (
     <>
       <style>{ASK_CSS + CSS}</style>
-      <Bar note="Everything for the weekly meeting in one place: the report, the pipelines from the group, and the actions agreed." />
 
       <Section title="Meeting slides" aside="This week's real figures, for the TV and to send round">
         <div className="ops-acts">
