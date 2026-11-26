@@ -16,6 +16,7 @@ import Scorecard from './ops/Scorecard.jsx';
 import Meeting from './ops/Meeting.jsx';
 import Listings from './ops/Listings.jsx';
 import Leads from './ops/Leads.jsx';
+import LeadPool from './ops/LeadPool.jsx';
 import People from './ops/People.jsx';
 import Promotions from './ops/Promotions.jsx';
 import Deals from './ops/Deals.jsx';
@@ -34,6 +35,7 @@ const PAGES = [
   ['Deals and money', 'money', 'Money', Money, false, 'money', false, 'What has been billed, month by month and by broker'],
   ['Stock and leads', 'listings', 'Listings', Listings, true, null, true, 'Live stock: what came on, what came off and why, by broker'],
   ['Stock and leads', 'leads', 'Leads', Leads, true, null, true, 'Portal enquiries by source and by broker, and the calls that were missed'],
+  ['Stock and leads', 'leadpool', 'Lead pool', LeadPool, false, 'leadpool', false, 'How much of the lead pool has been called, by whom, and how it went. Only admins see this'],
   ['Meeting', 'meeting', 'Meeting', Meeting, true, null, false, 'Everything for the Friday meeting: slides, the weekly report, pipeline and actions'],
   ['Meeting', 'ask', 'Ask', Ask, true, null, false, 'Ask anything about the figures and get a plain answer'],
 ];

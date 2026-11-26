@@ -68,9 +68,13 @@ export default route(async (req, res, staff) => {
   const action = q.get('action');
   if (action === 'access') {
     const teams = sc.all ? (await sql`select name from ops.teams where active order by sort, name`).map((t) => t.name) : [sc.team];
-    return res.json({ all: sc.all, team: sc.team, teams, money: sc.all, deals: sc.all, scorecard: sc.all });
+    return res.json({ all: sc.all, team: sc.team, teams, money: sc.all, deals: sc.all, scorecard: sc.all, leadpool: staff.role === 'admin' });
   }
   if (action === 'ask') return res.json(await askPage(staff, sc));
+  if (action === 'leadpool') {   // admins only
+    if (staff.role !== 'admin') return res.status(403).json({ error: 'Not allowed.' });
+    return res.json(await cached('leadpool', () => pages.leadPool()));
+  }
   if (action === 'meeting') return res.json(await meetingPage(staff, sc, q.get('week')));
   if (action === 'slides') return res.json(await slides(sc));
   if (action === 'report') { const r = await reportText(sc, q.get('id')); return r ? res.json(r) : res.status(404).json({ error: 'That report is no longer there.' }); }

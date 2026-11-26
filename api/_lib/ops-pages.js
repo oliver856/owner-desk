@@ -4,6 +4,7 @@
 // "New listings" on Today and People are dated by when the listing was created in Kendal; gained and lost on
 // Listings come from the change log, which starts at the first sync.
 import { sql } from './core.js';
+import { REASONS } from './reasons.js';
 
 export const one = async (q) => (await q)[0]?.j;
 
@@ -167,3 +168,43 @@ export const promotions = (team) => one(sql`
            coalesce((select sum(x.amount) from ops.deals x where lower(x.email) = t.email and x.deleted_at is null and x.deal_date >= t.since), 0)::float8 as gci,
            (select count(*) from ops.deals x where lower(x.email) = t.email and x.deleted_at is null and x.counts_as_deal and x.deal_date >= t.since)::int as deals
     from t left join ops.promotion_levels l on l.level = t.level left join ops.promotion_levels n on n.level = t.level + 1) x)) as j`);
+
+// Lead pool (admins only): how much of the pool has been called, by whom, and how the latest call on each lead went.
+// A lead counts as called once anyone has logged a call on it. Its result is the latest call's note (or outcome),
+// sorted into hot / spoke, not interested / didn't get through by the same rules as the Hot & cold report.
+const reasonRows = sql`(values ${sql(REASONS.map((x) => [x[0], x[1], x[2]]))}) as r(prefix, label, grp)`;
+export const leadPool = () => one(sql`
+  with lc as (
+    select l.unit_id, l.assigned_to, coalesce(l.batch, 'No batch') as batch, l.intent, c.called_at, c.note, c.outcome
+    from desk.leads l
+    left join lateral (select x.called_at, x.note, x.outcome from desk.calls x
+                       where x.owner_id = l.owner_id order by x.called_at desc limit 1) c on true),
+  r as (
+    select lc.*, case when lc.called_at is null then null
+             else coalesce(n.label, o.label, case when coalesce(lc.note, '') = '' then 'Nothing logged' else 'Other (own words)' end) end as result,
+           case when lc.called_at is null then 'todo'
+             else coalesce(n.grp, o.grp, case when coalesce(lc.note, '') = '' then 'nocontact' else 'objection' end) end as grp
+    from lc
+    left join lateral (select label, grp from ${reasonRows} where r.prefix not like 'outcome:%' and lower(coalesce(lc.note, '')) like lower(r.prefix) || '%'
+                       order by length(r.prefix) desc limit 1) n on true
+    left join lateral (select label, grp from ${reasonRows} where r.prefix = 'outcome:' || lc.outcome limit 1) o on true)
+  select json_build_object(
+    'total', (select count(*) from r),
+    'called', (select count(*) from r where grp <> 'todo'),
+    'hot', (select count(*) from r where grp = 'hot'),
+    'spoke', (select count(*) from r where grp = 'objection'),
+    'nocontact', (select count(*) from r where grp = 'nocontact'),
+    'today', (select count(*) from r where called_at >= (ops.dubai_day(now())::timestamp at time zone 'Asia/Dubai')),
+    'people', (select coalesce(json_agg(x order by x.left_desk, x.pct, x.name), '[]') from (
+        select coalesce(st.full_name, st.email, 'Not assigned') as name, coalesce(not st.active, true) as left_desk, st.role,
+               count(*) as leads, count(*) filter (where grp <> 'todo') as called,
+               round(100.0 * count(*) filter (where grp <> 'todo') / greatest(count(*), 1)) as pct,
+               count(*) filter (where grp = 'hot') as hot, count(*) filter (where grp = 'objection') as spoke,
+               count(*) filter (where grp = 'nocontact') as nocontact, count(*) filter (where grp = 'todo') as todo,
+               max(called_at) as last_call
+        from r left join desk.staff st on st.user_id = r.assigned_to group by st.user_id, st.full_name, st.email, st.active, st.role) x),
+    'results', (select coalesce(json_agg(x order by x.n desc), '[]') from (
+        select result, grp, count(*) as n from r where grp <> 'todo' group by 1, 2) x),
+    'batches', (select coalesce(json_agg(x order by x.leads desc), '[]') from (
+        select batch, count(*) as leads, count(*) filter (where grp <> 'todo') as called, count(*) filter (where grp = 'hot') as hot from r group by 1) x)
+  ) as j`);
