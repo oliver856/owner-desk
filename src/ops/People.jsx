@@ -36,6 +36,11 @@ function issuesFor(r, days, month) {
   return out.sort((a, b) => b[0] - a[0]);
 }
 
+// Monthly billing target by role. Anyone who has billed their target this month is on track, whatever else is behind.
+// Associate Directors have no billing target yet.
+const BILLING = [[/associate\s*director/i, null], [/principal/i, 90000], [/senior/i, 60000], [/property\s*consultant/i, 30000], [/associate/i, 15000]];
+const billingTarget = (role) => { const m = BILLING.find(([re]) => re.test(role || '')); return m ? m[1] : null; };
+
 const LEVEL = [['act', 'Needs a conversation'], ['push', 'Needs a push'], ['ok', 'On track']];
 
 export default function People({ api, team, period }) {
@@ -46,9 +51,11 @@ export default function People({ api, team, period }) {
     if (!d) return [];
     const days = workDays(d.from);
     return d.rows.map((r) => {
-      const issues = issuesFor(r, days, d.period === 'month');
+      const target = billingTarget(r.role);
+      const billedIt = target != null && Number(r.billed) >= target;
+      const issues = billedIt ? [] : issuesFor(r, days, d.period === 'month');
       const score = issues.reduce((s, x) => s + x[0], 0);
-      return { ...r, k: KPI[r.type], issues, score, callTarget: CALLS_A_DAY * days, level: score >= 4 ? 'act' : score > 0 ? 'push' : 'ok' };
+      return { ...r, k: KPI[r.type], issues, score, target, billedIt, callTarget: CALLS_A_DAY * days, level: score >= 4 ? 'act' : score > 0 ? 'push' : 'ok' };
     }).sort((a, b) => b.score - a.score || a.calls - b.calls || a.name.localeCompare(b.name));
   }, [d]);
   if (!d) return <Wait err={err} />;
@@ -67,13 +74,13 @@ export default function People({ api, team, period }) {
             <div className="pp-who">
               <span className={'pp-tag ' + r.level}>{LEVEL.find((x) => x[0] === r.level)[1]}</span>
               <b>{r.name}</b>
-              <span className="muted">{[r.team, cap(r.type)].filter(Boolean).join(' · ')}</span>
+              <span className="muted">{[r.role, r.team, cap(r.type)].filter(Boolean).join(' · ')}</span>
             </div>
             <div className="pp-why">
               {r.issues.length ? <>
                 <ul>{r.issues.map((x) => <li key={x[1]} className={x[0] >= 2 ? 'bad' : ''}>{x[1]}</li>)}</ul>
                 <div className="pp-do"><span className="muted">What to do</span>{[...new Set(r.issues.map((x) => x[2]))].slice(0, 2).map((t) => <p key={t}>{t}</p>)}</div>
-              </> : <p className="muted">All KPIs met {month ? 'this month' : 'this week'}.</p>}
+              </> : <p className="muted">{r.billedIt ? `Billed ${aed(r.billed)} this month, over their ${aed(r.target)} target.` : `All KPIs met ${month ? 'this month' : 'this week'}.`}</p>}
             </div>
             <div className="pp-nums">
               <span><b className="n">{n0(r.calls)}</b>calls</span>
@@ -82,7 +89,7 @@ export default function People({ api, team, period }) {
               <span><b className="n">{n0(r.leads)}</b>leads</span>
               <span><b className="n">{n0(r.viewings)}</b>viewings</span>
               <span><b className="n">{n0(r.deals)}</b>deals</span>
-              <span className="wide"><b className="n">{aed(r.billed)}</b>billed this month</span>
+              <span className="wide"><b className="n">{aed(r.billed)}{r.target ? <span className="muted" style={{ fontWeight: 400 }}> / {aed(r.target)}</span> : null}</b>billed this month{r.target ? ' / target' : ''}</span>
             </div>
           </div>))}
       </div>
