@@ -6,12 +6,12 @@ import { KPI, CALLS_A_DAY, WORKING_DAYS } from './rules.js';
 // and what to do about it. The rules for "what's wrong" and "what to do" are all in issuesFor() below.
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : '');
 
-// Working days (Monday to Saturday) from the start of the period up to today
+// Working days (Monday to Friday) from the start of the period up to today
 function workDays(from) {
   const start = new Date(String(from).slice(0, 10) + 'T12:00:00+04:00');
   const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Dubai' }));
   let n = 0;
-  for (const t = new Date(start); t <= today; t.setDate(t.getDate() + 1)) if (t.getDay() !== 0) n++;
+  for (const t = new Date(start); t <= today; t.setDate(t.getDate() + 1)) if (t.getDay() !== 0 && t.getDay() !== 6) n++;
   return Math.max(1, n);
 }
 
@@ -26,13 +26,15 @@ function issuesFor(r, days, month) {
   if (k) {
     if (r.stock < k.stock) out.push([r.stock < k.stock * 0.5 ? 2 : 1, `Live stock ${n0(r.stock)} of ${n0(k.stock)}`,
       'Needs listings: point their calls at owners in their own areas for listing opportunities, and check for listings that have dropped off.']);
+    // New listings only matter when their stock is below target: someone holding their stock is fine
     const listTarget = Math.max(1, Math.round(k.listed * days / WORKING_DAYS));
-    if (r.listed < listTarget) out.push([r.listed === 0 ? 2 : 1, r.listed === 0 ? 'No new listings ' + (month ? 'this month' : 'this week') : `New listings ${n0(r.listed)} of ${n0(listTarget)}`,
+    if (r.stock < k.stock && r.listed < listTarget) out.push([r.listed === 0 ? 2 : 1, r.listed === 0 ? 'No new listings ' + (month ? 'this month' : 'this week') : `New listings ${n0(r.listed)} of ${n0(listTarget)}`,
       'Agree how many listings they will bring on this week, and check which valuations they have booked.']);
   }
+  if (r.calls >= 500 && r.listed === 0) out.push([2, `${n0(r.calls)} calls but no new listings`, 'Go over their pitch with them again and make sure they know how to turn an owner call into a listing.']);
   if (r.viewings === 0 && r.leads >= 5) out.push([2, `${n0(r.leads)} leads but no viewings`, 'Leads are not being followed up: check how fast they reply to leads and listen to a few of their calls.']);
   else if (r.viewings === 0) out.push([1, 'No viewings, and few leads coming in', 'Check their listings are live, priced right and on both portals.']);
-  if (month && r.deals === 0 && r.viewings >= 5) out.push([1, `${n0(r.viewings)} viewings, no deals yet`, 'Go on a viewing with them and go through any offers in progress.']);
+  if (r.deals === 0 && r.viewings > 10) out.push([2, `${n0(r.viewings)} viewings but no deals`, 'Go on a viewing with them and go through any offers in progress.']);
   return out.sort((a, b) => b[0] - a[0]);
 }
 
@@ -68,7 +70,7 @@ export default function People({ api, team, period }) {
   return (
     <>
       <style>{PP_CSS}</style>
-      <Bar note={`${month ? 'Since 1 ' + day(d.from).split(' ')[1] : 'Since Monday ' + day(d.from)} · calls target ${n0(CALLS_A_DAY)} a working day · off-plan and commercial brokers have no listing or stock target`}>
+      <Bar note={`${month ? 'Since 1 ' + day(d.from).split(' ')[1] : 'Since Monday ' + day(d.from)} · calls target ${n0(CALLS_A_DAY)} a working day, Monday to Friday · off-plan and commercial brokers have no listing or stock target`}>
         <Seg value={show} onChange={setShow} options={[['attention', `Needs attention (${count('act') + count('push')})`], ['ok', `On track (${count('ok')})`], ['all', `Everyone (${rows.length})`]]} />
       </Bar>
       <div className="pp-list">
