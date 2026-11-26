@@ -29,7 +29,7 @@ import Ask from './ops/Ask.jsx';
 const PAGES = [
   ['Headlines', 'today', 'Overview', Today, true, null, true, 'The headline numbers, against the same days last week or month'],
   ['Headlines', 'scorecard', 'Scorecard', Scorecard, false, 'scorecard', false, 'The quarter\'s company measures against plan, month by month'],
-  ['Brokers', 'people', 'People', People, true, null, true, 'Each broker against their KPIs. Red is a missed KPI'],
+  ['Brokers', 'people', 'People', People, true, null, true, 'Who is off track, why, and what to do about it. Worst first'],
   ['Brokers', 'promotions', 'Promotions', Promotions, true, null, false, 'Who is close to the next level, and what they still need'],
   ['Deals and money', 'deals', 'Deals', Deals, false, 'deals', false, 'Add, fix and check deals. Every billing figure on the Desk comes from here'],
   ['Deals and money', 'money', 'Money', Money, false, 'money', false, 'What has been billed, month by month and by broker'],
