@@ -158,6 +158,24 @@ function deck(d) {
       <Stat label="Price drops" value={n0(d.totals.drops)} sub={d.priceFrom && d.priceFrom > shortIso(d.today, -7) ? 'prices recorded from ' + shortDate(d.priceFrom) : 'last 7 days'} />
     </div></>));
 
+  const done = (v) => {
+    if (!v[1]) return <span style={{ color: '#9a9a9a' }}>not judged</span>;
+    const c = share(v[0], v[1]);
+    return (<span style={{ display: 'block' }}>
+      <b style={{ fontWeight: 600 }}>{n0(v[0])}</b><span style={{ color: MUT }}> / {n0(v[1])}</span>
+      <span style={{ display: 'block', height: 6, background: '#eeeae2', borderRadius: 3, margin: '6px 18px 0', overflow: 'hidden' }}>
+        <span style={{ display: 'block', height: '100%', width: Math.min(100, pct(v[0], v[1])) + '%', background: c[0] }} /></span>
+      <span style={{ display: 'block', fontSize: 13, color: c[0], marginTop: 3 }}>{pct(v[0], v[1])}%</span>
+    </span>);
+  };
+  add('kpitotals', 'KPIs this week: team totals', `What each team did against what its brokers' targets add up to, over the last 7 full days. Calls ${R0.calls_a_day} a working day, Monday to Friday.`, (<>
+    <Table cols={[{ label: 'Team', w: 'minmax(0, 1.4fr)', render: (r) => <b style={{ fontWeight: 600 }}>{r.team}<span style={{ display: 'block', fontWeight: 400, fontSize: 13, color: MUT }}>{r.brokers} brokers</span></b> },
+      { label: 'Calls', center: true, render: (r) => done(r.calls) },
+      { label: 'New listings', center: true, render: (r) => done(r.listed) },
+      { label: 'Stock', center: true, render: (r) => done(r.stock) },
+      { label: 'Viewings', center: true, render: (r) => done(r.viewings) }]} rows={d.teamTotals || []} />
+    <p style={{ margin: '16px 0 0', fontSize: 14, color: MUT }}>Green 80% of target or more, amber 60 to 79%, red under 60%. New listings and stock only count apartment and villa brokers.</p></>));
+
   const RULES = {
     calls: `Stock under ${Math.ceil(R0.stock.apartment * R0.low_stock_share)} apt / ${Math.ceil(R0.stock.villa * R0.low_stock_share)} villa and under ${R0.calls_a_day} calls a day`, pitch: `${R0.calls_a_day}+ calls a day, new listings under KPI`,
     listings: `Half their listings overpriced or under ${R0.low_leads} leads in ${R0.low_leads_days} days`, leads: `${R0.leads_week_high}+ leads, under ${Math.ceil(R0.viewings_week * R0.viewings_low_share)} viewings logged · on top of any other flag`,
@@ -171,38 +189,7 @@ function deck(d) {
         { w: 'minmax(0, 2fr)', render: (g) => <b style={{ fontWeight: 600 }}>{g.session}</b> }]}
       rows={d.groups.map((g, i) => ({ ...g, i: i + 1 }))} />));
 
-  const groupCols = {
-    calls: [['Stock', (b) => `${b.stock} / ${b.stockTarget}`], ['Calls', (b) => `${b.callsPerDay} a day`], ['New listings', (b) => `${b.listed} / ${b.listedTarget}`]],
-    pitch: [['Calls', (b) => `${b.callsPerDay} a day`], ['New listings', (b) => `${b.listed} / ${b.listedTarget}`], ['Stock', (b) => `${b.stock} / ${b.stockTarget}`]],
-    listings: [['Live', (b) => b.live], ['Underperforming', (b) => b.bad], ['Overpriced', (b) => b.over], [`Under ${R0.low_leads} leads`, (b) => b.low]],
-    leads: [['Leads', (b) => b.leads], ['Viewings', (b) => b.viewings], ['Calls', (b) => `${b.callsPerDay} a day`]],
-    closing: [['Viewings, 30 days', (b) => b.viewings30], ['Viewings, 7 days', (b) => b.viewings]],
-    nodeal: [['Last deal', (b) => (b.lastDeal ? dayYear(b.lastDeal) : 'None on record')], ['Viewings, 30 days', (b) => b.viewings30], ['Stock', (b) => (b.stockTarget ? `${b.stock} / ${b.stockTarget}` : b.stock)]],
-    nolisting: [[`Listed in ${month}`, (b) => b.listedMonth], ['Stock', (b) => `${b.stock} / ${b.stockTarget}`], ['Calls', (b) => `${b.callsPerDay} a day`]],
-  };
-  const SUBS = {
-    calls: 'The fix is call time: a supervised power hour, everyone on the Desk at once.',
-    pitch: 'Calling enough but not turning calls into listings: the script, objections and listening back to calls.',
-    listings: 'Listings not pulling leads or priced above the market. Each listing gets checked on title, photos, price and portal spend: it isn\'t always the price.',
-    leads: 'Getting leads but few viewings in Kendal. Check the CRM first: they may be doing viewings and not logging them. If not, it\'s response time and booking on the first call.',
-    closing: 'Plenty of viewings, no deals: negotiation and offers, paired with a senior for their next viewings.',
-    nodeal: 'No deal in the last 60 days. A 1:1 with Billie, not a group session.',
-    nolisting: 'Nothing new live this month. Each one leaves with a listing plan and a date for their manager.',
-  };
-  const PER = 7;   // brokers per group slide; a bigger group carries on onto another slide
-  groups.forEach((g) => {
-    const n = d.groups.indexOf(g) + 1;
-    const extra = groupCols[g.key];
-    for (let p = 0; p < g.brokers.length; p += PER) {
-      const part = g.brokers.slice(p, p + PER), more = p > 0;
-      add('g-' + g.key + p, `Group ${n}: ${g.session}${more ? ' (continued)' : ''}`,
-        more ? `${g.name}. ${g.brokers.length} brokers.` : `${g.name}. ${g.brokers.length} broker${g.brokers.length === 1 ? '' : 's'}. ${SUBS[g.key]}`, (
-        <Table cols={[{ label: 'Broker', w: 'minmax(0, 1.1fr)', render: (b) => <b style={{ fontWeight: 600 }}>{b.name}</b> },
-          { label: 'Team', w: 'minmax(0, 1.4fr)', render: (b) => <span style={{ color: MUT, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[b.team, b.type ? b.type[0].toUpperCase() + b.type.slice(1) : ''].filter(Boolean).join(' · ')}</span> },
-          ...extra.map(([label, f]) => ({ label, num: true, w: 'minmax(0, 0.7fr)', render: f }))]}
-          rows={part} />));
-    }
-  });
+  // brokers aren't named in the meeting deck: the groups show as counts per team on the slide above
 
   const sumH = d.health.reduce((a, h) => ({ live: a.live + h.live, low: a.low + h.low }), { live: 0, low: 0 });
   add('listings', 'Listings health', 'Live listings against recent sales and new Ejari leases, leads in the last 14 days, and price drops in the last 7.', (
@@ -224,7 +211,7 @@ function deck(d) {
         {d.worst.map((w, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: i === d.worst.length - 1 ? 'none' : '1px solid ' + LINE, fontSize: 15 }}>
             <span><b style={{ fontWeight: 600 }}>{w.building}{w.beds != null ? `, ${w.beds === 0 ? 'studio' : w.beds + ' bed'}` : ''}</b>
-              <span style={{ display: 'block', fontSize: 13, color: MUT }}>{w.purpose === 'rent' ? 'Rent' : 'Sale'} · {money(w.listed)} vs {money(w.target)} · {w.broker}</span></span>
+              <span style={{ display: 'block', fontSize: 13, color: MUT }}>{w.purpose === 'rent' ? 'Rent' : 'Sale'} · {money(w.listed)} vs {money(w.target)}</span></span>
             <span style={{ color: R[0], fontWeight: 600 }}>+{Math.round(w.gap)}%</span>
           </div>))}
         {d.worst.length === 0 && <p style={{ color: MUT, fontSize: 15 }}>None flagged.</p>}
