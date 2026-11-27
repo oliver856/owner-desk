@@ -123,7 +123,8 @@ export async function slides(sc) {
     byBroker.set(l.email, b);
   }
 
-  const callTarget = R.calls_a_day * R.working_days;
+  const CALL_DAYS = 5;   // calls are counted Monday to Friday
+  const callTarget = R.calls_a_day * CALL_DAYS;
   const lowShare = R.low_stock_share ?? 0.5;
   const viewShare = R.viewings_low_share ?? 0.5;
   const inGroup = (b, key) => (key === 'nolisting' ? b.noListing : key === 'nodeal' ? b.noDeal : key === 'leads' ? b.leadsGap : b.flag === key);
@@ -161,9 +162,19 @@ export async function slides(sc) {
       calls: [bs.filter((b) => b.met.calls).length, bs.length], listed: [judged.filter((b) => b.met.listed).length, judged.length],
       stock: [judged.filter((b) => b.met.stock).length, judged.length], viewings: [bs.filter((b) => b.met.viewings).length, bs.length] };
   });
+  // the same KPIs as one team total: what the team did against what its brokers' targets add up to
+  const sum = (bs, f) => bs.reduce((a, b) => a + f(b), 0);
+  const teamTotal = (t, bs) => { const judged = bs.filter((b) => b.k);
+    return { team: t, brokers: bs.length,
+      calls: [sum(bs, (b) => b.calls), bs.length * callTarget],
+      listed: [sum(judged, (b) => b.listed), sum(judged, (b) => b.k.listed)],
+      stock: [sum(judged, (b) => b.stock), sum(judged, (b) => b.k.stock)],
+      viewings: [sum(bs, (b) => b.viewings), bs.length * R.viewings_week],
+      allFour: [judged.filter((b) => b.met.calls && b.met.listed && b.met.stock && b.met.viewings).length, judged.length] }; };
+  const teamTotals = [...teams.map((t) => teamTotal(t, brokers.filter((b) => (b.team || 'No team') === t))), { ...teamTotal('Company', brokers), company: true }];
   const totals = {
     calls: brokers.reduce((a, b) => a + b.calls, 0), callsTarget: brokers.length * callTarget,
-    listed: brokers.reduce((a, b) => a + b.listed, 0), listedTarget: brokers.reduce((a, b) => a + (b.k?.listed || 0), 0),
+    listed: brokers.filter((b) => b.k).reduce((a, b) => a + b.listed, 0), listedTarget: brokers.reduce((a, b) => a + (b.k?.listed || 0), 0),
     viewings: brokers.reduce((a, b) => a + b.viewings, 0), viewingsTarget: brokers.length * R.viewings_week,
     drops: drops.filter((d) => brokers.some((b) => byBroker.get(b.email))).length,
   };
@@ -171,7 +182,7 @@ export async function slides(sc) {
   const groups = FLAGS.map(([key, name, session]) => ({ key, name, session,
     brokers: brokers.filter((b) => inGroup(b, key)).map((b) => ({ id: b.email, name: b.name, team: b.team, type: b.type, stock: b.stock, stockTarget: b.k?.stock ?? null,
       listedMonth: b.listed_month, lastDeal: b.last_deal,
-      callsPerDay: Math.round(b.calls / R.working_days), listed: b.listed, listedTarget: b.k?.listed ?? null, leads: b.leads, viewings: b.viewings,
+      callsPerDay: Math.round(b.calls / CALL_DAYS), listed: b.listed, listedTarget: b.k?.listed ?? null, leads: b.leads, viewings: b.viewings,
       viewings30: b.viewings30, live: b.live, bad: b.bad, over: b.over, low: b.low, worst: b.worst })) }));
   const flagByTeam = FLAGS.map(([key]) => teams.map((t) => brokers.filter((b) => inGroup(b, key) && (b.team || 'No team') === t).length));
 
@@ -205,7 +216,7 @@ export async function slides(sc) {
     today, month: mo, monthEnd, quarterStart: qs, quarterEnd, team,
     pace: { month: dayOfMonth / daysInMonth, quarter: qDay / qDays }, workingDaysLeft: wdLeft, monthsLeft,
     monthScore: month, quarterScore: quarter, monthDeals: mDeals,
-    rules: { ...R, low_stock_share: lowShare, viewings_low_share: viewShare }, callTarget, kpis, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag || b.noListing || b.noDeal || b.leadsGap).length, brokerCount: brokers.length,
+    rules: { ...R, low_stock_share: lowShare, viewings_low_share: viewShare }, callTarget, callDays: CALL_DAYS, kpis, teamTotals, totals, groups, flagTeams: teams, flagByTeam, flagged: brokers.filter((b) => b.flag || b.noListing || b.noDeal || b.leadsGap).length, brokerCount: brokers.length,
     health, worst, priceFrom: priceFrom || null, managers, feeds, priceCheckAt: cache?.at || null, builtAt: new Date().toISOString(),
     lastWeek: acts.filter((a) => a.week < thisWeek && !isIssue(a)).map(clean),
     issues: acts.filter((a) => a.week === thisWeek && isIssue(a)).map(clean),
