@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useOps, Wait, Bar, Stats, Section, Table, Name, Pick, Seg, Field, Btn, LinkBtn, Dialog, n0, aed, day, clock, monthName, monthKey } from './kit.jsx';
 import { DEAL_TYPE } from './rules.js';
 
-const TYPES = [['sale', 'Sale'], ['rent', 'Rental'], ['service', 'Additional services']];
+const TYPES = [['sale', 'Sale'], ['rent', 'Rental'], ['service', 'Services']];   // shown as 'Additional services' in the list (rules.js)
 const toNum = (v) => Number(String(v || '').replace(/[,\s]/g, ''));
 const first = (name) => String(name || '').split(' ')[0];
 
