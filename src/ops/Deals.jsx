@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useOps, Wait, Bar, Stats, Section, Table, Name, Pick, Seg, Field, Btn, LinkBtn, Dialog, n0, aed, day, clock, monthName, monthKey } from './kit.jsx';
 import { DEAL_TYPE } from './rules.js';
 
-const TYPES = [['sale', 'Sale'], ['rent', 'Rental']];
+const TYPES = [['sale', 'Sale'], ['rent', 'Rental'], ['service', 'Additional services']];
 const toNum = (v) => Number(String(v || '').replace(/[,\s]/g, ''));
 const first = (name) => String(name || '').split(' ')[0];
 
@@ -36,8 +36,8 @@ export default function Deals({ api }) {
       </Bar>
       <Stats items={[
         { label: monthName(d.month) + ' billed', value: aed(t.billed) },
-        { label: 'Deals', value: n0(t.deals), sub: `${n0(t.sales)} sales, ${n0(t.rentals)} rentals${untagged > 0 ? `, ${n0(untagged)} not tagged` : ''}` },
-        { label: 'Average per deal', value: aed(t.deals ? t.billed / t.deals : 0) },
+        { label: 'Deals', value: n0(t.deals), sub: `${n0(t.sales)} sales, ${n0(t.rentals)} rentals${untagged > 0 ? `, ${n0(untagged)} not tagged` : ''}${t.services ? ` · plus ${n0(t.services)} additional service${t.services === 1 ? '' : 's'}, ${aed(t.servicesBilled)}` : ''}` },
+        { label: 'Average per deal', value: aed(t.deals ? (t.billed - (t.servicesBilled || 0)) / t.deals : 0), sub: t.services ? 'Sales and rentals only' : undefined },
       ]} />
       <Section title="Add a deal">
         <AddDeal people={d.people} today={String(d.today).slice(0, 10)} post={post} onSaved={(date) => { if (monthKey(date) !== monthKey(d.month)) setMonth(monthKey(date)); reload(); }} />
@@ -75,7 +75,8 @@ function AddDeal({ people, today, post, onSaved }) {
   const name = (e) => people.find((p) => p.email === e)?.name || '';
   const total = Math.round(toNum(f.amount)), split = f.splitWith && f.splitWith !== f.email;
   const a = split ? Math.round(total / 2) : total, b = total - a;
-  const ready = f.email && f.date && f.type && total > 0;
+  const service = f.type === 'service';
+  const ready = f.email && f.date && f.type && total > 0 && (!service || f.property.trim());
   const otherMonth = f.date && monthKey(f.date) !== monthKey(today);
   const save = (allowDuplicate) => {
     if (!ready || s.saving) return;
@@ -95,10 +96,11 @@ function AddDeal({ people, today, post, onSaved }) {
       <Field label="Split with"><BrokerSelect people={people} value={f.splitWith} onChange={set('splitWith')} none="No split" skip={f.email} /></Field>
       <Field label="Close date"><input type="date" value={f.date} max={today} min="2026-01-01" onChange={(e) => set('date')(e.target.value)} /></Field>
       <Field label="Type"><Seg value={f.type} onChange={set('type')} options={TYPES} /></Field>
-      <Field label={split ? 'Total commission, AED' : 'Commission, AED'} hint="Excluding VAT"><input className="amt" inputMode="numeric" placeholder="0" value={f.amount} onChange={(e) => set('amount')(e.target.value)} /></Field>
-      <Field label="Property" hint="Optional"><input value={f.property} maxLength={200} onChange={(e) => set('property')(e.target.value)} /></Field>
+      <Field label={service ? (split ? 'Total fee, AED' : 'Fee, AED') : split ? 'Total commission, AED' : 'Commission, AED'} hint="Excluding VAT"><input className="amt" inputMode="numeric" placeholder="0" value={f.amount} onChange={(e) => set('amount')(e.target.value)} /></Field>
+      <Field label={service ? 'What the service was' : 'Property'} hint={service ? 'Needed for additional services' : 'Optional'}><input value={f.property} maxLength={200} placeholder={service ? 'Mortgage referral, Smith' : ''} onChange={(e) => set('property')(e.target.value)} /></Field>
       {ready && !s.dup ? <div className={'ops-msg' + (otherMonth ? ' warn' : '')}>
-        {split ? `${aed(a)} to ${name(f.email)} and ${aed(b)} to ${name(f.splitWith)}. Counts as one deal, for ${first(name(f.email))}.` : `${aed(total)} to ${name(f.email)}.`}
+        {split ? `${aed(a)} to ${name(f.email)} and ${aed(b)} to ${name(f.splitWith)}.${service ? '' : ` Counts as one deal, for ${first(name(f.email))}.`}` : `${aed(total)} to ${name(f.email)}.`}
+        {service ? ' Additional service: 50/50 commission, counts toward billing but not as a sale or rental.' : ''}
         {' '}Goes into {monthName(f.date)}{otherMonth ? ', not the current month.' : '.'}
       </div> : null}
       {s.dup ? <div className="ops-msg warn">{name(f.email)} already has a deal of {aed(s.dup.amount)} on {day(s.dup.date)}{s.dup.property ? ` (${s.dup.property})` : ''}. Nothing has been saved. Is this a second, separate deal?</div> : null}
@@ -142,13 +144,13 @@ function EditDeal({ deal, people, today, post, onClose, onSaved }) {
         <Field label={deal.splitWith ? `${first(deal.name)}'s commission, AED` : 'Commission, AED'}><input className="amt" inputMode="numeric" value={f.amount} onChange={(e) => set('amount')(e.target.value)} /></Field>
         <Field label="Close date"><input type="date" value={f.date} max={today} min="2026-01-01" onChange={(e) => set('date')(e.target.value)} /></Field>
         <Field label="Type"><Seg value={f.type} onChange={set('type')} options={TYPES} /></Field>
-        <Field label="Property"><input value={f.property} maxLength={200} onChange={(e) => set('property')(e.target.value)} /></Field>
+        <Field label={f.type === 'service' ? 'What the service was' : 'Property'}><input value={f.property} maxLength={200} onChange={(e) => set('property')(e.target.value)} /></Field>
         <Field label="Property price, AED"><input className="amt" inputMode="numeric" value={f.dealValue} onChange={(e) => set('dealValue')(e.target.value)} /></Field>
         <Field label="Transferred on" hint="Leave empty until it has transferred"><input type="date" value={f.transferredOn} max={today} onChange={(e) => set('transferredOn')(e.target.value)} /></Field>
         <label className="ops-field ops-check"><input type="checkbox" checked={f.companyLead} onChange={(e) => set('companyLead')(e.target.checked)} /><span>Company lead</span></label>
         {f.type === 'sale' && <label className="ops-field ops-check"><input type="checkbox" checked={offPlan} onChange={(e) => { setOffPlan(e.target.checked); setS((x) => ({ ...x, err: '' })); }} /><span>Off-plan{deal.splitWith ? ' (both brokers)' : ''}</span></label>}
         {f.date && monthKey(f.date) !== monthKey(start.date) ? <div className="ops-msg warn">This moves the deal from {monthName(start.date)} to {monthName(f.date)}.</div> : null}
-        {!f.type ? <div className="ops-msg warn">Choose sale or rental to save a change to this deal.</div> : null}
+        {!f.type ? <div className="ops-msg warn">Choose sale, rental or additional services to save a change to this deal.</div> : null}
         {s.err ? <div className="ops-msg err">{s.err}</div> : null}
         {s.removing ? <div className="ops-acts">
           <span className="grow">Remove this deal{deal.splitWith ? ' for both brokers' : ''}? It can be put back from Changes.</span>

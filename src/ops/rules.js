@@ -6,4 +6,4 @@ export const CALLS_A_DAY = 75;        // owner calls per working day
 export const WORKING_DAYS = 5;        // Monday to Friday
 
 export const CHANNEL = { bayut: 'Bayut', pf: 'Property Finder', owner_desk: 'Owner Desk', other: 'Other', unknown: 'No source' };
-export const DEAL_TYPE = { sale: 'Sale', rent: 'Rental' };
+export const DEAL_TYPE = { sale: 'Sale', rent: 'Rental', service: 'Additional services' };
