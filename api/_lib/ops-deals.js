@@ -12,7 +12,9 @@ export const dealsPage = (month) => one(sql`
     'months', (select coalesce(json_agg(x.month order by x.month desc), '[]') from (
         select distinct month from ops.deals where deleted_at is null union select date_trunc('month', ops.dubai_day(now()))::date) x),
     'totals', (select json_build_object('billed', coalesce(sum(amount), 0), 'deals', count(*) filter (where counts_as_deal),
-                 'sales', count(*) filter (where counts_as_deal and deal_type = 'sale'), 'rentals', count(*) filter (where counts_as_deal and deal_type = 'rent'))
+                 'sales', count(*) filter (where counts_as_deal and deal_type = 'sale'), 'rentals', count(*) filter (where counts_as_deal and deal_type = 'rent'),
+                 'services', count(*) filter (where deal_type = 'service' and (split_id is null or split_id = 'od-' || id or id = (select min(x.id) from ops.deals x where x.split_id = ops.deals.split_id))),
+                 'servicesBilled', coalesce(sum(amount) filter (where deal_type = 'service'), 0))
                from ops.deals, m where deleted_at is null and month = m.mo),
     'deals', (select coalesce(json_agg(x order by x.date desc, x.id desc), '[]') from (
         select d.id, d.deal_date as date, d.email, coalesce(p.full_name, d.email) as name, d.amount, d.deal_type as type,
