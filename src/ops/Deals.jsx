@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { useOps, Wait, Bar, Stats, Section, Table, Name, Pick, Seg, Field, Btn, LinkBtn, Dialog, n0, aed, day, clock, monthName, monthKey } from './kit.jsx';
 import { DEAL_TYPE } from './rules.js';
 
-const TYPES = [['sale', 'Sale'], ['rent', 'Rental'], ['service', 'Services']];   // shown as 'Additional services' in the list (rules.js)
+const TYPES = [['sale', 'Sale'], ['rent', 'Rental'], ['service', 'Additional services']];
 const toNum = (v) => Number(String(v || '').replace(/[,\s]/g, ''));
 const first = (name) => String(name || '').split(' ')[0];
 
@@ -95,7 +95,7 @@ function AddDeal({ people, today, post, onSaved }) {
       <Field label="Broker"><BrokerSelect people={people} value={f.email} onChange={set('email')} none="Choose a broker" /></Field>
       <Field label="Split with"><BrokerSelect people={people} value={f.splitWith} onChange={set('splitWith')} none="No split" skip={f.email} /></Field>
       <Field label="Close date"><input type="date" value={f.date} max={today} min="2026-01-01" onChange={(e) => set('date')(e.target.value)} /></Field>
-      <Field label="Type"><Seg value={f.type} onChange={set('type')} options={TYPES} /></Field>
+      <label className="ops-field" style={{ gridColumn: 'span 2', minWidth: 0 }}><span>Type</span><Seg value={f.type} onChange={set('type')} options={TYPES} /></label>
       <Field label={service ? (split ? 'Total fee, AED' : 'Fee, AED') : split ? 'Total commission, AED' : 'Commission, AED'} hint="Excluding VAT"><input className="amt" inputMode="numeric" placeholder="0" value={f.amount} onChange={(e) => set('amount')(e.target.value)} /></Field>
       <Field label={service ? 'What the service was' : 'Property'} hint={service ? 'Needed for additional services' : 'Optional'}><input value={f.property} maxLength={200} placeholder={service ? 'Mortgage referral, Smith' : ''} onChange={(e) => set('property')(e.target.value)} /></Field>
       {ready && !s.dup ? <div className={'ops-msg' + (otherMonth ? ' warn' : '')}>
